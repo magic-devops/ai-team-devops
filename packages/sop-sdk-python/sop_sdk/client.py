@@ -65,6 +65,68 @@ def _delivery_query_params(*, limit: int, cursor: str, **filters: Any) -> dict[s
     }
 
 
+def _requirement_segment(value: str, *, maximum: int = 64) -> str:
+    if (
+        not isinstance(value, str) or not 1 <= len(value) <= maximum or value != value.strip()
+        or value in {".", ".."} or "/" in value or "\\" in value
+        or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in value)
+    ):
+        raise ValueError(f"requirement resource ID must contain 1 to {maximum} Unicode characters without controls or path separators")
+    try:
+        return quote(value, safe="", encoding="utf-8", errors="strict")
+    except UnicodeError as exc:
+        raise ValueError("invalid requirement resource ID Unicode") from exc
+
+
+def _requirement_generation(query_generation: int | None, *, required: bool = False) -> dict[str, int]:
+    if query_generation is None and not required:
+        return {}
+    if type(query_generation) is not int or query_generation < 1:
+        raise ValueError("query_generation must be an explicit positive integer")
+    return {"query_generation": query_generation}
+
+
+def _requirement_page(*, limit: int, cursor: str, **filters: Any) -> dict[str, Any]:
+    if not isinstance(cursor, str) or any(127 <= ord(char) <= 159 for char in cursor):
+        raise ValueError("invalid opaque requirement cursor")
+    return _delivery_query_params(limit=limit, cursor=cursor, **filters)
+
+
+def _requirement_collection(collection: str) -> str:
+    if not isinstance(collection, str) or collection not in {"artifacts", "reviews", "releases"}:
+        raise ValueError("collection must be artifacts, reviews or releases")
+    return collection
+
+
+def _requirement_impact_kind(kind: str) -> str:
+    if not isinstance(kind, str) or kind not in {"direct_task", "dependent_task", "execution", "release_candidate", "deployment"}:
+        raise ValueError("invalid requirement impact kind")
+    return kind
+
+
+def _requirement_preview_body(body: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(body, Mapping) or set(body) != {"requirement_basis", "changes"}:
+        raise ValueError("preview requires only requirement_basis and changes")
+    if not isinstance(body["requirement_basis"], str) or re.fullmatch(r"[a-f0-9]{64}", body["requirement_basis"]) is None:
+        raise ValueError("requirement_basis must be a lowercase 64-character hexadecimal digest")
+    changes = body["changes"]
+    if not isinstance(changes, Mapping) or set(changes) - {"title", "description", "acceptance_criteria"}:
+        raise ValueError("changes must be an object of explicit definition fields")
+    for name, maximum in (("title", 256), ("description", 20000)):
+        if name in changes and (
+            not isinstance(changes[name], str) or len(changes[name]) > maximum
+            or (name == "title" and not changes[name].strip())
+        ):
+            raise ValueError(f"invalid requirement {name}")
+    if "acceptance_criteria" in changes:
+        values = changes["acceptance_criteria"]
+        if not isinstance(values, list) or len(values) > 80 or any(
+            not isinstance(value, str) or not value.strip() or len(value) > 2000 for value in values
+        ):
+            raise ValueError("acceptance_criteria must contain at most 80 nonblank strings of at most 2000 characters")
+    return {"requirement_basis": body["requirement_basis"], "changes": dict(changes)}
+
+
 def _progress_scope_params(scope: str, scope_id: str) -> dict[str, str]:
     if not isinstance(scope, str) or scope not in {"project", "milestone", "sprint"}:
         raise ValueError("scope must be project, milestone or sprint")
@@ -344,8 +406,53 @@ class ManagerClient:
         )
         return self._request("GET", "/api/v1/delivery/requirements", params=params)
 
-    def delivery_requirement(self, requirement_id: str) -> dict[str, Any]:
-        return self._request("GET", f"/api/v1/delivery/requirements/{_resource_segment(requirement_id)}")
+    def delivery_requirement(self, requirement_id: str, *, query_generation: int | None = None) -> dict[str, Any]:
+        """Read the exact current head; definition, records and impact have independent reads."""
+        return self._request("GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}",
+                             params=_requirement_generation(query_generation))
+
+    def delivery_requirement_definition(self, requirement_id: str, *, query_generation: int) -> dict[str, Any]:
+        """Read the complete current definition in the head's explicit generation."""
+        return self._request("GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/definition",
+                             params=_requirement_generation(query_generation, required=True))
+
+    def delivery_requirement_records(
+        self, requirement_id: str, *, collection: str, query_generation: int, limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one same-generation page of original flow record summaries."""
+        params = _requirement_page(limit=limit, cursor=cursor, collection=_requirement_collection(collection),
+                                   **_requirement_generation(query_generation, required=True))
+        return self._request("GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/records", params=params)
+
+    def delivery_requirement_record(
+        self, requirement_id: str, position: int, *, collection: str, query_generation: int
+    ) -> dict[str, Any]:
+        """Read an original array position, including zero, without inventing a permanent record ID."""
+        if type(position) is not int or position < 0:
+            raise ValueError("position must be a nonnegative integer")
+        params = {"collection": _requirement_collection(collection), **_requirement_generation(query_generation, required=True)}
+        return self._request("GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/records/{position}", params=params)
+
+    def delivery_requirement_impact(self, requirement_id: str, *, query_generation: int | None = None) -> dict[str, Any]:
+        """Read current impact counts and completeness without downloading all affected IDs."""
+        return self._request("GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/impact",
+                             params=_requirement_generation(query_generation))
+
+    def delivery_requirement_impact_items(
+        self, requirement_id: str, *, kind: str, query_generation: int, limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one explicit current impact category; retain the summary's generation and cursor."""
+        params = _requirement_page(limit=limit, cursor=cursor, kind=_requirement_impact_kind(kind),
+                                   **_requirement_generation(query_generation, required=True))
+        return self._request("GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/impact/items", params=params)
+
+    def delivery_requirement_impact_item(
+        self, requirement_id: str, item_id: str, *, kind: str, query_generation: int
+    ) -> dict[str, Any]:
+        """Resolve one real, currently authorized impact member without a list-window fallback."""
+        params = {"kind": _requirement_impact_kind(kind), **_requirement_generation(query_generation, required=True)}
+        item = _requirement_segment(item_id, maximum=64 if kind in {"direct_task", "dependent_task"} else 200)
+        return self._request("GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/impact/items/{item}", params=params)
 
     def delivery_tasks(
         self,
@@ -821,24 +928,22 @@ class ManagerClient:
     def delivery_requirement_history(
         self, requirement_id: str, *, cursor: str = "", limit: int = 20
     ) -> dict[str, Any]:
-        """Read actual observed definitions; missing earlier history stays unknown."""
-        if type(limit) is not int or not 1 <= limit <= 100:
-            raise ValueError("limit must be an integer between 1 and 100")
-        return self._request("GET", f"/api/v1/delivery/requirements/{_resource_segment(requirement_id)}/history",
-                             params={"cursor": cursor, "limit": limit})
+        """Read fixed observed-version metadata; definitions and current impact are separate."""
+        params = _requirement_page(limit=limit, cursor=cursor)
+        return self._request("GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/history", params=params)
 
     def delivery_requirement_version(self, requirement_id: str, version_id: str) -> dict[str, Any]:
         """Read an exact immutable observed version without adopting or restoring it."""
         return self._request(
-            "GET", f"/api/v1/delivery/requirements/{_resource_segment(requirement_id)}/history/{_resource_segment(version_id)}",
+            "GET", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/history/{_requirement_segment(version_id, maximum=200)}",
         )
 
     def delivery_requirement_change_preview(
         self, requirement_id: str, body: Mapping[str, Any]
     ) -> dict[str, Any]:
-        """Preview exact definition changes; submission separately requires the returned bases."""
+        """Read complete change proof, including empty changes; never submit or replace the original proposal."""
         return self._request(
-            "POST", f"/api/v1/delivery/requirements/{_resource_segment(requirement_id)}/change-preview", json_body=dict(body),
+            "POST", f"/api/v1/delivery/requirements/{_requirement_segment(requirement_id)}/change-preview", json_body=_requirement_preview_body(body),
         )
 
     def delivery_schedule(

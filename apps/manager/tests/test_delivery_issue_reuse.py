@@ -2,7 +2,7 @@
 
 import pytest
 from sop_manager.routers import delivery
-from sop_manager.routers.sql_models import Issue, Requirement
+from sop_manager.routers.sql_models import DeliveryWorkspace, Issue, Requirement
 from test_business_access import env, headers  # noqa: F401
 
 
@@ -63,24 +63,39 @@ def test_deleted_old_feedback_never_duplicates_or_overwrites_current_requirement
         assert "requirements" not in ack and ack["resource"]["kind"] == "requirement"
         selected = client.get("/api/v1/delivery/requirements/" + ack["resource"]["id"], headers=auth)
         assert selected.status_code == 200, selected.text
-        row = selected.json()["requirement"]
-        assert row["flow"]["source_issue_id"] == "ISSUE-selected"
-        return [row], proposal_id
+        observed = selected.json()
+        row = observed["requirement"]
+        definition = client.get(
+            "/api/v1/delivery/requirements/" + row["id"] + "/definition",
+            headers=auth,
+            params={"query_generation": observed["query_generation"]},
+        )
+        assert definition.status_code == 200, definition.text
+        assert definition.json()["requirement_basis"] == row["basis"]
+        assert definition.json()["definition"]["id"] == row["id"]
+        with sessions() as db:
+            source = db.get(DeliveryWorkspace, "selected").data["flows"][row["id"]]
+            assert source["source_issue_id"] == "ISSUE-selected"
+            source_diagnosis = source.get("source_diagnosis")
+        assert current()["requirement_id"] == row["id"]
+        return [row], definition.json()["definition"], source_diagnosis, proposal_id
 
-    first, _ = promote(1)
+    first, _, _, _ = promote(1)
     assert len(first) == 1
     response = client.delete("/api/v1/requirements/" + first[0]["id"], headers=auth)
     assert response.status_code == 200, response.text
-    second, second_proposal = promote(2)
+    second, second_definition, second_source, second_proposal = promote(2)
     assert len(second) == 1 and second[0]["id"] != first[0]["id"]
     assert current()["requirement_id"] == second[0]["id"]
-    third, _ = promote(3)
+    third, third_definition, third_source, _ = promote(3)
     assert len(third) == 1 and third[0]["id"] == second[0]["id"]
-    for field in ("title", "description", "priority", "acceptance_criteria"):
+    for field in ("title", "priority"):
         assert third[0][field] == second[0][field]
+    assert third_definition == second_definition
+    assert third_source == second_source
     if mode == "diagnosis":
         assert third[0]["title"] == "Human edited requirement 2"
-        assert third[0]["flow"]["source_diagnosis"]["id"] == second_proposal
+        assert third_source["id"] == second_proposal
     with sessions() as db:
         assert db.query(Requirement).filter_by(project_id="selected", tenant_id="team").count() == 2
         assert db.get(Issue, "ISSUE-selected").status == "open"

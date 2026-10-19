@@ -1,6 +1,7 @@
 import type { DeliveryTask, DeliveryTaskData } from "./delivery";
 import { remapCriterionIndexes } from "./deliveryTaskPlan";
 import { normalizeTaskCriteria } from "./taskAcceptance";
+import { requirementReadMatches } from "./deliveryRequirementReads";
 export type TaskEditSession = {
   projectId: string;
   version: number;
@@ -17,12 +18,30 @@ export function openTaskEdit(
   if (!workspace.planning_basis)
     throw new Error("Current planning basis unavailable");
   const requirement = workspace.requirement;
+  if (task.req_id && (!requirement || requirement.id !== task.req_id))
+    throw new Error("Current requirement definition unavailable");
+  const definition = workspace.requirement_definition;
+  if (
+    requirement &&
+    (!requirementReadMatches(
+      definition,
+      workspace.project.id,
+      requirement.id,
+      workspace.query_generation,
+      requirement.basis,
+    ) ||
+      definition?.definition.id !== requirement.id ||
+      definition.version !== workspace.version)
+  )
+    throw new Error("Current requirement definition unavailable");
   return {
     projectId: workspace.project.id,
     version: workspace.version,
     planningBasis: workspace.planning_basis,
     task: structuredClone(task),
-    criteria: [...(requirement?.acceptance_criteria || [])],
+    criteria: requirement
+      ? [...definition!.definition.acceptance_criteria]
+      : [],
   };
 }
 export function taskEditPayload(

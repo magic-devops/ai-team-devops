@@ -53,10 +53,6 @@ class RequirementPage(QueryPage):
     facets: dict[str, dict[str, int]]
 
 
-class RequirementDetail(QueryEnvelope):
-    requirement: dict[str, Any]
-
-
 class TaskDetail(QueryEnvelope):
     task: dict[str, Any]
     requirement: dict[str, str] | None

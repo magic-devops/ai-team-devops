@@ -1,7 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Empty, Skeleton, Tag } from "antd";
 import { useTranslation } from "react-i18next";
-import type { DeliveryRequirement } from "@/lib/delivery";
+import { useState } from "react";
+import { fetchRequirementDetail } from "@/lib/deliveryQuery";
+import {
+  fetchRequirementDefinition,
+  requirementReadMatches,
+} from "@/lib/deliveryRequirementReads";
+import { DeliveryRequirementImpact } from "./DeliveryRequirementReads";
 import {
   fetchRequirementHistory,
   fetchRequirementHistoryItem,
@@ -9,34 +15,34 @@ import {
   useCollaborationRoute,
 } from "@/lib/deliveryCollaboration";
 import { ActivityFieldChanges } from "./DeliveryActivityFeed";
-import { RequirementImpactFacts } from "./DeliveryRequirementChangeEditor";
+
 import "./delivery-collaboration.css";
 
 export function DeliveryRequirementHistory({
   projectId,
   sessionId,
-  requirement,
+  requirementId,
   onNavigate,
 }: {
   projectId: string;
   sessionId: string;
-  requirement: DeliveryRequirement;
+  requirementId: string;
   onNavigate: (href: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const tr = (key: string) => t(`deliveryCollaboration.${key}`);
   const { route, change } = useCollaborationRoute(onNavigate);
-  const cursor = route.scopeId === requirement.id ? route.historyCursor : "";
+  const cursor = route.scopeId === requirementId ? route.historyCursor : "";
   const query = useQuery({
     queryKey: [
       "delivery-requirement-history",
       projectId,
       sessionId,
-      requirement.id,
+      requirementId,
       cursor,
     ],
     queryFn: ({ signal }) =>
-      fetchRequirementHistory(projectId, requirement.id, cursor, signal),
+      fetchRequirementHistory(projectId, requirementId, cursor, signal),
     gcTime: 0,
     retry: false,
   });
@@ -45,13 +51,13 @@ export function DeliveryRequirementHistory({
       "delivery-requirement-version",
       projectId,
       sessionId,
-      requirement.id,
+      requirementId,
       route.versionId,
     ],
     queryFn: ({ signal }) =>
       fetchRequirementHistoryItem(
         projectId,
-        requirement.id,
+        requirementId,
         route.versionId,
         signal,
       ),
@@ -62,7 +68,7 @@ export function DeliveryRequirementHistory({
   const data =
     !(query.isError && /^HTTP (403|404):/.test(query.error?.message || "")) &&
     query.data?.project_id === projectId &&
-    query.data.requirement_id === requirement.id
+    query.data.requirement_id === requirementId
       ? query.data
       : undefined;
   const selected =
@@ -70,18 +76,64 @@ export function DeliveryRequirementHistory({
     !(query.isError && /^HTTP 403:/.test(query.error?.message || "")) &&
     !(exact.isError && /^HTTP (403|404):/.test(exact.error?.message || "")) &&
     exact.data?.project_id === projectId &&
-    exact.data.requirement_id === requirement.id &&
+    exact.data.requirement_id === requirementId &&
     exact.data.item.id === route.versionId
       ? exact.data.item
       : undefined;
-  const currentLinks =
-    data?.current_basis === requirement.basis &&
-    data.current_links?.requirement_basis === requirement.basis
-      ? data.current_links
+  const [compare, setCompare] = useState(false);
+  const currentHead = useQuery({
+    queryKey: [
+      "delivery-requirement-history-current-head",
+      projectId,
+      sessionId,
+      requirementId,
+    ],
+    queryFn: ({ signal }) =>
+      fetchRequirementDetail(projectId, requirementId, signal),
+    enabled: compare,
+    retry: false,
+    gcTime: 0,
+  });
+  const currentDefinition = useQuery({
+    queryKey: [
+      "delivery-requirement-history-current-definition",
+      projectId,
+      sessionId,
+      requirementId,
+      currentHead.data?.query_generation,
+      currentHead.data?.requirement.basis,
+    ],
+    queryFn: ({ signal }) =>
+      fetchRequirementDefinition(
+        projectId,
+        requirementId,
+        currentHead.data!.query_generation,
+        signal,
+      ),
+    enabled: compare && !!currentHead.data && !currentHead.isError,
+    retry: false,
+    gcTime: 0,
+  });
+  const current =
+    compare &&
+    !currentHead.isError &&
+    !currentDefinition.isError &&
+    currentHead.data?.requirement.id === requirementId &&
+    requirementReadMatches(
+      currentDefinition.data,
+      projectId,
+      requirementId,
+      currentHead.data.query_generation,
+      currentHead.data.requirement.basis,
+    ) &&
+    currentDefinition.data?.definition.id === requirementId &&
+    currentDefinition.data.version === currentHead.data.version
+      ? currentDefinition.data.definition
       : undefined;
-  const definitionChanges = selected
-    ? requirementDefinitionChanges(selected.definition, requirement)
-    : {};
+  const definitionChanges =
+    selected && current
+      ? requirementDefinitionChanges(selected.definition, current)
+      : undefined;
   return (
     <div className="delivery-collaboration-history">
       <div className="delivery-collaboration-toolbar">
@@ -122,15 +174,13 @@ export function DeliveryRequirementHistory({
                 data-action="open-version"
                 aria-pressed={route.versionId === item.id}
                 onClick={() =>
-                  change({ versionId: item.id, scopeId: requirement.id })
+                  change({ versionId: item.id, scopeId: requirementId })
                 }
               >
                 <span>
                   {tr("recordVersion")} {item.number}
                 </span>
-                {item.basis === data.current_basis && (
-                  <Tag>{tr("current")}</Tag>
-                )}
+
                 <small>{new Date(item.at).toLocaleString(i18n.language)}</small>
               </Button>
             ))}
@@ -146,7 +196,7 @@ export function DeliveryRequirementHistory({
               <Button
                 size="small"
                 onClick={() =>
-                  change({ historyCursor: "", scopeId: requirement.id })
+                  change({ historyCursor: "", scopeId: requirementId })
                 }
               >
                 {tr("firstPage")}
@@ -159,7 +209,7 @@ export function DeliveryRequirementHistory({
                 onClick={() =>
                   change({
                     historyCursor: data.next_cursor || "",
-                    scopeId: requirement.id,
+                    scopeId: requirementId,
                   })
                 }
               >
@@ -225,54 +275,52 @@ export function DeliveryRequirementHistory({
               </ol>
               <code>{selected.id}</code>
               <h4>{tr("compareCurrent")}</h4>
-              {Object.keys(definitionChanges).length ? (
-                <ActivityFieldChanges
-                  changes={Object.entries(definitionChanges).map(
-                    ([field, after]) => ({
-                      field,
-                      before:
-                        selected.definition[
-                          field as keyof typeof selected.definition
-                        ],
-                      after,
-                    }),
-                  )}
-                />
-              ) : (
-                <p>{tr("definitionSame")}</p>
+              <Button
+                data-action="compare-current"
+                onClick={() => {
+                  if (compare) {
+                    void currentHead.refetch();
+                    if (currentHead.data) void currentDefinition.refetch();
+                  } else setCompare(true);
+                }}
+              >
+                {tr("readCurrentDefinition")}
+              </Button>
+              {!current && (
+                <Alert type="info" title={tr("definitionUnavailable")} />
               )}
+              {definitionChanges &&
+                (Object.keys(definitionChanges).length ? (
+                  <ActivityFieldChanges
+                    changes={Object.entries(definitionChanges).map(
+                      ([field, after]) => ({
+                        field,
+                        before:
+                          selected.definition[
+                            field as keyof typeof selected.definition
+                          ],
+                        after,
+                      }),
+                    )}
+                  />
+                ) : (
+                  <p>{tr("definitionSame")}</p>
+                ))}
             </section>
           )}
         </>
       )}
-      <section className="delivery-collaboration-current-impact">
-        <h3>{tr("currentImpact")}</h3>
-        <p className="delivery-collaboration-help">{tr("currentImpactHint")}</p>
-        {query.isPending && <Skeleton active paragraph={{ rows: 2 }} />}
-        {!query.isPending && (query.isError || !currentLinks) && (
-          <Alert
-            type="info"
-            title={tr("impactUnavailable")}
-            action={
-              <Button
-                size="small"
-                data-action="retry-impact"
-                onClick={() => void query.refetch()}
-              >
-                {tr("retry")}
-              </Button>
-            }
-          />
-        )}
-        {currentLinks && (
-          <RequirementImpactFacts
-            links={currentLinks}
-            projectId={projectId}
-            background={location.hash}
-            onNavigate={onNavigate}
-          />
-        )}
-      </section>
+      <DeliveryRequirementImpact
+        projectId={projectId}
+        sessionId={sessionId}
+        requirementId={requirementId}
+        onNavigate={onNavigate}
+        unavailable={
+          (query.isError && /^HTTP (403|404)\b/.test(query.error.message)) ||
+          (currentHead.isError &&
+            /^HTTP (403|404)\b/.test(currentHead.error.message))
+        }
+      />
     </div>
   );
 }

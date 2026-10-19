@@ -6,7 +6,7 @@ from contextlib import contextmanager, nullcontext
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Path, Query, Request
 from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -16,9 +16,7 @@ from .auth_sql import _norm_role, check_project_access, current_user
 from .delivery_activity_contract import (
     ActivityDetail,
     ActivityPage,
-    RequirementChangePreview,
     RequirementChangePreviewInput,
-    RequirementHistory,
     RequirementVersionDetail,
 )
 from .delivery_attention_contract import DeliveryInboxResponse, ProgressSummaryResponse
@@ -75,7 +73,6 @@ from .delivery_query_contract import (
     QueryRebuilt,
     QuerySort,
     ReferenceKind,
-    RequirementDetail,
     RequirementPage,
     TaskDetail,
 )
@@ -88,6 +85,19 @@ from .delivery_release_contract import (
     ReleasePageResponse,
     ReleasePreviewInput,
     ReleasePreviewResponse,
+)
+from .delivery_requirement_contract import (
+    RecordCollection,
+    RequirementChangePreview,
+    RequirementDefinitionResponse,
+    RequirementHeadResponse,
+    RequirementHistoryPage,
+    RequirementImpactDetail,
+    RequirementImpactKind,
+    RequirementImpactPage,
+    RequirementImpactSummary,
+    RequirementRecordDetail,
+    RequirementRecordsPage,
 )
 from .delivery_scheduling_contract import (
     CivilDate,
@@ -222,20 +232,24 @@ def workspace(
 
 @router.get("/context", response_model=DeliveryContext)
 def delivery_context(
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_query_read import context
 
     project = _project(db, user, project_id)
-    permissions = {**_permissions(db, user, project),
-                   "query_rebuild": _role_permissions(db, user, project)["configure"]}
+    permissions = {
+        **_permissions(db, user, project),
+        "query_rebuild": _role_permissions(db, user, project)["configure"],
+    }
     return context(db, project, permissions)
 
 
 @router.post("/query/rebuild", response_model=QueryRebuilt)
 def delivery_query_rebuild(
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_query_index import rebuild
@@ -248,67 +262,114 @@ def delivery_query_rebuild(
 
 @router.get("/requirements", response_model=RequirementPage)
 def delivery_requirement_page(
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    q: str = Query("", max_length=200), stage: str = Query("", max_length=32),
-    priority: str = Query("", max_length=8), owner_id: str = Query("", max_length=100),
-    milestone_id: str = Query("", max_length=64), sort: QuerySort = "created_desc",
-    cursor: str = Query("", max_length=4000), limit: int = Query(20, ge=1, le=100),
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    q: str = Query("", max_length=200),
+    stage: str = Query("", max_length=32),
+    priority: str = Query("", max_length=8),
+    owner_id: str = Query("", max_length=100),
+    milestone_id: str = Query("", max_length=64),
+    sort: QuerySort = "created_desc",
+    cursor: str = Query("", max_length=4000),
+    limit: int = Query(20, ge=1, le=100),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_query_read import entity_page
 
     if stage and stage not in {item["id"] for item in STAGES}:
         raise HTTPException(422, "Unknown delivery stage")
-    filters = {"q": q, "stage": stage, "priority": priority, "owner_id": owner_id,
-               "milestone_id": milestone_id, "sort": sort}
-    return entity_page(db, _project(db, user, project_id), user, "requirement", filters, limit=limit, cursor=cursor)
+    filters = {
+        "q": q,
+        "stage": stage,
+        "priority": priority,
+        "owner_id": owner_id,
+        "milestone_id": milestone_id,
+        "sort": sort,
+    }
+    return entity_page(
+        db, _project(db, user, project_id), user, "requirement", filters, limit=limit, cursor=cursor
+    )
 
 
 @router.get("/tasks", response_model=QueryPage)
 def delivery_task_page(
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    requirement_id: str = Query("", max_length=64), q: str = Query("", max_length=200),
-    status: DeliveryStatus | Literal[""] = "", priority: str = Query("", max_length=8),
-    owner_id: str = Query("", max_length=100), milestone_id: str = Query("", max_length=64),
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    requirement_id: str = Query("", max_length=64),
+    q: str = Query("", max_length=200),
+    status: DeliveryStatus | Literal[""] = "",
+    priority: str = Query("", max_length=8),
+    owner_id: str = Query("", max_length=100),
+    milestone_id: str = Query("", max_length=64),
     sprint_id: str = Query("", max_length=100),
-    sort: QuerySort = "created_desc", cursor: str = Query("", max_length=4000),
-    limit: int = Query(20, ge=1, le=100), project_id: str = Header(default="", alias="X-Project-Id"),
+    sort: QuerySort = "created_desc",
+    cursor: str = Query("", max_length=4000),
+    limit: int = Query(20, ge=1, le=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_query_read import entity_page
 
     if sort == "due_asc":
         raise HTTPException(422, "Task queries do not support due date sorting")
-    filters = {"requirement_id": requirement_id, "q": q, "status": status, "priority": priority,
-               "owner_id": owner_id, "milestone_id": milestone_id, "sprint_id": sprint_id, "sort": sort}
+    filters = {
+        "requirement_id": requirement_id,
+        "q": q,
+        "status": status,
+        "priority": priority,
+        "owner_id": owner_id,
+        "milestone_id": milestone_id,
+        "sprint_id": sprint_id,
+        "sort": sort,
+    }
     return entity_page(db, _project(db, user, project_id), user, "task", filters, limit=limit, cursor=cursor)
 
 
 @router.get("/issues", response_model=QueryPage)
 def delivery_issue_page(
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    requirement_id: str = Query("", max_length=64), task_id: str = Query("", max_length=64),
-    q: str = Query("", max_length=200), status: str = Query("", max_length=32),
-    severity: str = Query("", max_length=8), source: Literal["", "execution", "deployment", "event", "other"] = "",
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    requirement_id: str = Query("", max_length=64),
+    task_id: str = Query("", max_length=64),
+    q: str = Query("", max_length=200),
+    status: str = Query("", max_length=32),
+    severity: str = Query("", max_length=8),
+    source: Literal["", "execution", "deployment", "event", "other"] = "",
     cursor: str = Query("", max_length=4000),
-    limit: int = Query(20, ge=1, le=100), project_id: str = Header(default="", alias="X-Project-Id"),
+    limit: int = Query(20, ge=1, le=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_query_read import entity_page
 
-    filters = {"requirement_id": requirement_id, "task_id": task_id, "q": q, "status": status,
-               "severity": severity, "source": source, "sort": "created_desc"}
+    filters = {
+        "requirement_id": requirement_id,
+        "task_id": task_id,
+        "q": q,
+        "status": status,
+        "severity": severity,
+        "source": source,
+        "sort": "created_desc",
+    }
     return entity_page(db, _project(db, user, project_id), user, "issue", filters, limit=limit, cursor=cursor)
 
 
 @router.get("/references", response_model=QueryPage)
 def delivery_reference_page(
-    kind: ReferenceKind, request: Request, user: Annotated[User, Depends(current_user)],
-    db: Annotated[Session, Depends(get_session)], q: str = Query("", max_length=200),
-    ids: str = Query("", max_length=10100), requirement_id: str = Query("", max_length=64),
-    task_id: str = Query("", max_length=64), cursor: str = Query("", max_length=4000),
-    member_kind: Literal["", "human", "agent", "tool"] = "", member_active: bool | None = None,
-    resource_kind: Literal["", "repository", "document", "design", "other"] = "", archived: bool | None = None,
+    kind: ReferenceKind,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    q: str = Query("", max_length=200),
+    ids: str = Query("", max_length=10100),
+    requirement_id: str = Query("", max_length=64),
+    task_id: str = Query("", max_length=64),
+    cursor: str = Query("", max_length=4000),
+    member_kind: Literal["", "human", "agent", "tool"] = "",
+    member_active: bool | None = None,
+    resource_kind: Literal["", "repository", "document", "design", "other"] = "",
+    archived: bool | None = None,
     sort: Literal["id_asc", "ends_asc", "created_desc"] = "id_asc",
-    limit: int = Query(50, ge=1, le=100), project_id: str = Header(default="", alias="X-Project-Id"),
+    limit: int = Query(50, ge=1, le=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_query_read import reference_page
 
@@ -316,27 +377,176 @@ def delivery_reference_page(
         raise HTTPException(422, "End date sorting applies to milestone references")
     if sort == "created_desc" and kind != "execution":
         raise HTTPException(422, "Creation date sorting applies to execution references")
-    filters = {"kind": kind, "q": q, "ids": ids, "requirement_id": requirement_id, "task_id": task_id,
-               "member_kind": member_kind, "member_active": member_active, "resource_kind": resource_kind,
-               "archived": archived, "sort": sort}
-    return reference_page(db, _project(db, user, project_id), user, filters, limit=limit, cursor=cursor,
-                          store=getattr(request.app.state, "hermes_store", None))
+    filters = {
+        "kind": kind,
+        "q": q,
+        "ids": ids,
+        "requirement_id": requirement_id,
+        "task_id": task_id,
+        "member_kind": member_kind,
+        "member_active": member_active,
+        "resource_kind": resource_kind,
+        "archived": archived,
+        "sort": sort,
+    }
+    return reference_page(
+        db,
+        _project(db, user, project_id),
+        user,
+        filters,
+        limit=limit,
+        cursor=cursor,
+        store=getattr(request.app.state, "hermes_store", None),
+    )
 
 
-@router.get("/requirements/{requirement_id}", response_model=RequirementDetail)
+@router.get("/requirements/{requirement_id}", response_model=RequirementHeadResponse)
 def delivery_requirement_detail(
-    requirement_id: str, user: Annotated[User, Depends(current_user)],
-    db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id"),
+    requirement_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    query_generation: int | None = Query(default=None, ge=1),
+    project_id: str = Header(default="", alias="X-Project-Id"),
 ):
-    from .delivery_query_read import requirement_detail
+    from .delivery_requirement_read import head
 
-    return requirement_detail(db, _project(db, user, project_id), requirement_id)
+    return head(db, _project(db, user, project_id), requirement_id, query_generation)
+
+
+@router.get("/requirements/{requirement_id}/definition", response_model=RequirementDefinitionResponse)
+def delivery_requirement_definition(
+    requirement_id: str,
+    query_generation: Annotated[int, Query(ge=1)],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_read import definition
+
+    return definition(db, _project(db, user, project_id), requirement_id, query_generation)
+
+
+@router.get("/requirements/{requirement_id}/records", response_model=RequirementRecordsPage)
+def delivery_requirement_records(
+    requirement_id: str,
+    collection: RecordCollection,
+    query_generation: Annotated[int, Query(ge=1)],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str = Query(default="", max_length=4000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_read import records_page
+
+    return records_page(
+        db,
+        _project(db, user, project_id),
+        requirement_id,
+        collection,
+        query_generation,
+        user=user,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+@router.get("/requirements/{requirement_id}/records/{position}", response_model=RequirementRecordDetail)
+def delivery_requirement_record(
+    requirement_id: str,
+    position: Annotated[int, Path(ge=0)],
+    collection: RecordCollection,
+    query_generation: Annotated[int, Query(ge=1)],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_read import record_detail
+
+    return record_detail(
+        db, _project(db, user, project_id), requirement_id, collection, position, query_generation
+    )
+
+
+@router.get("/requirements/{requirement_id}/impact", response_model=RequirementImpactSummary)
+def delivery_requirement_impact(
+    requirement_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    query_generation: int | None = Query(default=None, ge=1),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_impact import impact_summary
+
+    return impact_summary(
+        db,
+        _project(db, user, project_id),
+        requirement_id,
+        query_generation,
+        user=user,
+        store=getattr(request.app.state, "hermes_store", None),
+    )
+
+
+@router.get("/requirements/{requirement_id}/impact/items", response_model=RequirementImpactPage)
+def delivery_requirement_impact_items(
+    requirement_id: str,
+    kind: RequirementImpactKind,
+    query_generation: Annotated[int, Query(ge=1)],
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str = Query(default="", max_length=4000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_impact import impact_page
+
+    return impact_page(
+        db,
+        _project(db, user, project_id),
+        requirement_id,
+        kind,
+        query_generation,
+        user=user,
+        store=getattr(request.app.state, "hermes_store", None),
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+@router.get("/requirements/{requirement_id}/impact/items/{item_id}", response_model=RequirementImpactDetail)
+def delivery_requirement_impact_item(
+    requirement_id: str,
+    item_id: str,
+    kind: RequirementImpactKind,
+    query_generation: Annotated[int, Query(ge=1)],
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_impact import impact_detail
+
+    return impact_detail(
+        db,
+        _project(db, user, project_id),
+        requirement_id,
+        kind,
+        item_id,
+        query_generation,
+        user=user,
+        store=getattr(request.app.state, "hermes_store", None),
+    )
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail)
 def delivery_task_detail(
-    task_id: str, user: Annotated[User, Depends(current_user)],
-    db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id"),
+    task_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_query_read import task_detail
 
@@ -345,13 +555,21 @@ def delivery_task_detail(
 
 @router.get("/executions/{execution_id}", response_model=ExecutionDetail)
 def delivery_execution_detail(
-    execution_id: str, request: Request, user: Annotated[User, Depends(current_user)],
-    db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id"),
+    execution_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_query_read import execution_detail
 
-    return execution_detail(db, _project(db, user, project_id), user, execution_id,
-                            getattr(request.app.state, "hermes_store", None))
+    return execution_detail(
+        db,
+        _project(db, user, project_id),
+        user,
+        execution_id,
+        getattr(request.app.state, "hermes_store", None),
+    )
 
 
 @router.get("/activity", response_model=ActivityPage)
@@ -370,9 +588,18 @@ def delivery_activity(
 
     project = _project(db, user, project_id)
     workspace = db.get(DeliveryWorkspace, project.id)
-    return list_activity(db, project, workspace.data if workspace else initial_state(), user,
-        scope=scope, scope_id=scope_id, action=action, cursor=cursor, limit=limit,
-        store=getattr(request.app.state, "hermes_store", None))
+    return list_activity(
+        db,
+        project,
+        workspace.data if workspace else initial_state(),
+        user,
+        scope=scope,
+        scope_id=scope_id,
+        action=action,
+        cursor=cursor,
+        limit=limit,
+        store=getattr(request.app.state, "hermes_store", None),
+    )
 
 
 @router.get("/activity/{event_id}", response_model=ActivityDetail)
@@ -387,14 +614,19 @@ def delivery_activity_detail(
 
     project = _project(db, user, project_id)
     workspace = db.get(DeliveryWorkspace, project.id)
-    return activity_detail(db, project, workspace.data if workspace else initial_state(), user, event_id,
-        store=getattr(request.app.state, "hermes_store", None))
+    return activity_detail(
+        db,
+        project,
+        workspace.data if workspace else initial_state(),
+        user,
+        event_id,
+        store=getattr(request.app.state, "hermes_store", None),
+    )
 
 
-@router.get("/requirements/{requirement_id}/history", response_model=RequirementHistory)
+@router.get("/requirements/{requirement_id}/history", response_model=RequirementHistoryPage)
 def delivery_requirement_history(
     requirement_id: str,
-    request: Request,
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_session)],
     cursor: str = Query(default="", max_length=4000),
@@ -403,8 +635,9 @@ def delivery_requirement_history(
 ):
     from .delivery_requirement_history import requirement_history
 
-    return requirement_history(db, _project(db, user, project_id), requirement_id, cursor=cursor, limit=limit,
-        user=user, store=getattr(request.app.state, "hermes_store", None))
+    return requirement_history(
+        db, _project(db, user, project_id), requirement_id, cursor=cursor, limit=limit, user=user
+    )
 
 
 @router.get("/requirements/{requirement_id}/history/{version_id}", response_model=RequirementVersionDetail)
@@ -429,16 +662,21 @@ def delivery_requirement_change_preview(
     db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
-    from .delivery_requirement_history import preview_change
+    from .delivery_requirement_proof import preview
 
     project = _project(db, user, project_id)
     if not _role_permissions(db, user, project)["write"]:
         raise HTTPException(403, "Project write permission required")
     _require_writable_state(project)
-    workspace = db.get(DeliveryWorkspace, project.id)
-    return preview_change(db, project, reconcile(db, project, workspace.data) if workspace else initial_state(),
-        user, requirement_id, body.requirement_basis, body.changes.model_dump(exclude_unset=True),
-        version=workspace.version if workspace else 0, store=getattr(request.app.state, "hermes_store", None))
+    return preview(
+        db,
+        project,
+        requirement_id,
+        body.requirement_basis,
+        body.changes.model_dump(exclude_unset=True),
+        user=user,
+        store=getattr(request.app.state, "hermes_store", None),
+    )
 
 
 @router.get("/issues/{issue_id}", response_model=IssueDetail)
@@ -454,7 +692,11 @@ def delivery_issue_detail(
     project = _project(db, user, project_id)
     row = db.get(DeliveryWorkspace, project.id)
     return issue_detail(
-        db, project, row.data if row else initial_state(), user, issue_id,
+        db,
+        project,
+        row.data if row else initial_state(),
+        user,
+        issue_id,
         version=row.version if row else 0,
         store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None),
@@ -502,8 +744,13 @@ def delivery_issue_diagnoses(
     project = _project(db, user, project_id)
     row = db.get(DeliveryWorkspace, project.id)
     return diagnosis_history(
-        db, project, row.data if row else initial_state(), user, issue_id,
-        cursor=cursor, store=getattr(request.app.state, "hermes_store", None),
+        db,
+        project,
+        row.data if row else initial_state(),
+        user,
+        issue_id,
+        cursor=cursor,
+        store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None),
     )
 
@@ -521,7 +768,12 @@ def delivery_issue_diagnose(
 
     project = _project(db, user, project_id)
     return generate_diagnosis(
-        db, project, user, issue_id, body, request,
+        db,
+        project,
+        user,
+        issue_id,
+        body,
+        request,
         store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None),
     )
@@ -539,7 +791,11 @@ def delivery_issue_diagnosis_detail(
     from .delivery_issue_diagnosis import diagnosis_detail
 
     return diagnosis_detail(
-        db, _project(db, user, project_id), user, issue_id, diagnosis_id,
+        db,
+        _project(db, user, project_id),
+        user,
+        issue_id,
+        diagnosis_id,
         store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None),
     )
@@ -555,7 +811,9 @@ def delivery_quality(
 ):
     from .delivery_release_query import quality_scope
 
-    return quality_scope(db, _project(db, user, project_id), requirement_ids=requirement_ids, task_ids=task_ids)
+    return quality_scope(
+        db, _project(db, user, project_id), requirement_ids=requirement_ids, task_ids=task_ids
+    )
 
 
 @router.get("/quality/catalogue", response_model=QualityCatalogueResponse)
@@ -571,8 +829,14 @@ def delivery_quality_catalogue(
 ):
     from .delivery_release_query import quality_catalogue
 
-    return quality_catalogue(db, _project(db, user, project_id), user,
-        {"kind": kind, "readiness": readiness, "q": q}, limit=limit, cursor=cursor)
+    return quality_catalogue(
+        db,
+        _project(db, user, project_id),
+        user,
+        {"kind": kind, "readiness": readiness, "q": q},
+        limit=limit,
+        cursor=cursor,
+    )
 
 
 @router.get("/release-pages", response_model=ReleasePageResponse)
@@ -648,7 +912,9 @@ def delivery_inbox(
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_session)],
     scope: Annotated[Literal["mine", "team"], Query()] = "mine",
-    category: Annotated[Literal["all", "work", "approval", "acceptance", "blocked", "overdue"], Query()] = "all",
+    category: Annotated[
+        Literal["all", "work", "approval", "acceptance", "blocked", "overdue"], Query()
+    ] = "all",
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     cursor: Annotated[str, Query(max_length=4000)] = "",
     project_id: str = Header(default="", alias="X-Project-Id"),
@@ -656,8 +922,16 @@ def delivery_inbox(
     from .delivery_inbox_query import inbox_page
 
     project = _project(db, user, project_id)
-    return inbox_page(db, project, user, can_approve=_permissions(db, user, project)["approve"],
-        scope_kind=scope, category=category, limit=limit, cursor=cursor)
+    return inbox_page(
+        db,
+        project,
+        user,
+        can_approve=_permissions(db, user, project)["approve"],
+        scope_kind=scope,
+        category=category,
+        limit=limit,
+        cursor=cursor,
+    )
 
 
 @router.get("/progress/summary", response_model=ProgressSummaryResponse)
@@ -715,20 +989,33 @@ def delivery_progress_observation(
 
 @router.get("/progress/baselines", response_model=ProgressBaselinesResponse)
 def delivery_progress_baselines(
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
-    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project",
+    scope_id: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=100),
+    cursor: str = Query("", max_length=4000),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_query import baselines
 
-    return baselines(db, _progress_project(db, user, project_id), user, scope=scope, scope_id=scope_id, limit=limit, cursor=cursor)
+    return baselines(
+        db,
+        _progress_project(db, user, project_id),
+        user,
+        scope=scope,
+        scope_id=scope_id,
+        limit=limit,
+        cursor=cursor,
+    )
 
 
 @router.get("/progress/freeze-proof", response_model=ProgressFreezeProofResponse)
 def delivery_progress_freeze_proof(
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project",
+    scope_id: str = Query("", max_length=100),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_current import freeze_proof
@@ -750,130 +1037,257 @@ def delivery_progress_baseline(
 
 @router.get("/progress/observations/{observation_id}/tasks", response_model=ProgressSnapshotTaskPage)
 def delivery_progress_observation_tasks(
-    observation_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
-    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    observation_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project",
+    scope_id: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=100),
+    cursor: str = Query("", max_length=4000),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_json import snapshot_page
 
-    return snapshot_page(db, _progress_project(db, user, project_id), user, "observation", observation_id, "tasks",
-        limit=limit, cursor=cursor, scope=scope, scope_id=scope_id)
+    return snapshot_page(
+        db,
+        _progress_project(db, user, project_id),
+        user,
+        "observation",
+        observation_id,
+        "tasks",
+        limit=limit,
+        cursor=cursor,
+        scope=scope,
+        scope_id=scope_id,
+    )
 
 
-@router.get("/progress/observations/{observation_id}/tasks/{task_id}", response_model=ProgressSnapshotTaskDetail)
+@router.get(
+    "/progress/observations/{observation_id}/tasks/{task_id}", response_model=ProgressSnapshotTaskDetail
+)
 def delivery_progress_observation_task(
-    observation_id: str, task_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    observation_id: str,
+    task_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project",
+    scope_id: str = Query("", max_length=100),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_json import snapshot_detail
 
-    return snapshot_detail(db, _progress_project(db, user, project_id), "observation", observation_id, "tasks", task_id, scope=scope, scope_id=scope_id)
+    return snapshot_detail(
+        db,
+        _progress_project(db, user, project_id),
+        "observation",
+        observation_id,
+        "tasks",
+        task_id,
+        scope=scope,
+        scope_id=scope_id,
+    )
 
 
-@router.get("/progress/observations/{observation_id}/requirements", response_model=ProgressSnapshotRequirementPage)
+@router.get(
+    "/progress/observations/{observation_id}/requirements", response_model=ProgressSnapshotRequirementPage
+)
 def delivery_progress_observation_requirements(
-    observation_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
-    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    observation_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project",
+    scope_id: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=100),
+    cursor: str = Query("", max_length=4000),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_json import snapshot_page
 
-    return snapshot_page(db, _progress_project(db, user, project_id), user, "observation", observation_id, "requirements",
-        limit=limit, cursor=cursor, scope=scope, scope_id=scope_id)
+    return snapshot_page(
+        db,
+        _progress_project(db, user, project_id),
+        user,
+        "observation",
+        observation_id,
+        "requirements",
+        limit=limit,
+        cursor=cursor,
+        scope=scope,
+        scope_id=scope_id,
+    )
 
 
-@router.get("/progress/observations/{observation_id}/requirements/{requirement_id}", response_model=ProgressSnapshotRequirementDetail)
+@router.get(
+    "/progress/observations/{observation_id}/requirements/{requirement_id}",
+    response_model=ProgressSnapshotRequirementDetail,
+)
 def delivery_progress_observation_requirement(
-    observation_id: str, requirement_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    observation_id: str,
+    requirement_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project",
+    scope_id: str = Query("", max_length=100),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_json import snapshot_detail
 
-    return snapshot_detail(db, _progress_project(db, user, project_id), "observation", observation_id, "requirements", requirement_id, scope=scope, scope_id=scope_id)
+    return snapshot_detail(
+        db,
+        _progress_project(db, user, project_id),
+        "observation",
+        observation_id,
+        "requirements",
+        requirement_id,
+        scope=scope,
+        scope_id=scope_id,
+    )
 
 
 @router.get("/progress/baselines/{baseline_id}/tasks", response_model=ProgressSnapshotTaskPage)
 def delivery_progress_baseline_tasks(
-    baseline_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    baseline_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: int = Query(20, ge=1, le=100),
+    cursor: str = Query("", max_length=4000),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_json import snapshot_page
 
-    return snapshot_page(db, _progress_project(db, user, project_id), user, "baseline", baseline_id, "tasks",
-        limit=limit, cursor=cursor)
+    return snapshot_page(
+        db,
+        _progress_project(db, user, project_id),
+        user,
+        "baseline",
+        baseline_id,
+        "tasks",
+        limit=limit,
+        cursor=cursor,
+    )
 
 
 @router.get("/progress/baselines/{baseline_id}/tasks/{task_id}", response_model=ProgressSnapshotTaskDetail)
 def delivery_progress_baseline_task(
-    baseline_id: str, task_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    baseline_id: str,
+    task_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_json import snapshot_detail
 
-    return snapshot_detail(db, _progress_project(db, user, project_id), "baseline", baseline_id, "tasks", task_id)
+    return snapshot_detail(
+        db, _progress_project(db, user, project_id), "baseline", baseline_id, "tasks", task_id
+    )
 
 
 @router.get("/progress/baselines/{baseline_id}/requirements", response_model=ProgressSnapshotRequirementPage)
 def delivery_progress_baseline_requirements(
-    baseline_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    baseline_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: int = Query(20, ge=1, le=100),
+    cursor: str = Query("", max_length=4000),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_json import snapshot_page
 
-    return snapshot_page(db, _progress_project(db, user, project_id), user, "baseline", baseline_id, "requirements",
-        limit=limit, cursor=cursor)
+    return snapshot_page(
+        db,
+        _progress_project(db, user, project_id),
+        user,
+        "baseline",
+        baseline_id,
+        "requirements",
+        limit=limit,
+        cursor=cursor,
+    )
 
 
-@router.get("/progress/baselines/{baseline_id}/requirements/{requirement_id}", response_model=ProgressSnapshotRequirementDetail)
+@router.get(
+    "/progress/baselines/{baseline_id}/requirements/{requirement_id}",
+    response_model=ProgressSnapshotRequirementDetail,
+)
 def delivery_progress_baseline_requirement(
-    baseline_id: str, requirement_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    baseline_id: str,
+    requirement_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_json import snapshot_detail
 
-    return snapshot_detail(db, _progress_project(db, user, project_id), "baseline", baseline_id, "requirements", requirement_id)
+    return snapshot_detail(
+        db, _progress_project(db, user, project_id), "baseline", baseline_id, "requirements", requirement_id
+    )
 
 
 @router.get("/progress/baselines/{baseline_id}/comparison", response_model=ProgressComparisonSummaryResponse)
 def delivery_progress_comparison(
-    baseline_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    baseline_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
     query_generation: int | None = Query(None, ge=1),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_comparison import comparison_summary
 
-    return comparison_summary(db, _progress_project(db, user, project_id), baseline_id, query_generation=query_generation)
+    return comparison_summary(
+        db, _progress_project(db, user, project_id), baseline_id, query_generation=query_generation
+    )
 
 
-@router.get("/progress/baselines/{baseline_id}/comparison/items", response_model=ProgressComparisonPageResponse)
+@router.get(
+    "/progress/baselines/{baseline_id}/comparison/items", response_model=ProgressComparisonPageResponse
+)
 def delivery_progress_comparison_items(
-    baseline_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    kind: ComparisonKind = "changed", limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    baseline_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    kind: ComparisonKind = "changed",
+    limit: int = Query(20, ge=1, le=100),
+    cursor: str = Query("", max_length=4000),
     query_generation: int | None = Query(None, ge=1),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_comparison import comparison_page
 
-    return comparison_page(db, _progress_project(db, user, project_id), user, baseline_id, kind=kind, limit=limit,
-        cursor=cursor, query_generation=query_generation)
+    return comparison_page(
+        db,
+        _progress_project(db, user, project_id),
+        user,
+        baseline_id,
+        kind=kind,
+        limit=limit,
+        cursor=cursor,
+        query_generation=query_generation,
+    )
 
 
-@router.get("/progress/baselines/{baseline_id}/comparison/items/{task_id}", response_model=ProgressComparisonDetailResponse)
+@router.get(
+    "/progress/baselines/{baseline_id}/comparison/items/{task_id}",
+    response_model=ProgressComparisonDetailResponse,
+)
 def delivery_progress_comparison_item(
-    baseline_id: str, task_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
-    kind: ComparisonKind = "changed", query_generation: int | None = Query(None, ge=1),
+    baseline_id: str,
+    task_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    kind: ComparisonKind = "changed",
+    query_generation: int | None = Query(None, ge=1),
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_progress_comparison import comparison_detail
 
-    return comparison_detail(db, _progress_project(db, user, project_id), baseline_id, task_id, kind=kind,
-        query_generation=query_generation)
+    return comparison_detail(
+        db,
+        _progress_project(db, user, project_id),
+        baseline_id,
+        task_id,
+        kind=kind,
+        query_generation=query_generation,
+    )
 
 
 @router.get("/team-runtime-bindings", response_model=TeamRuntimeBindingsResponse)
@@ -889,7 +1303,11 @@ def team_runtime_bindings(
     row = db.get(DeliveryWorkspace, project.id)
     data = row.data if row else initial_state()
     return runtime_bindings_view(
-        db, project, data, user, getattr(request.app.state, "hermes_store", None),
+        db,
+        project,
+        data,
+        user,
+        getattr(request.app.state, "hermes_store", None),
         can_configure=_permissions(db, user, project)["configure"],
         version=row.version if row else 0,
     )
@@ -996,24 +1414,35 @@ def _runtime_entry(db, project, execution_id):
 
 @router.get("/executions/{execution_id}/runtime", response_model=ExecutionRuntimeResponse)
 def execution_runtime(
-    execution_id: str, request: Request,
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    execution_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_execution_runtime import runtime_detail
 
     project = _project(db, user, project_id)
     _row, state, entry = _runtime_entry(db, project, execution_id)
-    return runtime_detail(db, project, user, state, entry,
-                          getattr(request.app.state, "hermes_store", None),
-                          getattr(request.app.state, "hermes_execution", None),
-                          _permissions(db, user, project))
+    return runtime_detail(
+        db,
+        project,
+        user,
+        state,
+        entry,
+        getattr(request.app.state, "hermes_store", None),
+        getattr(request.app.state, "hermes_execution", None),
+        _permissions(db, user, project),
+    )
 
 
 @router.get("/executions/{execution_id}/nodes/{node_id}/output", response_model=ExecutionNodeOutputResponse)
 def execution_node_output(
-    execution_id: str, node_id: str, request: Request,
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    execution_id: str,
+    node_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
     attempt: Annotated[int, Query(ge=1)],
     stream: Literal["stdout", "stderr"] = "stdout",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -1024,15 +1453,27 @@ def execution_node_output(
 
     project = _project(db, user, project_id)
     _row, state, entry = _runtime_entry(db, project, execution_id)
-    return node_output(db, project, user, state, entry,
-                       getattr(request.app.state, "hermes_store", None),
-                       node_id=node_id, attempt=attempt, stream=stream, limit=limit, cursor=cursor)
+    return node_output(
+        db,
+        project,
+        user,
+        state,
+        entry,
+        getattr(request.app.state, "hermes_store", None),
+        node_id=node_id,
+        attempt=attempt,
+        stream=stream,
+        limit=limit,
+        cursor=cursor,
+    )
 
 
 @router.post("/execution-control-preview", response_model=ExecutionControlPreviewResponse)
 def execution_control_preview(
-    body: ExecutionControlPreviewInput, request: Request,
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    body: ExecutionControlPreviewInput,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     from .delivery_execution_runtime import control_preview
@@ -1040,10 +1481,17 @@ def execution_control_preview(
     project = _project(db, user, project_id)
     row = db.get(DeliveryWorkspace, project.id)
     state = reconcile(db, project, row.data) if row else initial_state()
-    return control_preview(db, project, user, state, body,
-                           getattr(request.app.state, "hermes_store", None),
-                           getattr(request.app.state, "hermes_execution", None),
-                           _permissions(db, user, project), version=row.version if row else 0)
+    return control_preview(
+        db,
+        project,
+        user,
+        state,
+        body,
+        getattr(request.app.state, "hermes_store", None),
+        getattr(request.app.state, "hermes_execution", None),
+        _permissions(db, user, project),
+        version=row.version if row else 0,
+    )
 
 
 @router.get("/tasks/{task_id}/reviews", response_model=TaskReviewsResponse)
@@ -1124,7 +1572,10 @@ def deployments(
     project = _project(db, user, project_id)
     row = db.get(DeliveryWorkspace, project.id)
     return deployment_index(
-        db, project, row.data if row else initial_state(), user,
+        db,
+        project,
+        row.data if row else initial_state(),
+        user,
         version=row.version if row else 0,
         store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None),
@@ -1144,7 +1595,11 @@ def deployment_detail(
     project = _project(db, user, project_id)
     row = db.get(DeliveryWorkspace, project.id)
     return read_detail(
-        db, project, row.data if row else initial_state(), user, deployment_id,
+        db,
+        project,
+        row.data if row else initial_state(),
+        user,
+        deployment_id,
         version=row.version if row else 0,
         store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None),
@@ -1167,7 +1622,11 @@ def deployment_preview(
     _require_writable_state(project)
     row = db.get(DeliveryWorkspace, project.id)
     return prepare(
-        db, project, row.data if row else initial_state(), user, body,
+        db,
+        project,
+        row.data if row else initial_state(),
+        user,
+        body,
         version=row.version if row else 0,
         store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None),
@@ -1179,14 +1638,27 @@ def _command_permission(action, payload):
         return "approve"
     if action == "project.lifecycle":
         return "lifecycle"
-    if action in {"member.runtime.bind", "member.runtime.unbind", "release.policy.save", "deployment.environment.save"}:
+    if action in {
+        "member.runtime.bind",
+        "member.runtime.unbind",
+        "release.policy.save",
+        "deployment.environment.save",
+    }:
         return "configure"
     if action.startswith("deployment.") and action != "deployment.sync":
         return "approve"
     if action in {"member.save", "member.calendar.save", "resource.save", "resource.archive"} or (
-        action == "project.update" and {
-            "name", "description", "business_id", "project_path", "vector_db", "vector_db_config", "is_template"
-        } & payload.keys()
+        action == "project.update"
+        and {
+            "name",
+            "description",
+            "business_id",
+            "project_path",
+            "vector_db",
+            "vector_db_config",
+            "is_template",
+        }
+        & payload.keys()
     ):
         return "configure"
     if action in {
@@ -1205,7 +1677,9 @@ def _command_permission(action, payload):
 
 def _require_writable_state(project):
     if project.status == "archived":
-        raise HTTPException(409, {"code": "project_archived", "message": "Restore the project before editing."})
+        raise HTTPException(
+            409, {"code": "project_archived", "message": "Restore the project before editing."}
+        )
 
 
 @router.post("/project-lifecycle-preview", response_model=ProjectLifecyclePreviewResponse)
@@ -1221,8 +1695,9 @@ def project_lifecycle_preview(
     if not _role_permissions(db, user, project)["lifecycle"]:
         raise HTTPException(403, "Project lifecycle permission required")
     row = db.get(DeliveryWorkspace, project.id)
-    return preview(db, project, user, row.data if row else initial_state(), body,
-                   version=row.version if row else 0)
+    return preview(
+        db, project, user, row.data if row else initial_state(), body, version=row.version if row else 0
+    )
 
 
 @router.post("/commands", response_model=CommandAck)
@@ -1254,11 +1729,20 @@ def execute(
         if receipt.request_hash != fingerprint:
             raise HTTPException(409, "Idempotency key already used with different input")
         _schedule_committed_run(db, project, user, body, request, background_tasks, receipt.version)
-        return replay_ack(db, project, receipt.version, user=user,
-                          store=getattr(request.app.state, "hermes_store", None) if request else None)
+        return replay_ack(
+            db,
+            project,
+            receipt.version,
+            user=user,
+            store=getattr(request.app.state, "hermes_store", None) if request else None,
+        )
     from ..project_write_guard import lifecycle_scope, require_project_operation
 
-    scope = lifecycle_scope(db, project.tenant_id, project.id) if body.action == "project.lifecycle" else nullcontext()
+    scope = (
+        lifecycle_scope(db, project.tenant_id, project.id)
+        if body.action == "project.lifecycle"
+        else nullcontext()
+    )
     try:
         with scope:
             require_project_operation(db, project.tenant_id, project.id)
@@ -1280,9 +1764,16 @@ def execute(
                 if receipt.request_hash != fingerprint:
                     raise HTTPException(409, "Idempotency key already used with different input")
                 _schedule_committed_run(db, project, user, body, request, background_tasks, receipt.version)
-                return replay_ack(db, project, receipt.version, user=user,
-                                  store=getattr(request.app.state, "hermes_store", None) if request else None)
-            return _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks)
+                return replay_ack(
+                    db,
+                    project,
+                    receipt.version,
+                    user=user,
+                    store=getattr(request.app.state, "hermes_store", None) if request else None,
+                )
+            return _commit_command(
+                db, project, user, body, payload, key, fingerprint, request, background_tasks
+            )
     except Exception:
         db.rollback()
         raise
@@ -1293,7 +1784,9 @@ def _schedule_committed_run(db, project, user, body, request, background_tasks, 
     if body.action in {"execution.start", "execution.retry", "execution.approval"}:
         from .delivery_execution_schedule import schedule_committed_execution
 
-        return schedule_committed_execution(db, project, user, body, request, background_tasks, applied_version)
+        return schedule_committed_execution(
+            db, project, user, body, request, background_tasks, applied_version
+        )
     if body.action != "deployment.start" or request is None or background_tasks is None:
         return
     from hermes_core.models import CoreError
@@ -1314,13 +1807,15 @@ def _schedule_committed_run(db, project, user, body, request, background_tasks, 
     if not operation.get("run_id"):
         return
     workspace_id = entry["snapshot"]["definition"]["workspace_id"]
-    event = db.scalar(select(DeliveryEvent).where(
-        DeliveryEvent.project_id == project.id,
-        DeliveryEvent.tenant_id == project.tenant_id,
-        DeliveryEvent.version == applied_version,
-        DeliveryEvent.action == "deployment.start",
-        DeliveryEvent.resource_id == entry["id"],
-    ))
+    event = db.scalar(
+        select(DeliveryEvent).where(
+            DeliveryEvent.project_id == project.id,
+            DeliveryEvent.tenant_id == project.tenant_id,
+            DeliveryEvent.version == applied_version,
+            DeliveryEvent.action == "deployment.start",
+            DeliveryEvent.resource_id == entry["id"],
+        )
+    )
     committed = event.data.get("result", {}).get("start_run") if event else None
     if committed != {"workspace_id": workspace_id, "run_id": operation["run_id"]}:
         return
@@ -1338,7 +1833,8 @@ def _schedule_committed_run(db, project, user, body, request, background_tasks, 
         return
     source = run["data"].get("deployment_source", {})
     if (
-        run["status"] != "queued" or run["data"].get("target_device_id")
+        run["status"] != "queued"
+        or run["data"].get("target_device_id")
         or source.get("plan_digest") != operation["plan_digest"]
         or source.get("requested_by") != operation["requested_by"]["id"]
     ):
@@ -1350,16 +1846,35 @@ def _schedule_committed_run(db, project, user, body, request, background_tasks, 
 def stage_delivery_command(db, project, user, body, payload, key, fingerprint, request):
     """Prepare one canonical command; caller owns commit and original result."""
     reservation = None
+    requirement_proof_token = None
     try:
         from .delivery_discussion_adoption import prepare_adoption, record_adoption
+        from .delivery_requirement_proof import install, prepare_sync, prepare_update
 
+        if body.action == "requirement.update":
+            complete = prepare_update(db, project, payload.id, payload)
+            if complete is not None:
+                requirement_proof_token = install(db, project, payload.id, complete)
+        elif body.action == "sync.record.apply":
+            complete = prepare_sync(db, project, payload)
+            if complete is not None:
+                requirement_proof_token = install(db, project, payload.record["id"], complete)
         progress_proof = None
         if body.action == "baseline.create":
             from .delivery_progress_current import freeze_proof
 
-            progress_proof = freeze_proof(db, project, scope=payload.scope, scope_id=payload.scope_id, internal=True)
+            progress_proof = freeze_proof(
+                db, project, scope=payload.scope, scope_id=payload.scope_id, internal=True
+            )
             if not progress_proof[0]["available"] or not progress_proof[0]["complete"]:
-                raise HTTPException(413, {"code": "progress_proof_unavailable", "message": "The complete baseline approval exceeds its canonical proof budget", "reasons": progress_proof[0]["reasons"]})
+                raise HTTPException(
+                    413,
+                    {
+                        "code": "progress_proof_unavailable",
+                        "message": "The complete baseline approval exceeds its canonical proof budget",
+                        "reasons": progress_proof[0]["reasons"],
+                    },
+                )
         source = prepare_adoption(db, project, user, body, request)
         row = db.get(DeliveryWorkspace, project.id)
         if not row:
@@ -1394,9 +1909,14 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
 
             applied = apply_progress(db, project, user, body.action, payload, proof=progress_proof)
         else:
-            applied = _apply(db, project, user, data, body.action, payload, request, command_key=body.idempotency_key)
+            applied = _apply(
+                db, project, user, data, body.action, payload, request, command_key=body.idempotency_key
+            )
         resource_id, before = applied[:2]
-        event_data = {"before": before, "input": payload.model_dump(mode="json", exclude_unset=body.action == "project.update")}
+        event_data = {
+            "before": before,
+            "input": payload.model_dump(mode="json", exclude_unset=body.action == "project.update"),
+        }
         if body.action == "project.update" and "vector_db_config" in event_data["input"]:
             event_data["input"]["vector_db_config"] = {"changed": True}
         if len(applied) == 3:
@@ -1405,12 +1925,16 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
 
         ack = recorded_ack(project, body.action, resource_id, event_data.get("result"), next_version)
         event_data["command_ack"] = ack
-        event_data["command_ack_access"] = sorted(set(
-            command_access(data, body.action, resource_id)
-            + (list(source.runtime_scopes) if source is not None else [])
-        ))
+        event_data["command_ack_access"] = sorted(
+            set(
+                command_access(data, body.action, resource_id)
+                + (list(source.runtime_scopes) if source is not None else [])
+            )
+        )
         db.flush()
-        if body.action not in {"project.lifecycle", "baseline.create"} and not body.action.startswith(("release.", "deployment.")):
+        if body.action not in {"project.lifecycle", "baseline.create"} and not body.action.startswith(
+            ("release.", "deployment.")
+        ):
             remember_basis(db, project, data)
         updated = db.execute(
             update(DeliveryWorkspace)
@@ -1426,15 +1950,15 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
             raise HTTPException(409, "Concurrent edit. Reload the project.")
         db.flush()
         event = DeliveryEvent(
-                id=identifier("event"),
-                project_id=project.id,
-                tenant_id=project.tenant_id,
-                version=next_version,
-                actor=user.username,
-                action=body.action,
-                resource_id=resource_id,
-                data=event_data,
-            )
+            id=identifier("event"),
+            project_id=project.id,
+            tenant_id=project.tenant_id,
+            version=next_version,
+            actor=user.username,
+            action=body.action,
+            resource_id=resource_id,
+            data=event_data,
+        )
         from .delivery_activity import record_activity
 
         record_activity(db, project, user, data, event)
@@ -1450,11 +1974,13 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
         )
         yield {"ack": ack, "version": next_version}
     finally:
+        from .delivery_requirement_proof import release
+
+        release(db, requirement_proof_token)
         if reservation:
             from .delivery_progress_capture import release_workspace_version
 
             release_workspace_version(db, reservation)
-
 
 
 def _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks=None):
@@ -1468,7 +1994,9 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
         return current_ack(db, project, staged["ack"], replayed=False)
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(409, "Concurrent command. Reload and retry using the same idempotency key.") from exc
+        raise HTTPException(
+            409, "Concurrent command. Reload and retry using the same idempotency key."
+        ) from exc
     except Exception:
         db.rollback()
         raise
@@ -1483,7 +2011,12 @@ def _apply(db, project, user, data, action, payload, request, *, command_key="")
         from .delivery_execution_runtime import apply_runtime_control
 
         return apply_runtime_control(
-            db, project, user, data, action, payload,
+            db,
+            project,
+            user,
+            data,
+            action,
+            payload,
             getattr(request.app.state, "hermes_store", None) if request else None,
             getattr(request.app.state, "hermes_execution", None) if request else None,
             command_key=command_key,
@@ -1492,7 +2025,12 @@ def _apply(db, project, user, data, action, payload, request, *, command_key="")
         from .delivery_issue_diagnosis import apply_issue_diagnosis
 
         return apply_issue_diagnosis(
-            db, project, user, data, action, payload,
+            db,
+            project,
+            user,
+            data,
+            action,
+            payload,
             store=getattr(request.app.state, "hermes_store", None) if request else None,
             execution=getattr(request.app.state, "hermes_execution", None) if request else None,
         )

@@ -11,8 +11,8 @@ import {
 } from "@/lib/delivery";
 import {
   fetchDeliveryContext,
-  fetchDeliveryTaskData,
-  fetchRequirementDetail,
+  fetchDeliveryTaskEditData,
+  fetchEditableRequirement,
   fetchTaskDetail,
 } from "@/lib/deliveryQuery";
 import { fetchDeliveryIssue, type IssueDetail } from "@/lib/deliveryIssue";
@@ -22,7 +22,7 @@ import {
   type DiscussionScope,
 } from "@/lib/deliveryDiscussions";
 import { projectSessionKey } from "@/lib/projectPortfolio";
-import { DeliveryRequirementChangeEditor } from "./DeliveryRequirementChangeEditor";
+import { requirementAdoptionHref } from "@/lib/deliveryRequirementAdoption";
 import { DeliveryTaskPlanEditor } from "./DeliveryTaskPlanEditor";
 import { DeliveryTaskPlanMaintenance } from "./DeliveryTaskPlanMaintenance";
 import { IssueReviewPanel } from "./DeliveryIssueReview";
@@ -41,7 +41,7 @@ import type { DiscussionAdoptAction } from "./DeliveryDiscussionThread";
 
 export async function loadDiscussionAdoption(
   projectId: string,
-  action: DiscussionAdoptAction,
+  action: Exclude<DiscussionAdoptAction, "requirement">,
   source: DiscussionAdoption,
   signal?: AbortSignal,
 ) {
@@ -52,7 +52,7 @@ export async function loadDiscussionAdoption(
     throw new Error("HTTP 403: discussion adoption forbidden");
   if (action === "task") {
     if (subject.kind !== "task") throw new Error("discussion_scope_changed");
-    const task = await fetchDeliveryTaskData(projectId, subject.id, signal);
+    const task = await fetchDeliveryTaskEditData(projectId, subject.id, signal);
     if (task.project.id !== projectId || task.task.id !== subject.id)
       throw new Error("discussion_scope_changed");
     return { context, task };
@@ -76,7 +76,7 @@ export async function loadDiscussionAdoption(
     requirementId = current.task.req_id;
   } else if (subject.kind !== "requirement")
     throw new Error("discussion_scope_changed");
-  const requirement = await fetchRequirementDetail(
+  const requirement = await fetchEditableRequirement(
     projectId,
     requirementId,
     signal,
@@ -236,7 +236,7 @@ export function DeliveryDiscussionAdoption({
 }: {
   projectId: string;
   sessionId: string;
-  action: DiscussionAdoptAction;
+  action: Exclude<DiscussionAdoptAction, "requirement">;
   source: DiscussionAdoption;
   onClose: () => void;
   onSaved: (ack: DeliveryCommandAck) => void;
@@ -285,19 +285,6 @@ export function DeliveryDiscussionAdoption({
           />
         )}
       </Modal>
-    );
-  if (action === "requirement" && data.requirement)
-    return (
-      <DeliveryRequirementChangeEditor
-        workspace={data.context}
-        requirement={data.requirement.requirement}
-        requirementVersion={data.requirement.version}
-        sessionId={sessionId}
-        onSaved={onSaved}
-        onClose={onClose}
-        initialSource={source}
-        onUnresolvedChange={pending}
-      />
     );
   if (action === "plan" && data.requirement)
     return (
@@ -398,7 +385,7 @@ export function DeliveryCollaboration({
   onNavigate?: (href: string) => void;
 }) {
   const [adoption, setAdoption] = useState<{
-    action: DiscussionAdoptAction;
+    action: Exclude<DiscussionAdoptAction, "requirement">;
     source: DiscussionAdoption;
   } | null>(null);
   const origin = useRef(projectSessionKey());
@@ -409,8 +396,19 @@ export function DeliveryCollaboration({
     readOnly,
     onNavigate,
     onUnresolvedChange,
-    onAdopt: (action: DiscussionAdoptAction, source: DiscussionAdoption) =>
-      setAdoption({ action, source }),
+    onAdopt: (action: DiscussionAdoptAction, source: DiscussionAdoption) => {
+      if (action === "requirement") {
+        const href = requirementAdoptionHref(
+          projectId,
+          source,
+          currentDiscussionHash(),
+        );
+        if (onNavigate) onNavigate(href);
+        else location.hash = href;
+        return;
+      }
+      setAdoption({ action, source });
+    },
   };
   return (
     <>

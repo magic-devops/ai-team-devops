@@ -1,13 +1,11 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { RequirementHead } from "./deliveryRequirementReads";
 import { describe, expect, it, vi } from "vitest";
 import { request } from "./http";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DeliveryTaskPlanning } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanning";
-import type {
-  DeliveryRequirement,
-  DeliveryTask,
-  DeliveryTaskData,
-} from "./delivery";
+import type { DeliveryTask, DeliveryTaskData } from "./delivery";
 import {
   remapPlanCriteria,
   selectedPlanItems,
@@ -96,13 +94,25 @@ describe("editable task plans", () => {
         requirement: {
           flow: { revision: 1 },
           acceptance_criteria: [],
-        } as unknown as DeliveryRequirement,
-        data: { dependencies: [] } as unknown as DeliveryTaskData,
+        } as unknown as RequirementHead,
+        data: {
+          project: { id: "P" },
+          query_generation: 1,
+          dependencies: [],
+        } as unknown as DeliveryTaskData,
         onTask: () => {},
         onEdit: () => {},
         canEdit: true,
       });
-      expect(() => renderToStaticMarkup(element)).not.toThrow();
+      expect(() =>
+        renderToStaticMarkup(
+          createElement(
+            QueryClientProvider,
+            { client: new QueryClient() },
+            element,
+          ),
+        ),
+      ).not.toThrow();
     }
   });
   it("submits precisely the selected edited content without editor state", () => {
@@ -120,7 +130,7 @@ describe("editable task plans", () => {
         priority: "P1",
         estimate: "L",
         acceptance_criteria: [],
-  requirement_criteria_indices: [0],
+        requirement_criteria_indices: [0],
         depends_on: [],
         starts_on: null,
         ends_on: null,

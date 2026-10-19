@@ -39,7 +39,7 @@ describe("scoped collaboration HTTP boundary", () => {
       "/api/v1/delivery/requirements/R%2F1/history/version%2F30",
     ]);
   });
-  it("gets current links through reader history without a write preview", async () => {
+  it("reads metadata history without a current impact or write preview", async () => {
     await fetchRequirementHistory("P", "R", "older");
     expect(request).toHaveBeenCalledWith(
       "/api/v1/delivery/requirements/R/history?limit=20&cursor=older",

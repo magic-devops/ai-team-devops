@@ -201,7 +201,9 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
 
     verification = verification or VerificationContext(db, project, data)
     roster = verification.roster
-    tasks = [serialize(t) for t in sorted(verification.tasks.values(), key=lambda row: (row.created_at, row.id))]
+    tasks = [
+        serialize(t) for t in sorted(verification.tasks.values(), key=lambda row: (row.created_at, row.id))
+    ]
     for task in tasks:
         task["recorded_status"] = task["status"]
         task["basis"] = verification.basis(task["id"])
@@ -232,8 +234,14 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
             and task["status"] == "completed"
         ):
             task["status"] = "blocked"
-    issues = [({key: getattr(i, key) for key in ("id", "task_id", "title", "severity", "status")} if progress_only else serialize(i))
-              for i in sorted(verification.issues, key=lambda row: row.created_at, reverse=True)]
+    issues = [
+        (
+            {key: getattr(i, key) for key in ("id", "task_id", "title", "severity", "status")}
+            if progress_only
+            else serialize(i)
+        )
+        for i in sorted(verification.issues, key=lambda row: row.created_at, reverse=True)
+    ]
     task_groups, issue_groups = defaultdict(list), defaultdict(list)
     for task in tasks:
         task_groups[task["req_id"]].append(task)
@@ -244,12 +252,23 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
 
     from .sql_models import IssueEventOrigin
 
-    event_issue_ids = set() if progress_only else set(db.scalars(select(IssueEventOrigin.issue_id).where(
-        IssueEventOrigin.tenant_id == project.tenant_id, IssueEventOrigin.project_id == project.id
-    ).distinct()))
+    event_issue_ids = (
+        set()
+        if progress_only
+        else set(
+            db.scalars(
+                select(IssueEventOrigin.issue_id)
+                .where(
+                    IssueEventOrigin.tenant_id == project.tenant_id, IssueEventOrigin.project_id == project.id
+                )
+                .distinct()
+            )
+        )
+    )
     for issue in issues:
         issue["source_kinds"] = [
-            kind for kind, collection in (("execution", "executions"), ("deployment", "deployments"))
+            kind
+            for kind, collection in (("execution", "executions"), ("deployment", "deployments"))
             if any(entry.get("issue_id") == issue["id"] for entry in data.get(collection, []))
         ]
         if issue["id"] in event_issue_ids:
@@ -265,7 +284,9 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
         flow["legacy_completed"] = row.status == "completed" and row.id not in data["flows"]
         req["deployment_verified"] = row.id in deployed_requirements
         linked = task_groups[row.id]
-        flow["gates"] = stage_gates(req, flow, linked, issue_groups[row.id], deployment_verified=req["deployment_verified"])
+        flow["gates"] = stage_gates(
+            req, flow, linked, issue_groups[row.id], deployment_verified=req["deployment_verified"]
+        )
         req["flow"] = flow
         req["tasks_total"] = len(linked)
         req["tasks_done"] = sum(t["verified"] for t in linked)
@@ -419,7 +440,7 @@ def _update_requirement(db, project, data, body, roster, values):
     row = get_record(db, Requirement, project, body.id)
     before = serialize(row)
     resource_id = row.id
-    from .delivery_requirement_history import require_change_preview
+    from .delivery_requirement_proof import require_change_preview
 
     require_change_preview(db, project, data, row, body)
     flow = data["flows"].setdefault(row.id, default_flow())
@@ -630,7 +651,10 @@ def _apply_lifecycle(db, project, user, data, action, body, values):
         snapshot = materialize(db, project, data, user)
         current_requirement = next(item for item in snapshot["requirements"] if item["id"] == row.id)
         gates = stage_gates(
-            serialize(row), flow, snapshot["tasks"], snapshot["issues"],
+            serialize(row),
+            flow,
+            snapshot["tasks"],
+            snapshot["issues"],
             deployment_verified=current_requirement["deployment_verified"],
         )
         missing = [g["id"] for g in gates if not g["ok"]]

@@ -1,3 +1,4 @@
+import { beginProgressExactRead } from "@/lib/deliveryProgress";
 import {
   discussionFailure,
   type DiscussionAdoption,
@@ -8,7 +9,7 @@ import {
   applyDiscussionAdoption,
 } from "./DeliveryDiscussionAdoptionSource";
 import {
-  fetchDeliveryTaskData,
+  fetchDeliveryTaskEditData,
   type DeliveryCommandAck,
 } from "@/lib/deliveryQuery";
 import { useEffect, useState } from "react";
@@ -76,16 +77,31 @@ export function DeliveryTaskPlanMaintenance({
     return () => onEditingChange?.(false);
   }, [Boolean(editor), onEditingChange]);
   const requirement = data.requirement || undefined;
-  function edit() {
+  async function edit() {
     if (!task.basis) {
       setError(t("deliveryManualReview.readFailed"));
       return;
     }
     setError("");
-    let pinned = openTaskEdit(data, task.id);
+    const ticket = beginProgressExactRead();
+    let editingData: DeliveryTaskData;
+    try {
+      editingData = await fetchDeliveryTaskEditData(data.project.id, task.id);
+      if (!ticket.current()) return;
+      if (!editingData.permissions.write)
+        throw new Error("HTTP 403: Project write permission required");
+    } catch {
+      if (ticket.current())
+        setError(t("deliveryCollaboration.definitionUnavailable"));
+      return;
+    } finally {
+      ticket.finish();
+    }
+    const editingTask = editingData.task;
+    let pinned = openTaskEdit(editingData, task.id);
     let latest: DeliveryTaskData | undefined;
     let intent: DeliveryIntent = {
-      version: data.version,
+      version: editingData.version,
       key: crypto.randomUUID(),
     };
     const fields = (workspace: DeliveryTaskData): EditorField[] => [
@@ -134,25 +150,25 @@ export function DeliveryTaskPlanMaintenance({
     setEditor({
       title: tr("taskPlan.editTask"),
       hint: tr("taskPlan.editHint"),
-      fields: fields(data),
+      fields: fields(editingData),
       values: {
         ...applyDiscussionAdoption(
           {
-            description: task.description,
-            acceptance_criteria: [...task.acceptance_criteria],
+            description: editingTask.description,
+            acceptance_criteria: [...editingTask.acceptance_criteria],
           },
           initialSource,
         ),
         requirement_criteria_indices: remapCriterionIndexes(
-          task.planning?.requirement_criteria_indices || [],
-          task.planning?.requirement_snapshot?.acceptance_criteria ||
+          editingTask.planning?.requirement_criteria_indices || [],
+          editingTask.planning?.requirement_snapshot?.acceptance_criteria ||
             pinned.criteria,
           pinned.criteria,
         ).map(String),
-        depends_on: task.planning?.depends_on || [],
-        starts_on: task.planning?.starts_on,
-        ends_on: task.planning?.ends_on,
-        blocked_reason: task.planning?.blocked_reason || "",
+        depends_on: editingTask.planning?.depends_on || [],
+        starts_on: editingTask.planning?.starts_on,
+        ends_on: editingTask.planning?.ends_on,
+        blocked_reason: editingTask.planning?.blocked_reason || "",
       },
       submit: async (values) => {
         const payload = taskEditPayload(pinned, values);
@@ -201,7 +217,7 @@ export function DeliveryTaskPlanMaintenance({
         }
       },
       loadLatest: async () => {
-        latest = await fetchDeliveryTaskData(data.project.id, task.id);
+        latest = await fetchDeliveryTaskEditData(data.project.id, task.id);
         if (latest.task.id !== task.id)
           throw new Error(t("deliveryManualReview.taskPlanUnavailable"));
         const current = openTaskEdit(latest, task.id);

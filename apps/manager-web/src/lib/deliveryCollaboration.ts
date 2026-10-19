@@ -57,45 +57,17 @@ export type RequirementHistoryItem = {
   source: "delivery_command" | "sql_observed";
   flow_revision: number | null;
 };
-export type RequirementCurrentLinks = {
-  requirement_basis: string;
-  task_ids: string[];
-  dependent_task_ids: string[];
-  execution_ids: string[];
-  release_candidate_ids: string[];
-  deployment_ids: string[];
-  restricted_execution_count: number;
-  restricted_deployment_count: number;
-};
 export type RequirementHistoryPage = {
   project_id: string;
   requirement_id: string;
-  current_basis: string | null;
-  current_links: RequirementCurrentLinks | null;
-  items: RequirementHistoryItem[];
+  as_of: string;
+  items: Omit<RequirementHistoryItem, "definition">[];
+  limit: number;
   next_cursor: string | null;
   earlier_history_unknown: boolean;
 };
-export type RequirementChangePreview = {
-  project_id: string;
-  requirement_id: string;
-  version: number;
-  requirement_basis: string;
-  preview_basis: string;
-  changes: FieldChange[];
-  impact: {
-    task_ids: string[];
-    dependent_task_ids: string[];
-    execution_ids: string[];
-    release_candidate_ids: string[];
-    deployment_ids: string[];
-    invalidates_current_acceptance: boolean;
-    restricted_execution_count?: number;
-    restricted_deployment_count?: number;
-  };
-  allowed: boolean;
-  reasons: { code: string; message: string }[];
-};
+export type RequirementChangePreview =
+  import("./deliveryRequirementReads").BoundedRequirementChangePreview;
 export type CollaborationRoute = {
   eventId: string;
   versionId: string;
@@ -103,6 +75,21 @@ export type CollaborationRoute = {
   cursor: string;
   historyCursor: string;
   scopeId: string;
+  edit: string;
+  recordCollection: string;
+  recordCursor: string;
+  recordPosition: string;
+  impactKind: string;
+  impactCursor: string;
+  impactItem: string;
+  recordGeneration: string;
+  impactGeneration: string;
+  sourceThread: string;
+  sourceMessage: string;
+  sourceThreadVersion: string;
+  sourceMessageRevision: string;
+  sourceResolution: string;
+  sourceField: string;
 };
 const routeKeys: Record<keyof CollaborationRoute, string> = {
   eventId: "event_id",
@@ -111,6 +98,21 @@ const routeKeys: Record<keyof CollaborationRoute, string> = {
   cursor: "activity_cursor",
   historyCursor: "requirement_history_cursor",
   scopeId: "activity_scope_id",
+  edit: "requirement_edit",
+  recordCollection: "requirement_record_collection",
+  recordCursor: "requirement_record_cursor",
+  recordPosition: "requirement_record_position",
+  impactKind: "requirement_impact_kind",
+  impactCursor: "requirement_impact_cursor",
+  impactItem: "requirement_impact_item",
+  recordGeneration: "requirement_record_generation",
+  impactGeneration: "requirement_impact_generation",
+  sourceThread: "requirement_source_thread",
+  sourceMessage: "requirement_source_message",
+  sourceThreadVersion: "requirement_source_thread_version",
+  sourceMessageRevision: "requirement_source_message_revision",
+  sourceResolution: "requirement_source_resolution",
+  sourceField: "requirement_source_field",
 };
 const clean = (value: string | null, max = 2000) =>
   value && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value)
@@ -121,7 +123,11 @@ export function parseCollaborationRoute(hash: string): CollaborationRoute {
   return Object.fromEntries(
     Object.entries(routeKeys).map(([key, value]) => [
       key,
-      clean(params.get(value)),
+      key === "edit"
+        ? params.get(value) === "1"
+          ? "1"
+          : ""
+        : clean(params.get(value), /cursor/i.test(key) ? 4000 : 2000),
     ]),
   ) as CollaborationRoute;
 }
@@ -197,6 +203,21 @@ export function preserveCollaborationRoute(target: string, source: string) {
           "activity_scope_id",
           "requirement_version",
           "requirement_history_cursor",
+          "requirement_edit",
+          "requirement_record_collection",
+          "requirement_record_cursor",
+          "requirement_record_position",
+          "requirement_impact_kind",
+          "requirement_impact_cursor",
+          "requirement_impact_item",
+          "requirement_record_generation",
+          "requirement_impact_generation",
+          "requirement_source_thread",
+          "requirement_source_message",
+          "requirement_source_thread_version",
+          "requirement_source_message_revision",
+          "requirement_source_resolution",
+          "requirement_source_field",
         ]
       : []),
   ])

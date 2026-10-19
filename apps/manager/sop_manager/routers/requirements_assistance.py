@@ -412,7 +412,7 @@ def _history_entry(row, basis, revision):
     }
 
 
-def _origin(db, project, user, generation_id, action, requirement, supplied_basis):
+def _origin(db, project, user, generation_id, action, requirement, supplied_basis, *, canonical_change=None):
     row = db.get(RequirementAssistance, generation_id)
     if not row or (row.tenant_id, row.project_id, row.user_id, row.action) != (
         project.tenant_id,
@@ -424,7 +424,10 @@ def _origin(db, project, user, generation_id, action, requirement, supplied_basi
     if row.status != "succeeded":
         fail(409, "assistance_generation_unavailable", "Only a successful preview can be adopted")
     if requirement:
-        _, state, current, revision = _current(db, project, requirement.id)
+        if canonical_change is None:
+            _, state, current, revision = _current(db, project, requirement.id)
+        else:
+            current, revision = requirement, canonical_change.flow.get("revision") or 1
         if (
             row.requirement_id != requirement.id
             or row.data["basis"] != assistance_basis(current)
@@ -463,11 +466,16 @@ def _apply_selected(db, project, user, data, action, body, requirement, origin, 
         resource_id = ids[0]
     elif action == "apply-review":
         changes = {"id": requirement.id}
-        if body.acceptance_criteria is not None:
+        if (
+            body.acceptance_criteria is not None
+            and body.acceptance_criteria != requirement.acceptance_criteria
+        ):
             changes["acceptance_criteria"] = body.acceptance_criteria
-            from .delivery_requirement_history import change_facts
+            from .delivery_requirement_proof import change_facts
 
-            basis, preview_basis, _, _ = change_facts(db, project, data, requirement, {"acceptance_criteria": body.acceptance_criteria})
+            basis, preview_basis, _, _ = change_facts(
+                db, project, data, requirement, {"acceptance_criteria": body.acceptance_criteria}
+            )
             changes.update(requirement_basis=basis, change_preview_basis=preview_basis)
         _, _ = apply_action(
             db, project, user, data, "requirement.update", RequirementEdit.model_validate(changes)
@@ -520,20 +528,33 @@ def adopt(db, project, user, action, body, requirement_id=""):
     if receipt:
         result = _replay(receipt, fingerprint)
         return {**result, "replayed": True}
-    requirement = get_record(db, Requirement, project, requirement_id) if requirement_id else None
     generation_action = {"apply-review": "review", "prototype.apply": "prototype", "batch.apply": "parse"}[
         action
     ]
-    origin = _origin(
-        db,
-        project,
-        user,
-        body.generation_id,
-        generation_action,
-        requirement,
-        getattr(body, "requirement_basis", ""),
-    )
+    requirement_proof_token = None
+    canonical_change = None
     try:
+        if action == "apply-review" and body.acceptance_criteria is not None:
+            from ..project_write_guard import require_project_operation
+            from .delivery_requirement_proof import install, prepare_assistance
+
+            require_project_operation(db, project.tenant_id, project.id)
+            db.expire_all()
+            project, user = _access(db, project, user)
+            canonical_change = prepare_assistance(db, project, requirement_id, body.acceptance_criteria)
+            if canonical_change is not None:
+                requirement_proof_token = install(db, project, requirement_id, canonical_change)
+        requirement = get_record(db, Requirement, project, requirement_id) if requirement_id else None
+        origin = _origin(
+            db,
+            project,
+            user,
+            body.generation_id,
+            generation_action,
+            requirement,
+            getattr(body, "requirement_basis", ""),
+            canonical_change=canonical_change,
+        )
         workspace = db.get(DeliveryWorkspace, project.id)
         if not workspace:
             workspace = DeliveryWorkspace(
@@ -562,7 +583,14 @@ def adopt(db, project, user, action, body, requirement_id=""):
         if requirement:
             db.refresh(requirement)
             _origin(
-                db, project, user, body.generation_id, generation_action, requirement, body.requirement_basis
+                db,
+                project,
+                user,
+                body.generation_id,
+                generation_action,
+                requirement,
+                body.requirement_basis,
+                canonical_change=canonical_change,
             )
         data = reconcile(db, project, workspace.data)
         source = {**_metadata(origin), "generation_id": origin.id}
@@ -583,20 +611,20 @@ def adopt(db, project, user, action, body, requirement_id=""):
         db.flush()
         summary = materialize(db, project, data, user)["summary"]
         event = DeliveryEvent(
-                id=identifier("event"),
-                tenant_id=project.tenant_id,
-                project_id=project.id,
-                version=workspace.version,
-                actor=user.username,
-                action=action,
-                resource_id=resource_id,
-                data={
-                    "snapshot": summary,
-                    "before": before,
-                    "generation": source,
-                    "input": body.model_dump(mode="json"),
-                },
-            )
+            id=identifier("event"),
+            tenant_id=project.tenant_id,
+            project_id=project.id,
+            version=workspace.version,
+            actor=user.username,
+            action=action,
+            resource_id=resource_id,
+            data={
+                "snapshot": summary,
+                "before": before,
+                "generation": source,
+                "input": body.model_dump(mode="json"),
+            },
+        )
         from .delivery_activity import record_activity
 
         record_activity(db, project, user, data, event)
@@ -640,3 +668,7 @@ def adopt(db, project, user, action, body, requirement_id=""):
     except Exception:
         db.rollback()
         raise
+    finally:
+        from .delivery_requirement_proof import release
+
+        release(db, requirement_proof_token)

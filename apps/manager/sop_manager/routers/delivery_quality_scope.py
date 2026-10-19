@@ -93,13 +93,26 @@ def _objects(db, project, paths):
 
 
 class _Scope:
-    def __init__(self, db, project, requirements, tasks, limit, *, input_budget=None):
+    def __init__(
+        self,
+        db,
+        project,
+        requirements,
+        tasks,
+        limit,
+        *,
+        input_budget=None,
+        record_limit=None,
+        extra_flow_fields=(),
+    ):
         self.db, self.project, self.limit = db, project, limit
         self.wanted_requirements, self.wanted_tasks = set(requirements), set(tasks)
         self.tasks, self.requirements, self.entries = {}, {}, {}
         self.data = initial_state()
         self.run_ids, self.latest_loaded = set(), set()
         self.input_budget = input_budget
+        self.record_limit = record_limit
+        self.extra_flow_fields = extra_flow_fields
         self.path_cache = {}
 
     def paths(self, paths):
@@ -111,8 +124,14 @@ class _Scope:
                 prefix = path[:length]
                 if prefix in self.path_cache:
                     value = self.path_cache[prefix]
-                    for part in path[len(prefix):]:
-                        value = value.get(part) if isinstance(value, dict) else value[part] if isinstance(value, list) and isinstance(part, int) and 0 <= part < len(value) else None
+                    for part in path[len(prefix) :]:
+                        value = (
+                            value.get(part)
+                            if isinstance(value, dict)
+                            else value[part]
+                            if isinstance(value, list) and isinstance(part, int) and 0 <= part < len(value)
+                            else None
+                        )
                     result[key] = value
                     break
             else:
@@ -141,10 +160,10 @@ class _Scope:
         if not ids:
             return {}
         query = select(DeliveryQueryFact.entity_id, DeliveryQueryFact.data).where(
-                *scope(self.project, DeliveryQueryFact),
-                DeliveryQueryFact.kind == kind,
-                DeliveryQueryFact.entity_id.in_(ids),
-            )
+            *scope(self.project, DeliveryQueryFact),
+            DeliveryQueryFact.kind == kind,
+            DeliveryQueryFact.entity_id.in_(ids),
+        )
         self.source_rows(query, [DeliveryQueryFact.entity_id, DeliveryQueryFact.data])
         rows = self.db.execute(query).all()
         return dict(rows)
@@ -166,7 +185,10 @@ class _Scope:
             )
         self.wanted_requirements.update(row.req_id for row in new if row.req_id)
         needed = self.wanted_requirements - self.requirements.keys()
-        self.source_rows(select(Requirement).where(*scope(self.project, Requirement), Requirement.id.in_(needed)), list(Requirement.__table__.c))
+        self.source_rows(
+            select(Requirement).where(*scope(self.project, Requirement), Requirement.id.in_(needed)),
+            list(Requirement.__table__.c),
+        )
         rows = (
             self.db.scalars(
                 select(Requirement)
@@ -212,7 +234,7 @@ class _Scope:
         self.flows(rows)
 
     def flows(self, rows):
-        fields = ("stage", "revision", "blocked_reason", "definition", "tested_work")
+        fields = ("stage", "revision", "blocked_reason", "definition", "tested_work", *self.extra_flow_fields)
         _objects(self.db, self.project, {row.id: ("flows", row.id) for row in rows})
         values = self.paths({(row.id, key): ("flows", row.id, key) for row in rows for key in fields})
         facts = self.facts("requirement", {row.id for row in rows})
@@ -270,6 +292,12 @@ class _Scope:
             flow["artifacts" if kind == "test" else "reviews"].append(record)
 
     def read_entries(self, facts):
+        if self.record_limit is not None and len(self.entries) + len(facts) > self.record_limit:
+            _fail(
+                "requirement_proof_record_budget",
+                "The complete canonical proof has too many execution sources",
+                413,
+            )
         if len(self.entries) + len(facts) > self.limit * 3 + 200:
             self.budget(self.limit + 1)
         values = self.paths({id: ("executions", row["position"]) for id, row in facts.items()})
@@ -368,10 +396,16 @@ class _Scope:
             from .sql_models import ProjectMember, User
 
             people = [value[5:] for value in owners if value.startswith("user:")]
-            self.source_rows(select(User).where(User.tenant_id == self.project.tenant_id, User.id.in_(people)),
-                [User.id, User.username, User.status, User.role])
-            self.source_rows(select(ProjectMember).where(ProjectMember.project_id == self.project.id, ProjectMember.user_id.in_(people)),
-                [ProjectMember.user_id, ProjectMember.role])
+            self.source_rows(
+                select(User).where(User.tenant_id == self.project.tenant_id, User.id.in_(people)),
+                [User.id, User.username, User.status, User.role],
+            )
+            self.source_rows(
+                select(ProjectMember).where(
+                    ProjectMember.project_id == self.project.id, ProjectMember.user_id.in_(people)
+                ),
+                [ProjectMember.user_id, ProjectMember.role],
+            )
         return TeamContext(self.db, self.project, self.data, owner_ids=owners)
 
     def context(self):
@@ -431,10 +465,19 @@ class _Scope:
         ).all()
         if any((size or 0) > 1024 * 1024 for size in sizes):
             _fail("quality_scope_too_large", "A complete proof source exceeds its bounded read budget.", 413)
-        review_columns = [DeliveryTaskReview.id, DeliveryTaskReview.task_id, DeliveryTaskReview.created_at,
-            DeliveryTaskReview.reviewer_id, DeliveryTaskReview.decision, DeliveryTaskReview.task_basis,
-            DeliveryTaskReview.snapshot, DeliveryTaskReview.invalidated]
-        self.source_rows(select(DeliveryTaskReview).join(latest, DeliveryTaskReview.seq == latest.c.seq), review_columns)
+        review_columns = [
+            DeliveryTaskReview.id,
+            DeliveryTaskReview.task_id,
+            DeliveryTaskReview.created_at,
+            DeliveryTaskReview.reviewer_id,
+            DeliveryTaskReview.decision,
+            DeliveryTaskReview.task_basis,
+            DeliveryTaskReview.snapshot,
+            DeliveryTaskReview.invalidated,
+        ]
+        self.source_rows(
+            select(DeliveryTaskReview).join(latest, DeliveryTaskReview.seq == latest.c.seq), review_columns
+        )
         reviews = self.db.scalars(
             select(DeliveryTaskReview)
             .join(latest, DeliveryTaskReview.seq == latest.c.seq)

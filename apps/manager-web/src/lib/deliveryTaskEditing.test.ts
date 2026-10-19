@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -29,12 +30,25 @@ const task = {
 const workspace = {
   project: { id: "project" },
   version: 7,
+  query_generation: 1,
   planning_basis: "planning-old",
   task,
   requirement: null,
   dependencies: [],
 } as unknown as DeliveryTaskData;
 describe("one task plan editor", () => {
+  it("does not treat a missing parent of a linked task as an empty standalone definition", () => {
+    expect(() =>
+      openTaskEdit(
+        {
+          ...workspace,
+          task: { ...task, req_id: "MISSING" },
+          requirement: null,
+        },
+        task.id,
+      ),
+    ).toThrow("Current requirement definition unavailable");
+  });
   it("pins standalone task basis and submits dependencies without invented requirement criteria", () => {
     const session = openTaskEdit(workspace, task.id);
     task.basis = "mutated";
@@ -72,14 +86,40 @@ describe("one task plan editor", () => {
     const first = {
       ...workspace,
       task: oldTask,
-      requirement: { id: "REQ-one", acceptance_criteria: ["A", "B"] },
+      requirement: { id: "REQ-one", basis: "a".repeat(64) },
+      requirement_definition: {
+        project_id: "project",
+        requirement_id: "REQ-one",
+        version: 7,
+        query_generation: 1,
+        requirement_basis: "a".repeat(64),
+        definition: {
+          id: "REQ-one",
+          title: "Req",
+          description: "",
+          acceptance_criteria: ["A", "B"],
+        },
+      },
     } as unknown as DeliveryTaskData;
     const session = openTaskEdit(first, task.id);
     const fresh = {
       ...first,
       version: 8,
       task: { ...oldTask, basis: "latest" },
-      requirement: { id: "REQ-one", acceptance_criteria: ["B", "A"] },
+      requirement: { id: "REQ-one", basis: "b".repeat(64) },
+      requirement_definition: {
+        project_id: "project",
+        requirement_id: "REQ-one",
+        version: 8,
+        query_generation: 1,
+        requirement_basis: "b".repeat(64),
+        definition: {
+          id: "REQ-one",
+          title: "Req",
+          description: "",
+          acceptance_criteria: ["B", "A"],
+        },
+      },
     } as unknown as DeliveryTaskData;
     const adopted = adoptTaskEdit(session, fresh, {
       description: "My draft",
@@ -97,7 +137,25 @@ describe("one task plan editor", () => {
       version: 8,
       task: { basis: "latest" },
     });
-    expect(() => adoptTaskEdit(session, { ...fresh, task: { ...fresh.task, id: "T-other" } }, {})).toThrow();
+    expect(() =>
+      adoptTaskEdit(
+        session,
+        { ...fresh, task: { ...fresh.task, id: "T-other" } },
+        {},
+      ),
+    ).toThrow();
+  });
+  it("refuses a linked task editor when the explicit current definition has not been read", () => {
+    expect(() =>
+      openTaskEdit(
+        {
+          ...workspace,
+          task: { ...task, req_id: "REQ" },
+          requirement: { id: "REQ", basis: "a".repeat(64) },
+        } as DeliveryTaskData,
+        task.id,
+      ),
+    ).toThrow("Current requirement definition unavailable");
   });
   it("treats task basis changes as explicit recoverable conflicts", () => {
     expect(
@@ -124,21 +182,25 @@ describe("one task plan editor", () => {
   });
   it("renders standalone planning without fabricating a requirement", () => {
     const html = renderToStaticMarkup(
-      createElement(DeliveryTaskPlanning, {
-        task: {
-          ...task,
-          planning: {
-            ...task.planning,
-            source: "manual",
-            requirement_revision: 1,
-            requirement_criteria_indices: [0],
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(DeliveryTaskPlanning, {
+          task: {
+            ...task,
+            planning: {
+              ...task.planning,
+              source: "manual",
+              requirement_revision: 1,
+              requirement_criteria_indices: [0],
+            },
           },
-        },
-        data: workspace,
-        onTask: () => {},
-        onEdit: () => {},
-        canEdit: true,
-      }),
+          data: workspace,
+          onTask: () => {},
+          onEdit: () => {},
+          canEdit: true,
+        }),
+      ),
     );
     expect(html).toContain("2026-10-17");
     expect(html).toContain("T-first");

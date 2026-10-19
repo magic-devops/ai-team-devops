@@ -20,6 +20,7 @@ import {
   fetchDeliveryContext,
   fetchTaskDetail,
   fetchRequirementDetail,
+  fetchEditableRequirement,
 } from "./deliveryQuery";
 import { request } from "./http";
 const state = vi.hoisted(() => ({
@@ -78,6 +79,7 @@ vi.mock("./deliveryQuery", async () => ({
   fetchDeliveryContext: vi.fn(),
   fetchTaskDetail: vi.fn(),
   fetchRequirementDetail: vi.fn(),
+  fetchEditableRequirement: vi.fn(),
 }));
 vi.mock("./http", () => ({ request: vi.fn() }));
 function storage() {
@@ -155,6 +157,7 @@ beforeEach(() => {
   vi.mocked(fetchDeliveryContext).mockReset();
   vi.mocked(fetchTaskDetail).mockReset();
   vi.mocked(fetchRequirementDetail).mockReset();
+  vi.mocked(fetchEditableRequirement).mockReset();
   vi.stubGlobal("localStorage", storage());
   vi.stubGlobal("sessionStorage", storage());
   vi.stubGlobal("location", { hash: "#/dev-flow?view=discussions" });
@@ -370,12 +373,12 @@ describe("discussion interactions and fixed business handoff", () => {
       project_id: "P",
       task: { id: "T", req_id: "new-R" },
     } as any);
-    vi.mocked(fetchRequirementDetail).mockResolvedValue({
+    vi.mocked(fetchEditableRequirement).mockResolvedValue({
       project_id: "P",
       requirement: { id: "new-R" },
     } as any);
     await loadDiscussionAdoption("P", "plan", adoption());
-    expect(fetchRequirementDetail).toHaveBeenCalledWith(
+    expect(fetchEditableRequirement).toHaveBeenCalledWith(
       "P",
       "new-R",
       undefined,
@@ -398,7 +401,7 @@ describe("discussion interactions and fixed business handoff", () => {
     await expect(
       loadDiscussionAdoption("P", "plan", adoption()),
     ).rejects.toThrow("404");
-    expect(fetchRequirementDetail).not.toHaveBeenCalled();
+    expect(fetchEditableRequirement).not.toHaveBeenCalled();
   });
   it("prefills only the explicitly selected field and keeps the fixed source separate", () => {
     const original = {

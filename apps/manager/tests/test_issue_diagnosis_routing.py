@@ -78,11 +78,14 @@ def test_rules_proposal_and_human_adoption_reuse_one_canonical_requirement(env):
     requirement_id = saved.json()["resource"]["id"]
     assert saved.json()["result"]["requirement_id"] == requirement_id
     promoted = client.get(f"/api/v1/delivery/requirements/{requirement_id}").json()["requirement"]
-    assert promoted["flow"]["source_issue_id"] == "ISS-diagnosis"
-    assert promoted["flow"]["source_diagnosis"]["id"] == generated["id"]
+    assert promoted["id"] == requirement_id
     with sessions() as db:
         assert db.query(Requirement).filter_by(tenant_id="tenant", project_id="project").count() == 1
-    assert client.get("/api/v1/delivery/issues/ISS-diagnosis").json()["issue"]["status"] == "open"
+        source = db.get(DeliveryWorkspace, "project").data["flows"][requirement_id]
+        assert source["source_issue_id"] == "ISS-diagnosis"
+        assert source["source_diagnosis"]["id"] == generated["id"]
+    issue = client.get("/api/v1/delivery/issues/ISS-diagnosis").json()
+    assert issue["requirement_id"] == requirement_id and issue["issue"]["status"] == "open"
 
 
 def test_unknown_issue_does_not_fall_back_to_the_first_issue(env):  # noqa: F811

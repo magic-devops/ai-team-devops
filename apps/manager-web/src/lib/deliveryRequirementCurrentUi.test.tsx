@@ -1,3 +1,6 @@
+import { DeliveryRequirementChangeHost } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryRequirementChangeHost";
+import { DeliveryRequirementHistory } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryRequirementHistory";
+import { DeliveryRequirementDefinition } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryRequirementReads";
 import { isValidElement, type ReactNode } from "react";
 import { Drawer } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +13,7 @@ const h = vi.hoisted(() => ({
   refNext: 0,
   status: 0,
   cached: true,
+  contextStatus: 0,
 }));
 vi.mock("react", async () => ({
   ...(await vi.importActual<typeof import("react")>("react")),
@@ -65,10 +69,8 @@ vi.mock("./deliveryAttention", () => ({
 const requirement = {
   id: "R",
   title: "PRIVATE CURRENT REQUIREMENT",
-  description: "PRIVATE CURRENT BODY",
   basis: "basis",
   priority: "P1",
-  acceptance_criteria: ["PRIVATE CRITERION"],
   tasks_total: 0,
   tasks_done: 0,
   flow: {
@@ -80,9 +82,7 @@ const requirement = {
     blocked_reason: "",
     closed: false,
     gates: [],
-    artifacts: [],
-    reviews: [],
-    releases: [],
+    record_counts: { artifacts: 0, reviews: 0, releases: 0 },
   },
 };
 const context = {
@@ -102,19 +102,25 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: any) => ({
     data:
       options.queryKey[0] === "delivery-context"
-        ? context
+        ? h.contextStatus
+          ? undefined
+          : context
         : options.queryKey[0] === "delivery-requirement-detail"
           ? h.cached
             ? { project_id: "P", version: 7, query_generation: 1, requirement }
             : undefined
           : { items: [] },
     isError:
-      options.queryKey[0] === "delivery-requirement-detail" &&
-      Boolean(h.status),
+      options.queryKey[0] === "delivery-context"
+        ? !!h.contextStatus
+        : options.queryKey[0] === "delivery-requirement-detail" &&
+          Boolean(h.status),
     error:
-      options.queryKey[0] === "delivery-requirement-detail" && h.status
-        ? new Error(`HTTP ${h.status}: Current requirement unavailable`)
-        : null,
+      options.queryKey[0] === "delivery-context" && h.contextStatus
+        ? new Error(`HTTP ${h.contextStatus}: index unavailable`)
+        : options.queryKey[0] === "delivery-requirement-detail" && h.status
+          ? new Error(`HTTP ${h.status}: Current requirement unavailable`)
+          : null,
     isPending: false,
     isFetching: false,
     refetch: vi.fn(),
@@ -129,7 +135,14 @@ function find(
     return node.map((item) => find(item, type, predicate)).find(Boolean);
   if (!isValidElement<any>(node)) return undefined;
   if (node.type === type && predicate(node.props)) return node.props;
-  return find(node.props.children, type, predicate);
+  return (
+    find(node.props.children, type, predicate) ||
+    find(
+      node.props.items?.map((item: any) => item.children),
+      type,
+      predicate,
+    )
+  );
 }
 function render() {
   h.next = 0;
@@ -142,6 +155,7 @@ beforeEach(() => {
   h.refs = [];
   h.status = 0;
   h.cached = true;
+  h.contextStatus = 0;
   vi.stubGlobal("location", {
     hash: "#/dev-flow?view=progress&project_id=P&requirement=R&detail=details",
     pathname: "/",
@@ -153,6 +167,21 @@ beforeEach(() => {
   });
 });
 describe("actual current-requirement drawer after historical navigation", () => {
+  it("keeps route recovery and exact history hosts mounted outside failed current index reads", () => {
+    h.contextStatus = 503;
+    h.status = 404;
+    h.cached = false;
+    location.hash =
+      "#/dev-flow?view=list&project_id=P&requirement=R&detail=history&requirement_version=OLD&requirement_edit=1";
+    const page = render();
+    expect(find(page, DeliveryRequirementChangeHost)).toMatchObject({
+      projectId: "P",
+      requirementId: "R",
+    });
+    expect(find(page, DeliveryRequirementHistory)).toMatchObject({
+      requirementId: "R",
+    });
+  });
   for (const status of [403, 404])
     for (const cached of [true, false])
       it(`clears the retained current body after HTTP ${status} with query cache ${cached}`, () => {
@@ -164,7 +193,7 @@ describe("actual current-requirement drawer after historical navigation", () => 
             (props) => props.className === "delivery-inspector" && props.open,
           ).title,
         ).toBe(requirement.title);
-        expect(JSON.stringify(first)).toContain(requirement.description);
+        expect(find(first, DeliveryRequirementDefinition)).toBeDefined();
         h.status = status;
         h.cached = cached;
         const failed = render();
@@ -176,9 +205,7 @@ describe("actual current-requirement drawer after historical navigation", () => 
             (props) => props.className === "delivery-inspector" && props.open,
           ).title,
         ).toBeUndefined();
-        expect(JSON.stringify(failed)).not.toContain(requirement.description);
-        expect(JSON.stringify(failed)).not.toContain(
-          requirement.acceptance_criteria[0],
-        );
+        expect(find(failed, DeliveryRequirementDefinition)).toBeUndefined();
+        expect(JSON.stringify(failed)).not.toContain(requirement.title);
       });
 });

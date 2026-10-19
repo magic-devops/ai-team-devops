@@ -23,7 +23,9 @@ _FILE_SESSION = ContextVar("project_file_write_session", default=None)
 
 class ManagerSession(Session):
     def bulk_save_objects(self, *args, **kwargs):
-        raise ValueError("Use typed Session.execute or ordinary ORM writes instead of legacy bulk_save_objects")
+        raise ValueError(
+            "Use typed Session.execute or ordinary ORM writes instead of legacy bulk_save_objects"
+        )
 
     def bulk_insert_mappings(self, *args, **kwargs):
         raise ValueError("Use typed Session.execute instead of legacy bulk_insert_mappings")
@@ -53,15 +55,24 @@ class _Permission:
 
 def _permission(db, scope, purpose):
     current = db.get_nested_transaction() or db.get_transaction()
-    return next((token for token in reversed(db.info.get(_TOKENS, []))
-                 if token.transaction is current and (token.tenant_id, token.project_id) == scope
-                 and token.purpose == purpose), None)
+    return next(
+        (
+            token
+            for token in reversed(db.info.get(_TOKENS, []))
+            if token.transaction is current
+            and (token.tenant_id, token.project_id) == scope
+            and token.purpose == purpose
+        ),
+        None,
+    )
 
 
 def _pending_project(db, scope):
     from .routers.sql_models import Project
-    return next((row for row in db.new if isinstance(row, Project)
-                 and (row.tenant_id, row.id) == scope), None)
+
+    return next(
+        (row for row in db.new if isinstance(row, Project) and (row.tenant_id, row.id) == scope), None
+    )
 
 
 def lock_project_scopes(db, scopes):
@@ -82,8 +93,11 @@ def lock_project_scopes(db, scopes):
             # The no-op UPDATE upgrades SQLite's transaction to a writer before
             # facts are re-read. Explicit updated_at suppresses Column.onupdate.
             try:
-                connection.execute(update(table).where(predicate)
-                                   .values(status=table.c.status, updated_at=table.c.updated_at))
+                connection.execute(
+                    update(table)
+                    .where(predicate)
+                    .values(status=table.c.status, updated_at=table.c.updated_at)
+                )
             except OperationalError as exc:
                 if getattr(exc.orig, "sqlite_errorcode", 0) & 0xFF in {5, 6}:
                     _deny("project_concurrent_write", "Project changed concurrently; reload and retry")
@@ -168,6 +182,11 @@ def progress_snapshot_write_scope(db, tenant_id, project_id, kind):
     return _scope(db, tenant_id, project_id, "progress_" + kind)
 
 
+def requirement_version_capture_scope(db, tenant_id, project_id):
+    """Only actual observed canonical definitions may append fixed versions."""
+    return _scope(db, tenant_id, project_id, "requirement_version")
+
+
 def in_lifecycle_scope(db, tenant_id, project_id):
     return _permission(db, (str(tenant_id), str(project_id)), "lifecycle") is not None
 
@@ -178,8 +197,10 @@ def project_file_write_scope(*, tenant_id=None, project_id=None):
     from .path_config import resolved_project_id, resolved_tenant_id
     from .routers.sql_models import SessionLocal
 
-    scope = (tenant_id if tenant_id is not None else resolved_tenant_id(),
-             project_id if project_id is not None else resolved_project_id())
+    scope = (
+        tenant_id if tenant_id is not None else resolved_tenant_id(),
+        project_id if project_id is not None else resolved_project_id(),
+    )
     existing = _FILE_SESSION.get()
     if existing:
         if existing[0] != scope:
@@ -254,7 +275,11 @@ def _assignment_value(statement, column, value, parameters):
         immutable.add("status")
     # Mutable business expressions remain valid inside a proven scope. Their
     # domain guards (for example Task acceptance) still validate their fields.
-    if isinstance(value, ClauseElement) and not isinstance(value, BindParameter) and _name(column) not in immutable:
+    if (
+        isinstance(value, ClauseElement)
+        and not isinstance(value, BindParameter)
+        and _name(column) not in immutable
+    ):
         return value
     return _literal(value, parameters)
 
@@ -270,8 +295,11 @@ def _scope_for_row(db, table, row):
         _deny("project_sql_scope_unproven", "Project writes require an explicit project ID", 422)
     if table.name == "project_members":
         pending = next((p for p in db.new if isinstance(p, Project) and p.id == project_id), None)
-        tenant_id = pending.tenant_id if pending else db.connection().scalar(
-            select(Project.tenant_id).where(Project.id == project_id))
+        tenant_id = (
+            pending.tenant_id
+            if pending
+            else db.connection().scalar(select(Project.tenant_id).where(Project.id == project_id))
+        )
     if not isinstance(tenant_id, str) or not tenant_id:
         _deny("project_sql_scope_unproven", "Project writes require an explicit tenant ID", 422)
     return tenant_id, project_id
@@ -294,9 +322,12 @@ def _workspace_invalidation(old, new, *, lifecycle=False):
     ):
         return False
     old_entries, new_entries = before.pop("executions", []), after.pop("executions", [])
-    if (not isinstance(old_entries, list) or not isinstance(new_entries, list)
-            or len(old_entries) != len(new_entries)
-            or any(not isinstance(entry, dict) for entry in old_entries + new_entries)):
+    if (
+        not isinstance(old_entries, list)
+        or not isinstance(new_entries, list)
+        or len(old_entries) != len(new_entries)
+        or any(not isinstance(entry, dict) for entry in old_entries + new_entries)
+    ):
         return False
     for original, changed in zip(old_entries, new_entries, strict=True):
         a, b = dict(original), dict(changed)
@@ -308,9 +339,13 @@ def _workspace_invalidation(old, new, *, lifecycle=False):
         if a != b:
             return False
     old_flows, new_flows = before.pop("flows", {}), after.pop("flows", {})
-    if (not isinstance(old_flows, dict) or not isinstance(new_flows, dict)
-            or old_flows.keys() != new_flows.keys() or before != after
-            or any(not isinstance(flow, dict) for flow in [*old_flows.values(), *new_flows.values()])):
+    if (
+        not isinstance(old_flows, dict)
+        or not isinstance(new_flows, dict)
+        or old_flows.keys() != new_flows.keys()
+        or before != after
+        or any(not isinstance(flow, dict) for flow in [*old_flows.values(), *new_flows.values()])
+    ):
         return False
     return all(_flow_invalidation(original, new_flows[rid]) for rid, original in old_flows.items())
 
@@ -329,14 +364,23 @@ def _release_candidates_invalidation(originals, changes):
         if original.get("invalidated", False) is not False or changed.get("invalidated") is not True:
             return False
         reasons = changed.get("invalidated_reasons")
-        if (not isinstance(changed.get("invalidated_at"), str) or not changed["invalidated_at"]
-                or not isinstance(reasons, list) or not reasons):
+        if (
+            not isinstance(changed.get("invalidated_at"), str)
+            or not changed["invalidated_at"]
+            or not isinstance(reasons, list)
+            or not reasons
+        ):
             return False
         for reason in reasons:
-            if (not isinstance(reason, dict) or set(reason) != {"code", "message", "target"}
-                    or reason["code"] not in INVALIDATION_CODES or reason["target"] is not None
-                    or not isinstance(reason["message"], str) or not reason["message"]
-                    or len(reason["message"]) > 4000):
+            if (
+                not isinstance(reason, dict)
+                or set(reason) != {"code", "message", "target"}
+                or reason["code"] not in INVALIDATION_CODES
+                or reason["target"] is not None
+                or not isinstance(reason["message"], str)
+                or not reason["message"]
+                or len(reason["message"]) > 4000
+            ):
                 return False
         fields = {"invalidated", "invalidated_at", "invalidated_reasons"}
         if {k: v for k, v in original.items() if k not in fields} != {
@@ -349,8 +393,12 @@ def _release_candidates_invalidation(originals, changes):
 def _flow_invalidation(original, changed):
     a, b = deepcopy(original), deepcopy(changed)
     aa, ba = a.get("artifacts", []), b.get("artifacts", [])
-    if (not isinstance(aa, list) or not isinstance(ba, list) or len(aa) != len(ba)
-            or any(not isinstance(artifact, dict) for artifact in aa + ba)):
+    if (
+        not isinstance(aa, list)
+        or not isinstance(ba, list)
+        or len(aa) != len(ba)
+        or any(not isinstance(artifact, dict) for artifact in aa + ba)
+    ):
         return False
     for artifact, updated in zip(aa, ba, strict=True):
         if not _monotonic_flag(artifact, updated, "stale"):
@@ -366,18 +414,30 @@ def _flow_invalidation(original, changed):
     if a.get("reviews", []) != b.get("reviews", []):
         reviews = b.get("reviews", [])
         old_reviews = a.get("reviews", [])
-        if (not isinstance(reviews, list) or not isinstance(old_reviews, list)
-                or len(reviews) != len(old_reviews) + 1 or reviews[:-1] != old_reviews
-                or not isinstance(reviews[-1], dict)):
+        if (
+            not isinstance(reviews, list)
+            or not isinstance(old_reviews, list)
+            or len(reviews) != len(old_reviews) + 1
+            or reviews[:-1] != old_reviews
+            or not isinstance(reviews[-1], dict)
+        ):
             return False
         review = reviews[-1]
-        if (set(review) != {"stage", "revision", "decision", "actor", "comment", "at"}
-                or review["stage"] != a.get("stage") or review["revision"] != a.get("revision")
-                or review["decision"] != "reopen" or review["actor"] != "system"
-                or review["comment"] != "Canonical requirement or accepted work changed outside this workbench."
-                or not isinstance(review["at"], str) or not review["at"]
-                or b.get("revision") != a.get("revision", 0) + 1 or b.get("stage") != "intake"
-                or b.get("closed") is not False or "accepted_work" in b or "tested_work" in b):
+        if (
+            set(review) != {"stage", "revision", "decision", "actor", "comment", "at"}
+            or review["stage"] != a.get("stage")
+            or review["revision"] != a.get("revision")
+            or review["decision"] != "reopen"
+            or review["actor"] != "system"
+            or review["comment"] != "Canonical requirement or accepted work changed outside this workbench."
+            or not isinstance(review["at"], str)
+            or not review["at"]
+            or b.get("revision") != a.get("revision", 0) + 1
+            or b.get("stage") != "intake"
+            or b.get("closed") is not False
+            or "accepted_work" in b
+            or "tested_work" in b
+        ):
             return False
         for key in ("reviews", "revision", "stage", "closed", "accepted_work", "tested_work"):
             a.pop(key, None)
@@ -388,8 +448,11 @@ def _flow_invalidation(original, changed):
 
 
 def _restricted_write(db, table, scope, operation, old, values):
-    if (table.name == "issue_event_origins" and operation == "insert"
-            and _permission(db, scope, "issue_origin_rebuild")):
+    if (
+        table.name == "issue_event_origins"
+        and operation == "insert"
+        and _permission(db, scope, "issue_origin_rebuild")
+    ):
         return True
     lifecycle = _permission(db, scope, "lifecycle")
     identity = _permission(db, scope, "identity")
@@ -403,19 +466,25 @@ def _restricted_write(db, table, scope, operation, old, values):
     if table.name == "delivery_workspaces" and (lifecycle or identity):
         if operation == "insert" and lifecycle:
             from .routers.delivery_service import initial_state
+
             return _workspace_invalidation(initial_state(), values.get("data", {}), lifecycle=True)
         if operation == "update" and set(values) <= {"data", "version"}:
             version = values.get("version", old["version"])
-            return (version in {old["version"], old["version"] + 1}
-                    and _workspace_invalidation(old["data"], values.get("data", old["data"]), lifecycle=bool(lifecycle)))
+            return version in {old["version"], old["version"] + 1} and _workspace_invalidation(
+                old["data"], values.get("data", old["data"]), lifecycle=bool(lifecycle)
+            )
     if identity:
         if table.name == "delivery_progress_observations" and operation == "insert":
             return True
         if table.name == "delivery_task_reviews" and operation == "update":
-            return (set(values) <= {"invalidated", "invalidated_at", "invalidated_reason"}
-                    and not old["invalidated"] and values.get("invalidated") is True
-                    and values.get("invalidated_at") is not None
-                    and values.get("invalidated_reason") in {"task_review_task_missing", "task_review_basis_changed"})
+            return (
+                set(values) <= {"invalidated", "invalidated_at", "invalidated_reason"}
+                and not old["invalidated"]
+                and values.get("invalidated") is True
+                and values.get("invalidated_at") is not None
+                and values.get("invalidated_reason")
+                in {"task_review_task_missing", "task_review_basis_changed"}
+            )
     return False
 
 
@@ -427,17 +496,40 @@ def _check_project_change(db, scope, operation, old, values):
         if not isinstance(status, str) or status not in {"planning", "active", "paused"}:
             _deny("project_initial_status_invalid", "New projects must be planning, active or paused", 422)
         return
-    if "status" in values and values["status"] != old.get("status") and not _permission(db, scope, "lifecycle"):
+    if (
+        "status" in values
+        and values["status"] != old.get("status")
+        and not _permission(db, scope, "lifecycle")
+    ):
         _deny("project_lifecycle_command_required", "Change project status through project.lifecycle")
 
 
 def _check_discussion_write(db, table, scope, operation, old, values):
-    immutable_facts = {"delivery_discussion_message_versions", "delivery_discussion_events", "delivery_discussion_receipts", "delivery_source_links"}
+    immutable_facts = {
+        "delivery_discussion_message_versions",
+        "delivery_discussion_events",
+        "delivery_discussion_receipts",
+        "delivery_source_links",
+    }
     if table.name in immutable_facts and operation != "insert":
         _deny("discussion_immutable", "Discussion evidence is append-only")
     identities = {
-        "delivery_discussion_threads": {"subject_kind", "subject_id", "created_by_id", "created_by_name", "created_at", "created_seq"},
-        "delivery_discussion_messages": {"thread_id", "parent_message_id", "author_id", "author_name", "created_at", "created_seq"},
+        "delivery_discussion_threads": {
+            "subject_kind",
+            "subject_id",
+            "created_by_id",
+            "created_by_name",
+            "created_at",
+            "created_seq",
+        },
+        "delivery_discussion_messages": {
+            "thread_id",
+            "parent_message_id",
+            "author_id",
+            "author_name",
+            "created_at",
+            "created_seq",
+        },
     }
     if table.name not in identities or operation not in {"update", "delete"}:
         return
@@ -494,7 +586,18 @@ def _check_write(db, table, operation, old, values, *, user_cascade=False):
         if operation != "insert":
             _deny("progress_snapshot_immutable", "Progress observations and baselines are append-only")
         if not _permission(db, scope, "progress_" + snapshots[table.name]):
-            _deny("progress_snapshot_command_required", "Only actual progress capture or baseline commands may append snapshots")
+            _deny(
+                "progress_snapshot_command_required",
+                "Only actual progress capture or baseline commands may append snapshots",
+            )
+    if table.name == "delivery_requirement_versions":
+        if operation != "insert":
+            _deny("requirement_version_immutable", "Observed requirement versions are append-only")
+        if not _permission(db, scope, "requirement_version"):
+            _deny(
+                "requirement_version_capture_required",
+                "Only actual canonical definition capture may append versions",
+            )
 
 
 def _scoped(table):
@@ -509,6 +612,7 @@ def _base_table(table):
 
 def _parent_delete(db, table, ids):
     from .routers.sql_models import Project
+
     if not ids:
         return
     connection = db.connection()
@@ -533,7 +637,10 @@ def _insert_plans(statement, parameters):
         else:
             if not hasattr(static, "items"):
                 _deny("project_sql_scope_unproven", "Inserts require named column values", 422)
-            values = {_name(key): _assignment_value(statement, key, value, parameters) for key, value in static.items()}
+            values = {
+                _name(key): _assignment_value(statement, key, value, parameters)
+                for key, value in static.items()
+            }
         yield "insert", {}, values
 
 
@@ -559,12 +666,18 @@ def _bounded_rows(state, table, parameters, orm_bulk):
             _deny("project_sql_scope_unproven", "ORM bulk updates require every primary key", 422)
         query = query.where(*(column == parameters[column.key] for column in primary))
     elif not _anchor(statement.whereclause, table, parameters):
-        _deny("project_sql_scope_unproven", "Write predicates must name a finite project or primary-key scope", 422)
+        _deny(
+            "project_sql_scope_unproven",
+            "Write predicates must name a finite project or primary-key scope",
+            422,
+        )
     return [dict(row) for row in state.session.connection().execute(query, parameters).mappings()]
 
 
 def _typed_plans(state, table, canonical, orm_bulk, parent):
-    batches = list(state.parameters) if isinstance(state.parameters, (list, tuple)) else [state.parameters or {}]
+    batches = (
+        list(state.parameters) if isinstance(state.parameters, (list, tuple)) else [state.parameters or {}]
+    )
     plans = []
     for parameters in batches:
         if not isinstance(parameters, dict):
@@ -598,14 +711,30 @@ def _typed_write(state):
     parent = state.is_delete and canonical.name in {"tenants", "businesses"}
     if not (_scoped(canonical) or parent):
         return
-    if (getattr(statement, "_select_names", None) or getattr(statement, "_post_values_clause", None) is not None
-            or getattr(statement, "_prefixes", ())):
-        _deny("project_sql_scope_unproven", "INSERT SELECT and conflict writes cannot prove a project scope", 422)
-    orm_bulk = state.is_update and isinstance(state.parameters, (list, tuple)) and getattr(table, "_annotations", {}).get("parentmapper")
+    if (
+        getattr(statement, "_select_names", None)
+        or getattr(statement, "_post_values_clause", None) is not None
+        or getattr(statement, "_prefixes", ())
+    ):
+        _deny(
+            "project_sql_scope_unproven",
+            "INSERT SELECT and conflict writes cannot prove a project scope",
+            422,
+        )
+    orm_bulk = (
+        state.is_update
+        and isinstance(state.parameters, (list, tuple))
+        and getattr(table, "_annotations", {}).get("parentmapper")
+    )
     plans = _typed_plans(state, table, canonical, orm_bulk, parent)
-    scopes = {_scope_for_row(db, canonical, values if operation == "insert" else old)
-              for operation, old, values in plans}
-    lock_project_scopes(db, [scope for scope in scopes if scope is not None and canonical.name not in {"projects", "audit_logs"}])
+    scopes = {
+        _scope_for_row(db, canonical, values if operation == "insert" else old)
+        for operation, old, values in plans
+    }
+    lock_project_scopes(
+        db,
+        [scope for scope in scopes if scope is not None and canonical.name not in {"projects", "audit_logs"}],
+    )
     for operation, old, values in plans:
         _check_write(db, canonical, operation, old, values)
     if not state.is_insert and not parent and not orm_bulk:
@@ -614,8 +743,16 @@ def _typed_write(state):
         targets = {tuple(old[column.key] for column in primary) for _, old, _ in plans}
         # Fixed scalar predicates work with executemany; expanding IN parameters
         # do not. Keep the same selected-PK fence for every batch parameter row.
-        predicate = or_(*(and_(*(column == value for column, value in zip(primary, target, strict=True)))
-                          for target in sorted(targets))) if targets else false()
+        predicate = (
+            or_(
+                *(
+                    and_(*(column == value for column, value in zip(primary, target, strict=True)))
+                    for target in sorted(targets)
+                )
+            )
+            if targets
+            else false()
+        )
         state.statement = statement.where(predicate)
 
 
@@ -641,17 +778,30 @@ def _orm_plan(db, obj, deleted, cascade_members):
     if not _scoped(table):
         return None
     if obj in db.new:
-        values = {column.key: getattr(obj, column.key) for column in table.c
-                  if getattr(obj, column.key) is not None}
+        values = {
+            column.key: getattr(obj, column.key) for column in table.c if getattr(obj, column.key) is not None
+        }
         return table, "insert", {}, values, False
     primary = list(table.primary_key.columns)
-    old = db.connection().execute(select(table).where(*(column == value for column, value in zip(primary, state.identity, strict=True)))).mappings().first()
+    old = (
+        db.connection()
+        .execute(
+            select(table).where(
+                *(column == value for column, value in zip(primary, state.identity, strict=True))
+            )
+        )
+        .mappings()
+        .first()
+    )
     if old is None:
         return None
     if obj not in deleted:
         _check_relationship_identity(obj, state, table, old)
-    values = {column.key: getattr(obj, column.key) for column in table.c
-              if state.attrs[column.key].history.has_changes()}
+    values = {
+        column.key: getattr(obj, column.key)
+        for column in table.c
+        if state.attrs[column.key].history.has_changes()
+    }
     cascade = table.name == "project_members" and tuple(state.identity) in cascade_members
     return table, "delete" if obj in deleted else "update", dict(old), values, cascade
 
@@ -662,20 +812,37 @@ def _before_flush(db, flush_context, instances):
     # SQLAlchemy discovers delete-orphan effects during its unit-of-work flush,
     # after before_flush. Inspect relationship history before those hidden
     # DELETEs are emitted, rather than relying on db.deleted alone.
-    orphans = {removed for obj in db.dirty for relation in inspect(obj).mapper.relationships
-               if relation.cascade.delete_orphan
-               for removed in inspect(obj).attrs[relation.key].history.deleted if removed not in db.new}
+    orphans = {
+        removed
+        for obj in db.dirty
+        for relation in inspect(obj).mapper.relationships
+        if relation.cascade.delete_orphan
+        for removed in inspect(obj).attrs[relation.key].history.deleted
+        if removed not in db.new
+    }
     deleted = set(db.deleted) | orphans
     deleted_users = {inspect(user).identity[0] for user in deleted if isinstance(user, User)}
     cascade_members = set()
     if deleted_users:
-        cascade_members = set(db.connection().execute(select(ProjectMember.project_id, ProjectMember.user_id)
-                                                     .where(ProjectMember.user_id.in_(deleted_users))).all())
-    plans = [plan for obj in set(db.new) | set(db.dirty) | deleted
-             if (plan := _orm_plan(db, obj, deleted, cascade_members)) is not None]
-    scopes = {_scope_for_row(db, table, values if operation == "insert" else old)
-              for table, operation, old, values, _ in plans
-              if table.name != "audit_logs" and not (table.name == "projects" and operation == "insert")}
+        cascade_members = set(
+            db.connection()
+            .execute(
+                select(ProjectMember.project_id, ProjectMember.user_id).where(
+                    ProjectMember.user_id.in_(deleted_users)
+                )
+            )
+            .all()
+        )
+    plans = [
+        plan
+        for obj in set(db.new) | set(db.dirty) | deleted
+        if (plan := _orm_plan(db, obj, deleted, cascade_members)) is not None
+    ]
+    scopes = {
+        _scope_for_row(db, table, values if operation == "insert" else old)
+        for table, operation, old, values, _ in plans
+        if table.name != "audit_logs" and not (table.name == "projects" and operation == "insert")
+    }
     lock_project_scopes(db, [scope for scope in scopes if scope is not None])
     for table, operation, old, values, cascade in plans:
         _check_write(db, table, operation, old, values, user_cascade=cascade)
@@ -688,7 +855,10 @@ def _transaction_end(db, transaction):
 
 
 def install_project_write_guard():
-    for name, callback in [("do_orm_execute", _typed_write), ("before_flush", _before_flush),
-                           ("after_transaction_end", _transaction_end)]:
+    for name, callback in [
+        ("do_orm_execute", _typed_write),
+        ("before_flush", _before_flush),
+        ("after_transaction_end", _transaction_end),
+    ]:
         if not event.contains(Session, name, callback):
             event.listen(Session, name, callback)

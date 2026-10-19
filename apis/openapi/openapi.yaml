@@ -2469,6 +2469,445 @@ paths:
           description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
       description: Exact original/current comparison item for the requested task and category. Preserves unknown historical
         fields and validates the current generation.
+  /api/v1/delivery/requirements/{requirement_id}/definition:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Definition
+      operationId: deliveryRequirementDefinition
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: query_generation
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          title: Query Generation
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementDefinitionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+        '413':
+          description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
+      description: Exact current definition pinned to an explicit query generation, with a 1MiB item budget. No unloaded-definition
+        fallback.
+  /api/v1/delivery/requirements/{requirement_id}/records:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Records
+      operationId: deliveryRequirementRecords
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: collection
+        in: query
+        required: true
+        schema:
+          enum:
+          - artifacts
+          - reviews
+          - releases
+          type: string
+          title: Collection
+      - name: query_generation
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          title: Query Generation
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementRecordsPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Independent artifacts/reviews/legacy releases SQL summary page, default20/max100. Explicit generation pins
+        original array positions; no whole flow transfer before slicing.
+  /api/v1/delivery/requirements/{requirement_id}/records/{position}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Record
+      operationId: deliveryRequirementRecord
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: position
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 0
+          title: Position
+      - name: collection
+        in: query
+        required: true
+        schema:
+          enum:
+          - artifacts
+          - reviews
+          - releases
+          type: string
+          title: Collection
+      - name: query_generation
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          title: Query Generation
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementRecordDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+        '413':
+          description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
+      description: Exact current original record at its nonnegative position and explicit generation, limited to 1MiB. A position
+        is not an immutable business ID.
+  /api/v1/delivery/requirements/{requirement_id}/impact:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Impact
+      operationId: deliveryRequirementImpact
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: query_generation
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Query Generation
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementImpactSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Current complete direct/dependent Task, all historical execution, candidate and deployment impact counts
+        with actual ACL-restricted counts; no unbounded ID arrays or partial completeness.
+  /api/v1/delivery/requirements/{requirement_id}/impact/items:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Impact Items
+      operationId: deliveryRequirementImpactItems
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: kind
+        in: query
+        required: true
+        schema:
+          enum:
+          - direct_task
+          - dependent_task
+          - execution
+          - release_candidate
+          - deployment
+          type: string
+          title: Kind
+      - name: query_generation
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          title: Query Generation
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementImpactPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Independent impact-kind page bound to explicit current generation, reader/ACL, requirement, kind and limit.
+        Hidden runtime IDs are never returned.
+  /api/v1/delivery/requirements/{requirement_id}/impact/items/{item_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Impact Item
+      operationId: deliveryRequirementImpactItem
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Item Id
+      - name: kind
+        in: query
+        required: true
+        schema:
+          enum:
+          - direct_task
+          - dependent_task
+          - execution
+          - release_candidate
+          - deployment
+          type: string
+          title: Kind
+      - name: query_generation
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          title: Query Generation
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementImpactDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Exact actual impact membership and currently readable navigation target in the explicit generation; does
+        not copy Task bodies or runtime logs.
   /api/v1/sprints/{sprint_id}/burndown:
     get:
       tags:
@@ -6710,7 +7149,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RequirementHistory'
+                $ref: '#/components/schemas/RequirementHistoryPage'
         '422':
           description: Validation Error
           content:
@@ -6725,8 +7164,13 @@ paths:
           description: Current project or operation permission denied
         '404':
           description: Exact scoped record was not found
-      description: Read bounded actual canonical definition observations. Observation number/time differ from workflow revision
-        and original edit time. Earlier uncaptured content remains unknown; this read never backfills it.
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Immutable observed-version metadata only, fixed initial sequence window and reader/project/requirement/limit
+        cursor; independent of current index readiness.
   /api/v1/delivery/requirements/{requirement_id}/history/{version_id}:
     get:
       tags:
@@ -6776,8 +7220,15 @@ paths:
           description: Current project or operation permission denied
         '404':
           description: Exact scoped record was not found
-      description: Read one exact immutable observed requirement definition in the current tenant/project scope, including after
-        canonical deletion. This does not restore or adopt it.
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+        '413':
+          description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
+      description: Exact actually saved original definition, independent of current entity existence or query generation; no
+        invented earlier version or truncated original.
   /api/v1/delivery/requirements/{requirement_id}/change-preview:
     post:
       tags:
@@ -6829,9 +7280,10 @@ paths:
           description: Exact scoped record was not found
         '409':
           description: Requirement, affected work or project status changed; explicitly read and adopt current facts
-      description: Pure preview of exact title/description/acceptance changes pinned to current requirement_basis. Returns differences,
-        direct and dependent work, permitted runtime targets, preview_basis and project version. It never writes history, reschedules,
-        dispatches, runs a model or accepts work.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Explicit complete canonical change proof, including empty changes. Within actual 16MiB/1MiB and 10000-source
+        limits only; incomplete proofs have no approval basis. Ordinary page visibility never authorizes a partial change.
   /api/v1/delivery/context:
     get:
       tags:
@@ -7042,6 +7494,15 @@ paths:
         schema:
           type: string
           title: Requirement Id
+      - name: query_generation
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Query Generation
       - name: X-Project-Id
         in: header
         required: true
@@ -7055,7 +7516,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RequirementDetail'
+                $ref: '#/components/schemas/RequirementHeadResponse'
         '422':
           description: Validation Error
           content:
@@ -7072,7 +7533,10 @@ paths:
           description: Exact scoped record not found
         '409':
           description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
-      description: Read one exact scoped requirement and its own workflow JSON path, independent of any loaded page.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Small typed current requirement head with canonical gates, counts and flow scalars; no definition body, flow
+        history or impact ID arrays.
   /api/v1/delivery/tasks:
     get:
       tags:
@@ -23819,54 +24283,6 @@ components:
       - next_cursor
       title: ActivityPage
       type: object
-    ChangeImpact:
-      additionalProperties: false
-      properties:
-        task_ids:
-          items:
-            type: string
-          title: Task Ids
-          type: array
-        dependent_task_ids:
-          items:
-            type: string
-          title: Dependent Task Ids
-          type: array
-        execution_ids:
-          items:
-            type: string
-          title: Execution Ids
-          type: array
-        release_candidate_ids:
-          items:
-            type: string
-          title: Release Candidate Ids
-          type: array
-        deployment_ids:
-          items:
-            type: string
-          title: Deployment Ids
-          type: array
-        invalidates_current_acceptance:
-          title: Invalidates Current Acceptance
-          type: boolean
-        restricted_execution_count:
-          default: 0
-          title: Restricted Execution Count
-          type: integer
-        restricted_deployment_count:
-          default: 0
-          title: Restricted Deployment Count
-          type: integer
-      required:
-      - task_ids
-      - dependent_task_ids
-      - execution_ids
-      - release_candidate_ids
-      - deployment_ids
-      - invalidates_current_acceptance
-      title: ChangeImpact
-      type: object
     CollaborationReason:
       additionalProperties: false
       properties:
@@ -23882,79 +24298,91 @@ components:
       title: CollaborationReason
       type: object
     DefinitionChanges:
-      additionalProperties: false
       properties:
         title:
-          anyOf:
-          - maxLength: 256
-            minLength: 1
-            type: string
-          - type: 'null'
-          default: null
+          type: string
+          maxLength: 256
+          minLength: 1
           title: Title
         description:
-          anyOf:
-          - maxLength: 20000
-            type: string
-          - type: 'null'
-          default: null
+          type: string
+          maxLength: 20000
           title: Description
         acceptance_criteria:
-          anyOf:
-          - items:
-              type: string
-            maxItems: 80
-            type: array
-          - type: 'null'
-          default: null
+          items:
+            type: string
+          type: array
+          maxItems: 80
           title: Acceptance Criteria
-      title: DefinitionChanges
-      type: object
-    RequirementChangePreview:
       additionalProperties: false
+      type: object
+      title: DefinitionChanges
+    RequirementChangePreview:
       properties:
         project_id:
+          type: string
           title: Project Id
-          type: string
         requirement_id:
+          type: string
           title: Requirement Id
-          type: string
         version:
-          title: Version
           type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
         requirement_basis:
+          type: string
           title: Requirement Basis
-          type: string
         preview_basis:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Preview Basis
-          type: string
         changes:
           items:
             $ref: '#/components/schemas/FieldChange'
-          title: Changes
           type: array
+          title: Changes
         impact:
-          $ref: '#/components/schemas/ChangeImpact'
-        allowed:
-          title: Allowed
+          $ref: '#/components/schemas/RequirementPreviewImpact'
+        available:
           type: boolean
+          title: Available
+        complete:
+          type: boolean
+          title: Complete
+        allowed:
+          type: boolean
+          title: Allowed
+        budget:
+          $ref: '#/components/schemas/RequirementReadBudget'
         reasons:
           items:
-            $ref: '#/components/schemas/CollaborationReason'
-          title: Reasons
+            $ref: '#/components/schemas/RequirementReadReason'
           type: array
+          title: Reasons
+      additionalProperties: false
+      type: object
       required:
       - project_id
       - requirement_id
       - version
+      - query_generation
+      - as_of
       - requirement_basis
       - preview_basis
       - changes
       - impact
+      - available
+      - complete
       - allowed
+      - budget
       - reasons
       title: RequirementChangePreview
-      type: object
     RequirementChangePreviewInput:
       additionalProperties: false
       properties:
@@ -24033,47 +24461,6 @@ components:
       - source
       - flow_revision
       title: RequirementVersion
-      type: object
-    RequirementHistory:
-      additionalProperties: false
-      properties:
-        project_id:
-          title: Project Id
-          type: string
-        requirement_id:
-          title: Requirement Id
-          type: string
-        current_basis:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Current Basis
-        items:
-          items:
-            $ref: '#/components/schemas/RequirementVersion'
-          title: Items
-          type: array
-        next_cursor:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Next Cursor
-        earlier_history_unknown:
-          default: true
-          title: Earlier History Unknown
-          type: boolean
-        current_links:
-          anyOf:
-          - $ref: '#/components/schemas/RequirementLinks'
-          - type: 'null'
-          default: null
-      required:
-      - project_id
-      - requirement_id
-      - current_basis
-      - items
-      - next_cursor
-      title: RequirementHistory
       type: object
     RequirementVersionDetail:
       additionalProperties: false
@@ -24180,54 +24567,6 @@ components:
       required:
       - id
       title: RequirementEdit
-      type: object
-    RequirementLinks:
-      additionalProperties: false
-      properties:
-        requirement_basis:
-          title: Requirement Basis
-          type: string
-        task_ids:
-          items:
-            type: string
-          title: Task Ids
-          type: array
-        dependent_task_ids:
-          items:
-            type: string
-          title: Dependent Task Ids
-          type: array
-        execution_ids:
-          items:
-            type: string
-          title: Execution Ids
-          type: array
-        release_candidate_ids:
-          items:
-            type: string
-          title: Release Candidate Ids
-          type: array
-        deployment_ids:
-          items:
-            type: string
-          title: Deployment Ids
-          type: array
-        restricted_execution_count:
-          title: Restricted Execution Count
-          type: integer
-        restricted_deployment_count:
-          title: Restricted Deployment Count
-          type: integer
-      required:
-      - requirement_basis
-      - task_ids
-      - dependent_task_ids
-      - execution_ids
-      - release_candidate_ids
-      - deployment_ids
-      - restricted_execution_count
-      - restricted_deployment_count
-      title: RequirementLinks
       type: object
     CommandReference:
       additionalProperties: false
@@ -24491,31 +24830,6 @@ components:
       additionalProperties: false
       properties: {}
       title: ReadModel
-      type: object
-    RequirementDetail:
-      additionalProperties: false
-      properties:
-        project_id:
-          title: Project Id
-          type: string
-        version:
-          title: Version
-          type: integer
-        query_generation:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Query Generation
-        requirement:
-          additionalProperties: true
-          title: Requirement
-          type: object
-      required:
-      - project_id
-      - version
-      - query_generation
-      - requirement
-      title: RequirementDetail
       type: object
     RequirementPage:
       additionalProperties: false
@@ -28417,3 +28731,813 @@ components:
       - before
       - after
       title: ProgressComparisonItemDetail
+    RequirementHeadResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        requirement_id:
+          type: string
+          title: Requirement Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        requirement:
+          $ref: '#/components/schemas/RequirementHead'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - requirement_id
+      - version
+      - query_generation
+      - as_of
+      - requirement
+      title: RequirementHeadResponse
+    RequirementHead:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          maxLength: 256
+          title: Title
+        priority:
+          type: string
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Priority
+        status:
+          type: string
+          title: Status
+        sprint_id:
+          type: string
+          title: Sprint Id
+        basis:
+          type: string
+          title: Basis
+        flow:
+          $ref: '#/components/schemas/RequirementFlowHead'
+        tasks_total:
+          type: integer
+          minimum: 0.0
+          title: Tasks Total
+        tasks_done:
+          type: integer
+          minimum: 0.0
+          title: Tasks Done
+        tasks_recorded_done:
+          type: integer
+          minimum: 0.0
+          title: Tasks Recorded Done
+        accepted:
+          type: boolean
+          title: Accepted
+        deployment_verified:
+          type: boolean
+          title: Deployment Verified
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - priority
+      - status
+      - sprint_id
+      - basis
+      - flow
+      - tasks_total
+      - tasks_done
+      - tasks_recorded_done
+      - accepted
+      - deployment_verified
+      title: RequirementHead
+    RequirementFlowHead:
+      properties:
+        stage:
+          type: string
+          enum:
+          - intake
+          - product
+          - ux
+          - architecture
+          - planning
+          - development
+          - testing
+          - acceptance
+          - release
+          - operations
+          title: Stage
+        revision:
+          type: integer
+          title: Revision
+        owner_id:
+          type: string
+          title: Owner Id
+        due_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Due On
+        milestone_id:
+          type: string
+          title: Milestone Id
+        blocked_reason:
+          type: string
+          title: Blocked Reason
+        closed:
+          type: boolean
+          title: Closed
+        legacy_completed:
+          type: boolean
+          title: Legacy Completed
+        gates:
+          items:
+            $ref: '#/components/schemas/RequirementGate'
+          type: array
+          title: Gates
+        record_counts:
+          $ref: '#/components/schemas/RequirementRecordCounts'
+      additionalProperties: false
+      type: object
+      required:
+      - stage
+      - revision
+      - owner_id
+      - due_on
+      - milestone_id
+      - blocked_reason
+      - closed
+      - legacy_completed
+      - gates
+      - record_counts
+      title: RequirementFlowHead
+    RequirementGate:
+      properties:
+        id:
+          type: string
+          title: Id
+        ok:
+          type: boolean
+          title: Ok
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - ok
+      title: RequirementGate
+    RequirementRecordCounts:
+      properties:
+        artifacts:
+          type: integer
+          minimum: 0.0
+          title: Artifacts
+        reviews:
+          type: integer
+          minimum: 0.0
+          title: Reviews
+        releases:
+          type: integer
+          minimum: 0.0
+          title: Releases
+      additionalProperties: false
+      type: object
+      required:
+      - artifacts
+      - reviews
+      - releases
+      title: RequirementRecordCounts
+    RequirementDefinitionResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        requirement_id:
+          type: string
+          title: Requirement Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        requirement_basis:
+          type: string
+          title: Requirement Basis
+        definition:
+          $ref: '#/components/schemas/RequirementDefinition'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - requirement_id
+      - version
+      - query_generation
+      - as_of
+      - requirement_basis
+      - definition
+      title: RequirementDefinitionResponse
+    RequirementHistoryPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        requirement_id:
+          type: string
+          title: Requirement Id
+        as_of:
+          type: string
+          title: As Of
+        items:
+          items:
+            $ref: '#/components/schemas/RequirementVersionMetadata'
+          type: array
+          maxItems: 100
+          title: Items
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        earlier_history_unknown:
+          type: boolean
+          title: Earlier History Unknown
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - requirement_id
+      - as_of
+      - items
+      - limit
+      - next_cursor
+      title: RequirementHistoryPage
+    RequirementVersionMetadata:
+      properties:
+        id:
+          type: string
+          title: Id
+        number:
+          type: integer
+          title: Number
+        basis:
+          type: string
+          title: Basis
+        at:
+          type: string
+          title: At
+        actor:
+          $ref: '#/components/schemas/ActivityActor'
+        source:
+          type: string
+          enum:
+          - delivery_command
+          - sql_observed
+          title: Source
+        flow_revision:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Flow Revision
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - number
+      - basis
+      - at
+      - actor
+      - source
+      - flow_revision
+      title: RequirementVersionMetadata
+    RequirementRecordsPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        requirement_id:
+          type: string
+          title: Requirement Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        requirement_basis:
+          type: string
+          title: Requirement Basis
+        collection:
+          type: string
+          enum:
+          - artifacts
+          - reviews
+          - releases
+          title: Collection
+        items:
+          items:
+            $ref: '#/components/schemas/RequirementRecordSummary'
+          type: array
+          maxItems: 100
+          title: Items
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - requirement_id
+      - version
+      - query_generation
+      - as_of
+      - requirement_basis
+      - collection
+      - items
+      - total
+      - limit
+      - next_cursor
+      title: RequirementRecordsPage
+    RequirementRecordSummary:
+      properties:
+        position:
+          type: integer
+          minimum: 0.0
+          title: Position
+        revision:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Revision
+        kind:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Kind
+        stage:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Stage
+        title:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Title
+        result:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Result
+        decision:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Decision
+        actor:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Actor
+        at:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: At
+        stale:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Stale
+      additionalProperties: false
+      type: object
+      required:
+      - position
+      - revision
+      - kind
+      - stage
+      - title
+      - result
+      - decision
+      - actor
+      - at
+      - stale
+      title: RequirementRecordSummary
+    RequirementRecordDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        requirement_id:
+          type: string
+          title: Requirement Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        requirement_basis:
+          type: string
+          title: Requirement Basis
+        collection:
+          type: string
+          enum:
+          - artifacts
+          - reviews
+          - releases
+          title: Collection
+        position:
+          type: integer
+          minimum: 0.0
+          title: Position
+        record:
+          additionalProperties: true
+          type: object
+          title: Record
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - requirement_id
+      - version
+      - query_generation
+      - as_of
+      - requirement_basis
+      - collection
+      - position
+      - record
+      title: RequirementRecordDetail
+    RequirementImpactSummary:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        requirement_id:
+          type: string
+          title: Requirement Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        requirement_basis:
+          type: string
+          title: Requirement Basis
+        available:
+          type: boolean
+          title: Available
+        complete:
+          type: boolean
+          title: Complete
+        counts:
+          anyOf:
+          - $ref: '#/components/schemas/RequirementImpactCounts'
+          - type: 'null'
+        budget:
+          $ref: '#/components/schemas/RequirementReadBudget'
+        reasons:
+          items:
+            $ref: '#/components/schemas/RequirementReadReason'
+          type: array
+          title: Reasons
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - requirement_id
+      - version
+      - query_generation
+      - as_of
+      - requirement_basis
+      - available
+      - complete
+      - counts
+      - budget
+      - reasons
+      title: RequirementImpactSummary
+    RequirementImpactCounts:
+      properties:
+        direct_task:
+          type: integer
+          minimum: 0.0
+          title: Direct Task
+        dependent_task:
+          type: integer
+          minimum: 0.0
+          title: Dependent Task
+        execution:
+          type: integer
+          minimum: 0.0
+          title: Execution
+        release_candidate:
+          type: integer
+          minimum: 0.0
+          title: Release Candidate
+        deployment:
+          type: integer
+          minimum: 0.0
+          title: Deployment
+        restricted_execution:
+          type: integer
+          minimum: 0.0
+          title: Restricted Execution
+        restricted_deployment:
+          type: integer
+          minimum: 0.0
+          title: Restricted Deployment
+      additionalProperties: false
+      type: object
+      required:
+      - direct_task
+      - dependent_task
+      - execution
+      - release_candidate
+      - deployment
+      - restricted_execution
+      - restricted_deployment
+      title: RequirementImpactCounts
+    RequirementReadBudget:
+      properties:
+        max_tasks:
+          type: integer
+          title: Max Tasks
+          default: 10000
+        max_closure_tasks:
+          type: integer
+          title: Max Closure Tasks
+          default: 10000
+        max_requirements:
+          type: integer
+          title: Max Requirements
+          default: 10000
+        max_records_per_collection:
+          type: integer
+          title: Max Records Per Collection
+          default: 10000
+        max_bytes:
+          type: integer
+          title: Max Bytes
+          default: 16777216
+        max_item_bytes:
+          type: integer
+          title: Max Item Bytes
+          default: 1048576
+        max_dependency_depth:
+          type: integer
+          title: Max Dependency Depth
+          default: 64
+        task_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Task Count
+        closure_task_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Closure Task Count
+        requirement_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Requirement Count
+        execution_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Execution Count
+        release_candidate_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Release Candidate Count
+        deployment_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Deployment Count
+        bytes_used:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Bytes Used
+      additionalProperties: false
+      type: object
+      title: RequirementReadBudget
+    RequirementReadReason:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      title: RequirementReadReason
+    RequirementImpactPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        requirement_id:
+          type: string
+          title: Requirement Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        requirement_basis:
+          type: string
+          title: Requirement Basis
+        kind:
+          type: string
+          enum:
+          - direct_task
+          - dependent_task
+          - execution
+          - release_candidate
+          - deployment
+          title: Kind
+        items:
+          items:
+            $ref: '#/components/schemas/RequirementImpactItem'
+          type: array
+          maxItems: 100
+          title: Items
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - requirement_id
+      - version
+      - query_generation
+      - as_of
+      - requirement_basis
+      - kind
+      - items
+      - total
+      - limit
+      - next_cursor
+      title: RequirementImpactPage
+    RequirementImpactItem:
+      properties:
+        id:
+          type: string
+          title: Id
+        kind:
+          type: string
+          enum:
+          - direct_task
+          - dependent_task
+          - execution
+          - release_candidate
+          - deployment
+          title: Kind
+        title:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Title
+        status:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Status
+        target:
+          $ref: '#/components/schemas/ActivityTarget'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - kind
+      - title
+      - status
+      - target
+      title: RequirementImpactItem
+    RequirementImpactDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        requirement_id:
+          type: string
+          title: Requirement Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        requirement_basis:
+          type: string
+          title: Requirement Basis
+        kind:
+          type: string
+          enum:
+          - direct_task
+          - dependent_task
+          - execution
+          - release_candidate
+          - deployment
+          title: Kind
+        item:
+          $ref: '#/components/schemas/RequirementImpactItem'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - requirement_id
+      - version
+      - query_generation
+      - as_of
+      - requirement_basis
+      - kind
+      - item
+      title: RequirementImpactDetail
+    RequirementPreviewImpact:
+      properties:
+        counts:
+          anyOf:
+          - $ref: '#/components/schemas/RequirementImpactCounts'
+          - type: 'null'
+        invalidates_current_acceptance:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Invalidates Current Acceptance
+      additionalProperties: false
+      type: object
+      required:
+      - counts
+      - invalidates_current_acceptance
+      title: RequirementPreviewImpact

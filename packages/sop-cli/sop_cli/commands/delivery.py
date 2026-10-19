@@ -11,10 +11,24 @@ from .._util import console, get_client, warn
 from . import delivery_discussion
 
 app = typer.Typer(
-    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / progress-freeze-proof / baselines / baseline / baseline-items / baseline-item / baseline-comparison / baseline-comparison-items / baseline-comparison-item / observation / observation-items / observation-item / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：context / requirements / requirement / requirement-definition / requirement-records / requirement-record / requirement-impact / requirement-impact-items / requirement-impact-item / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / progress-freeze-proof / baselines / baseline / baseline-items / baseline-item / baseline-comparison / baseline-comparison-items / baseline-comparison-item / observation / observation-items / observation-item / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
 
 app.add_typer(delivery_discussion.app, name="discussion")
+
+
+class RequirementRecordCollection(str, Enum):
+    artifacts = "artifacts"
+    reviews = "reviews"
+    releases = "releases"
+
+
+class RequirementImpactKind(str, Enum):
+    direct_task = "direct_task"
+    dependent_task = "dependent_task"
+    execution = "execution"
+    release_candidate = "release_candidate"
+    deployment = "deployment"
 
 
 def _query_output(method, *args, **selection):
@@ -58,9 +72,88 @@ def requirements(
 
 
 @app.command("requirement")
-def requirement(requirement_id: Annotated[str, typer.Option("--id")]):
-    """按精确ID读取完整需求，不受列表页窗口影响。"""
-    _query_output("delivery_requirement", requirement_id)
+def requirement(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    query_generation: Annotated[int | None, typer.Option("--generation", min=1)] = None,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """按精确ID读取当前需求小头；定义原文、原记录和当前影响分别读取。"""
+    options = {"query_generation": query_generation} if query_generation is not None else {}
+    _query_output("delivery_requirement", requirement_id, **options)
+
+
+@app.command("requirement-definition")
+def requirement_definition(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    query_generation: Annotated[int, typer.Option("--generation", min=1)],
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """在小头的明确代次读取完整当前定义；不以未读条件推断空列表。"""
+    _query_output("delivery_requirement_definition", requirement_id, query_generation=query_generation)
+
+
+@app.command("requirement-records")
+def requirement_records(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    collection: Annotated[RequirementRecordCollection, typer.Option("--collection")],
+    query_generation: Annotated[int, typer.Option("--generation", min=1)],
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """分页读取同代产物、评审或旧发布摘要；保留原数组位置。"""
+    _query_output("delivery_requirement_records", requirement_id, collection=collection.value,
+                  query_generation=query_generation, limit=limit, cursor=cursor)
+
+
+@app.command("requirement-record")
+def requirement_record(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    collection: Annotated[RequirementRecordCollection, typer.Option("--collection")],
+    position: Annotated[int, typer.Option("--position", min=0)],
+    query_generation: Annotated[int, typer.Option("--generation", min=1)],
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取同代原数组位置的完整记录；0合法，不生成历史业务ID。"""
+    _query_output("delivery_requirement_record", requirement_id, position, collection=collection.value,
+                  query_generation=query_generation)
+
+
+@app.command("requirement-impact")
+def requirement_impact(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    query_generation: Annotated[int | None, typer.Option("--generation", min=1)] = None,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取当前完整影响计数、受限计数与完整性；不下载全部关联ID。"""
+    _query_output("delivery_requirement_impact", requirement_id, query_generation=query_generation)
+
+
+@app.command("requirement-impact-items")
+def requirement_impact_items(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    kind: Annotated[RequirementImpactKind, typer.Option("--kind")],
+    query_generation: Annotated[int, typer.Option("--generation", min=1)],
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取明确影响分类的一页；固定摘要代次，不自动翻页或采用新代次。"""
+    _query_output("delivery_requirement_impact_items", requirement_id, kind=kind.value,
+                  query_generation=query_generation, limit=limit, cursor=cursor)
+
+
+@app.command("requirement-impact-item")
+def requirement_impact_item(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    item_id: Annotated[str, typer.Option("--item")],
+    kind: Annotated[RequirementImpactKind, typer.Option("--kind")],
+    query_generation: Annotated[int, typer.Option("--generation", min=1)],
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """核对同代真实影响成员与当前可读目标；不回退列表首项。"""
+    _query_output("delivery_requirement_impact_item", requirement_id, item_id, kind=kind.value,
+                  query_generation=query_generation)
 
 
 @app.command("tasks")
@@ -235,8 +328,9 @@ def requirement_history(
     version_id: Annotated[str, typer.Option("--version")] = "",
     cursor: Annotated[str, typer.Option("--cursor")] = "",
     limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
 ):
-    """读取真实观测的需求内容历史，或精确只读版本；不补造早期内容。"""
+    """读取固定版本元数据页，或--version指定的完整原件；不夹当前影响。"""
     try:
         if version_id and (cursor or limit != 20):
             raise ValueError("--version 不能同时使用分页参数")
@@ -254,14 +348,15 @@ def requirement_history(
 def requirement_change_preview(
     requirement_id: Annotated[str, typer.Option("--id")],
     file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)],
+    json_out: Annotated[bool, typer.Option("--json")] = False,
 ):
-    """核对固定需求内容变更及影响；不会保存、重派或重新验收。"""
+    """完整预览明确变更及影响；changes可为空，不自动保存或换依据。"""
     try:
         body = json.loads(file.read_text(encoding="utf-8"))
         if not isinstance(body, dict) or set(body) != {"requirement_basis", "changes"}:
             raise ValueError("需要明确 requirement_basis 和 changes")
-        if not isinstance(body["requirement_basis"], str) or not isinstance(body["changes"], dict) or not body["changes"]:
-            raise ValueError("requirement_basis 必须为字符串，changes 必须为非空对象")
+        if not isinstance(body["requirement_basis"], str) or not isinstance(body["changes"], dict):
+            raise ValueError("requirement_basis 必须为字符串，changes 必须为对象")
         if set(body["changes"]) - {"title", "description", "acceptance_criteria"}:
             raise ValueError("changes 只能修改 title、description、acceptance_criteria")
         with get_client() as client:

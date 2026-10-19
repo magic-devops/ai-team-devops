@@ -1,8 +1,10 @@
+import { requirementEditSourcePatch } from "@/lib/deliveryRequirementAdoption";
 import { currentEventHash, safeEventReturn } from "@/lib/eventReceipts";
 import {
   fetchDeliveryContext,
   fetchDeliveryReferences,
   fetchRequirementDetail,
+  fetchEditableRequirement,
   type RequirementDetail,
   invalidateDeliveryQueries,
   rebuildDeliveryQuery,
@@ -47,13 +49,11 @@ import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
   deliveryStages,
   prepareDeliveryIntent,
-  safeEvidenceUrl,
   saveDelivery,
   type DeliveryAction,
   type DeliveryIntent,
   type DeliveryMember,
   type DeliveryMilestone,
-  type DeliveryRequirement,
   type DeliveryContext,
   type DeliveryCommandAck,
   type DeliveryInboxTarget,
@@ -97,10 +97,20 @@ import {
 } from "./DeliveryActivityFeed";
 import { DeliveryCollaboration } from "./DeliveryDiscussionAdoption";
 import { DeliverySourceSummary } from "./DeliverySourceSummary";
-import { DeliveryRequirementChangeEditor } from "./DeliveryRequirementChangeEditor";
+import { DeliveryRequirementChangeHost } from "./DeliveryRequirementChangeHost";
+import {
+  DeliveryRequirementDefinition,
+  DeliveryRequirementRecords,
+} from "./DeliveryRequirementReads";
+import type {
+  RequirementHead,
+  RequirementEditable,
+} from "@/lib/deliveryRequirementReads";
+import { beginProgressExactRead } from "@/lib/deliveryProgress";
 import { DeliveryRequirementHistory } from "./DeliveryRequirementHistory";
 import {
   preserveCollaborationRoute,
+  useCollaborationRoute,
   safeCollaborationReturn,
 } from "@/lib/deliveryCollaboration";
 import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
@@ -262,11 +272,9 @@ function ProjectDelivery() {
     gcTime: 0,
     refetchInterval: 5000,
   });
-  const [changeRequirement, setChangeRequirement] =
-    useState<DeliveryRequirement | null>(null);
   const [editor, setEditor] = useState<EditorSpec | null>(null);
   const [planRequirement, setPlanRequirement] =
-    useState<DeliveryRequirement | null>(null);
+    useState<RequirementEditable | null>(null);
   const [actionError, setActionError] = useState("");
   const lastRequest = useRef<{ signature: string; key: string }>();
   const editorIntent = useRef<DeliveryIntent>();
@@ -480,7 +488,7 @@ function ProjectDelivery() {
   )
     retainedRequirement.current = detailQuery.data;
   const selected =
-    !detailDenied && originScope.current === sessionSnapshot()
+    !detailQuery.isError && originScope.current === sessionSnapshot()
       ? retainedRequirement.current?.requirement
       : undefined;
   const selectedOwner = useQuery({
@@ -643,7 +651,6 @@ function ProjectDelivery() {
           current = {
             ...req,
             ...req.flow,
-            criteria: req.acceptance_criteria.join("\n"),
           };
         const items = [
           {
@@ -676,9 +683,11 @@ function ProjectDelivery() {
       },
     });
   };
-  const reqEditor = (r?: DeliveryRequirement) => {
+  const { route: collaborationRoute, change: changeCollaboration } =
+    useCollaborationRoute(collaborationNavigate);
+  const reqEditor = (r?: RequirementHead) => {
     if (r) {
-      setChangeRequirement(structuredClone(r));
+      changeCollaboration({ edit: "1", ...requirementEditSourcePatch() });
       return;
     }
     edit(
@@ -803,11 +812,22 @@ function ProjectDelivery() {
       "toolsHint",
     );
   const planVersion = useRef(0);
-  const planEditor = (r: DeliveryRequirement) => {
-    planVersion.current = detailQuery.data?.version || 0;
-    setPlanRequirement(r);
+  const planEditor = async (r: RequirementHead) => {
+    const ticket = beginProgressExactRead();
+    setActionError("");
+    try {
+      const fresh = await fetchEditableRequirement(projectId, r.id);
+      if (ticket.current()) {
+        planVersion.current = fresh.version;
+        setPlanRequirement(fresh.requirement);
+      }
+    } catch (error) {
+      if (ticket.current()) setActionError((error as Error).message);
+    } finally {
+      ticket.finish();
+    }
   };
-  const evidenceEditor = (r: DeliveryRequirement) =>
+  const evidenceEditor = (r: RequirementHead) =>
     edit(
       "addEvidence",
       [
@@ -843,7 +863,7 @@ function ProjectDelivery() {
       },
       "manual",
     );
-  const reviewEditor = (r: DeliveryRequirement, reopen = false) =>
+  const reviewEditor = (r: RequirementHead, reopen = false) =>
     edit(
       reopen ? "reopen" : "advance",
       [
@@ -862,50 +882,103 @@ function ProjectDelivery() {
       },
     );
 
+  const requirementRecovery =
+    selectedId && collaborationRoute.edit === "1" && projectId && getToken() ? (
+      <DeliveryRequirementChangeHost
+        key={`${projectId}:${sessionId}:${selectedId}`}
+        projectId={projectId}
+        requirementId={selectedId}
+        sessionId={sessionId}
+        onClose={() =>
+          changeCollaboration({ edit: "", ...requirementEditSourcePatch() })
+        }
+        onSaved={saveWorkspace}
+        onUnresolvedChange={(value) =>
+          executionPending(`requirement:${selectedId}`, value)
+        }
+      />
+    ) : null;
+  const independentHistory =
+    selectedId && (detailTab === "history" || collaborationRoute.versionId) ? (
+      <DeliveryRequirementHistory
+        key={`${projectId}:${sessionId}:${selectedId}`}
+        projectId={projectId}
+        sessionId={sessionId}
+        requirementId={selectedId}
+        onNavigate={collaborationNavigate}
+      />
+    ) : null;
+  const historyFallback = independentHistory ? (
+    <Drawer
+      open
+      title={selectedId}
+      onClose={() => navigate(view, "")}
+      className="delivery-inspector"
+    >
+      {independentHistory}
+    </Drawer>
+  ) : null;
   if (!projectId || !getToken())
     return (
       <Empty description={tr("noProject")}>
         <Button href="#/projects">{tr("chooseProject")}</Button>
       </Empty>
     );
-  if (query.isPending) return <Skeleton active paragraph={{ rows: 12 }} />;
+  if (query.isPending)
+    return (
+      <>
+        <Skeleton active paragraph={{ rows: 12 }} />
+        {requirementRecovery}
+        {historyFallback}
+      </>
+    );
   if (!data)
     return (
-      <Alert
-        type="error"
-        showIcon
-        title={query.error?.message || tr("empty")}
-        action={
-          <Button onClick={() => void query.refetch()}>{tr("refresh")}</Button>
-        }
-      />
+      <>
+        <Alert
+          type="error"
+          showIcon
+          title={query.error?.message || tr("empty")}
+          action={
+            <Button onClick={() => void query.refetch()}>
+              {tr("refresh")}
+            </Button>
+          }
+        />
+        {requirementRecovery}
+        {historyFallback}
+      </>
     );
   if (data.query_state.status !== "ready")
     return (
-      <Alert
-        type="warning"
-        showIcon
-        title={t("deliveryQuery.rebuildRequired")}
-        action={
-          data.permissions.query_rebuild ? (
-            <Button
-              onClick={() =>
-                void rebuildDeliveryQuery(projectId)
-                  .then(() => query.refetch())
-                  .catch((failure) => setActionError(failure.message))
-              }
-            >
-              {t("deliveryQuery.rebuild")}
-            </Button>
-          ) : undefined
-        }
-        description={actionError || undefined}
-      />
+      <>
+        <Alert
+          type="warning"
+          showIcon
+          title={t("deliveryQuery.rebuildRequired")}
+          action={
+            data.permissions.query_rebuild ? (
+              <Button
+                onClick={() =>
+                  void rebuildDeliveryQuery(projectId)
+                    .then(() => query.refetch())
+                    .catch((failure) => setActionError(failure.message))
+                }
+              >
+                {t("deliveryQuery.rebuild")}
+              </Button>
+            ) : undefined
+          }
+          description={actionError || undefined}
+        />
+        {requirementRecovery}
+        {historyFallback}
+      </>
     );
   const canWrite = data.permissions.write && !query.isError;
   const canWriteRequirement =
     canWrite && !detailQuery.isPending && !detailQuery.isError;
-  const stageTag = (r: DeliveryRequirement) => (
+  const stageTag = (r: RequirementHead) => (
     <Tag
       color={r.flow.closed ? "green" : r.flow.blocked_reason ? "red" : "cyan"}
     >
@@ -1364,6 +1437,7 @@ function ProjectDelivery() {
             }}
           />
         )}
+        {!selected && independentHistory}
         {selected && (
           <>
             <div className="delivery-inspector-meta">
@@ -1393,9 +1467,12 @@ function ProjectDelivery() {
                   label: tr("details"),
                   children: (
                     <>
-                      <p className="delivery-description">
-                        {selected.description || tr("none")}
-                      </p>
+                      <DeliveryRequirementDefinition
+                        key={`${selected.id}:${detailQuery.data?.query_generation}:${selected.basis}`}
+                        projectId={projectId}
+                        sessionId={sessionId}
+                        head={detailQuery.data!}
+                      />
                       <div className="delivery-facts">
                         <span>
                           {tr("owner")}
@@ -1421,12 +1498,6 @@ function ProjectDelivery() {
                         target={{ kind: "requirement", id: selected.id }}
                         onNavigate={collaborationNavigate}
                       />
-                      <h3>{tr("criteria")}</h3>
-                      <ul className="delivery-criteria">
-                        {selected.acceptance_criteria.map((c, i) => (
-                          <li key={i}>{c}</li>
-                        ))}
-                      </ul>
                       {selected.flow.blocked_reason && (
                         <Alert
                           type="warning"
@@ -1563,56 +1634,13 @@ function ProjectDelivery() {
                       >
                         {tr("addEvidence")}
                       </Button>
-                      {!selected.flow.artifacts.length && (
-                        <Empty
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          description={tr("noEvidence")}
-                        />
-                      )}
-                      {[...selected.flow.artifacts].reverse().map((a) => (
-                        <article className="delivery-evidence" key={a.id}>
-                          <div>
-                            <Tag>{tr(`kinds.${a.kind}`)}</Tag>
-                            <Tag
-                              color={
-                                a.result === "failed"
-                                  ? "red"
-                                  : a.result === "passed"
-                                    ? "green"
-                                    : "default"
-                              }
-                            >
-                              {tr(`statuses.${a.result}`)}
-                            </Tag>
-                            {a.revision !== selected.flow.revision && (
-                              <Tag>{tr("oldRevision")}</Tag>
-                            )}
-                            {a.stale && (
-                              <Tag color="warning">{tr("staleEvidence")}</Tag>
-                            )}
-                          </div>
-                          <h3>{a.title}</h3>
-                          <p className="delivery-description">{a.content}</p>
-                          {safeEvidenceUrl(a.url) && (
-                            <a
-                              href={safeEvidenceUrl(a.url)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {tr("url")} ↗
-                            </a>
-                          )}
-                          <small>
-                            {tr(
-                              a.source === "execution-runtime"
-                                ? "runtimeEvidence"
-                                : "manual",
-                            )}{" "}
-                            · {date(a.at)} ·{" "}
-                            {t("delivery.revision", { number: a.revision })}
-                          </small>
-                        </article>
-                      ))}
+                      <DeliveryRequirementRecords
+                        projectId={projectId}
+                        sessionId={sessionId}
+                        head={detailQuery.data!}
+                        collection="artifacts"
+                        onNavigate={collaborationNavigate}
+                      />
                     </>
                   ),
                 },
@@ -1630,40 +1658,13 @@ function ProjectDelivery() {
                       <Button onClick={() => navigate("releases", "")}>
                         {t("deliveryRelease.releases")}
                       </Button>
-                      {!selected.flow.releases.length && (
-                        <Empty
-                          description={tr("noRelease")}
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        />
-                      )}
-                      {[...selected.flow.releases].reverse().map((r) => (
-                        <article className="delivery-evidence" key={r.id}>
-                          <h3>
-                            {r.version} <Tag>{r.environment}</Tag>
-                          </h3>
-                          <small>
-                            {t("delivery.revision", { number: r.revision })} ·{" "}
-                            {date(r.at)}
-                          </small>
-                          <h4>{tr("verification")}</h4>
-                          <p className="delivery-description">
-                            {r.verification}
-                          </p>
-                          <h4>{tr("rollback")}</h4>
-                          <p className="delivery-description">
-                            {r.rollback_plan}
-                          </p>
-                          {safeEvidenceUrl(r.artifact_url) && (
-                            <a
-                              href={safeEvidenceUrl(r.artifact_url)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {tr("url")} ↗
-                            </a>
-                          )}
-                        </article>
-                      ))}
+                      <DeliveryRequirementRecords
+                        projectId={projectId}
+                        sessionId={sessionId}
+                        head={detailQuery.data!}
+                        collection="releases"
+                        onNavigate={collaborationNavigate}
+                      />
                     </>
                   ),
                 },
@@ -1675,7 +1676,7 @@ function ProjectDelivery() {
                       key={selected.id}
                       projectId={projectId}
                       sessionId={sessionId}
-                      requirement={selected}
+                      requirementId={selected.id}
                       onNavigate={collaborationNavigate}
                     />
                   ),
@@ -1685,21 +1686,13 @@ function ProjectDelivery() {
                   label: tr("activity"),
                   children: (
                     <>
-                      {selected.flow.reviews.map((r, i) => (
-                        <article className="delivery-evidence" key={i}>
-                          <Tag>{tr(`stages.${r.stage}`)}</Tag>
-                          <strong>
-                            {r.decision === "reopen"
-                              ? tr("reopen")
-                              : tr("advance")}
-                          </strong>
-                          <p>{r.comment}</p>
-                          <small>
-                            {date(r.at)} ·{" "}
-                            {t("delivery.revision", { number: r.revision })}
-                          </small>
-                        </article>
-                      ))}
+                      <DeliveryRequirementRecords
+                        projectId={projectId}
+                        sessionId={sessionId}
+                        head={detailQuery.data!}
+                        collection="reviews"
+                        onNavigate={collaborationNavigate}
+                      />
                       <DeliveryActivityFeed
                         key={selected.id}
                         projectId={projectId}
@@ -1720,23 +1713,7 @@ function ProjectDelivery() {
         sessionId={sessionId}
         onNavigate={collaborationNavigate}
       />
-      {changeRequirement && (
-        <DeliveryRequirementChangeEditor
-          key={changeRequirement.id}
-          workspace={data}
-          requirement={changeRequirement}
-          requirementVersion={detailQuery.data?.version}
-          sessionId={sessionId}
-          onClose={() => setChangeRequirement(null)}
-          onSaved={(updated) => {
-            if (originScope.current === sessionSnapshot())
-              saveWorkspace(updated);
-          }}
-          onUnresolvedChange={(value) =>
-            executionPending(`requirement:${changeRequirement.id}`, value)
-          }
-        />
-      )}
+      {requirementRecovery}
       {editor && (
         <DeliveryEditor spec={editor} onClose={() => setEditor(null)} />
       )}

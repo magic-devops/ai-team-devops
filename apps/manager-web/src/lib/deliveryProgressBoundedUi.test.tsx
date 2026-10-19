@@ -5,7 +5,7 @@ import { DeliveryProgress } from "../../subapps/ai-rd-center/src/pages/delivery/
 import { DeliveryProgressSnapshotBrowser } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProgressBrowser";
 import { DeliveryProgressCommands } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProgressCommands";
 import { DeliveryRequirementHistory } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryRequirementHistory";
-import { RequirementImpactFacts } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryRequirementChangeEditor";
+import { DeliveryRequirementImpact } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryRequirementReads";
 
 const h = vi.hoisted(() => ({
   state: [] as any[],
@@ -225,19 +225,12 @@ describe("bounded progress route and denied original cache", () => {
     it(`clears cached exact requirement history and current-impact metadata after HTTP ${status}`, () => {
       location.hash =
         "#/dev-flow?view=list&project_id=P&requirement=R&requirement_version=V";
-      h.status = status;
+      h.status = 0;
       h.data["delivery-requirement-history"] = {
         project_id: "P",
         requirement_id: "R",
-        current_basis: "basis",
-        current_links: {
-          requirement_basis: "basis",
-          task_ids: ["PRIVATE-TASK"],
-          dependent_task_ids: [],
-          execution_ids: [],
-          release_candidate_ids: [],
-          deployment_ids: [],
-        },
+        as_of: "now",
+        limit: 20,
         items: [],
         next_cursor: null,
       };
@@ -259,15 +252,26 @@ describe("bounded progress route and denied original cache", () => {
           },
         },
       };
-      const tree = DeliveryRequirementHistory({
-        projectId: "P",
-        sessionId: "S",
-        requirement,
-        onNavigate: vi.fn(),
-      });
+      const renderHistory = () => {
+        h.next = 0;
+        h.refNext = 0;
+        return DeliveryRequirementHistory({
+          projectId: "P",
+          sessionId: "S",
+          requirementId: requirement.id,
+          onNavigate: vi.fn(),
+        });
+      };
+      const initial = renderHistory();
+      expect(
+        find(initial, "section", (props) => props["data-version-id"] === "V"),
+      ).toBeDefined();
+      expect(find(initial, DeliveryRequirementImpact).unavailable).toBe(false);
+      h.status = status;
+      const tree = renderHistory();
       expect(
         find(tree, "section", (props) => props["data-version-id"] === "V"),
       ).toBeUndefined();
-      expect(find(tree, RequirementImpactFacts)).toBeUndefined();
+      expect(find(tree, DeliveryRequirementImpact).unavailable).toBe(true);
     });
 });

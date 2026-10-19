@@ -1,3 +1,7 @@
+import type {
+  RequirementEditable,
+  RequirementEditableResponse,
+} from "@/lib/deliveryRequirementReads";
 import {
   discussionFailure,
   type DiscussionAdoption,
@@ -7,8 +11,7 @@ import {
   useDiscussionAdoptionSource,
 } from "./DeliveryDiscussionAdoptionSource";
 import {
-  fetchRequirementDetail,
-  type RequirementDetail,
+  fetchEditableRequirement,
   type DeliveryCommandAck,
 } from "@/lib/deliveryQuery";
 import { DeliveryReferenceSelect } from "@/components/DeliveryReferenceSelect";
@@ -32,7 +35,6 @@ import {
   prepareDeliveryIntent,
   saveDelivery,
   type DeliveryIntent,
-  type DeliveryRequirement,
   type DeliveryContext,
 } from "@/lib/delivery";
 import {
@@ -52,7 +54,7 @@ type Baseline = {
   version: number;
   revision: number;
   basis?: string;
-  requirement: DeliveryRequirement;
+  requirement: RequirementEditable;
   workspace: DeliveryContext;
 };
 type Draft = {
@@ -72,7 +74,7 @@ export function DeliveryTaskPlanEditor({
   onUnresolvedChange,
 }: {
   data: DeliveryContext;
-  requirement: DeliveryRequirement;
+  requirement: RequirementEditable;
   requirementVersion?: number;
   onClose: () => void;
   onSaved: (updated: DeliveryCommandAck) => void;
@@ -136,7 +138,9 @@ export function DeliveryTaskPlanEditor({
   const [notice, setNotice] = useState("");
   const [conflict, setConflict] = useState(false);
   const [generationFailed, setGenerationFailed] = useState(false);
-  const [latest, setLatest] = useState<RequirementDetail | null>(null);
+  const [latest, setLatest] = useState<RequirementEditableResponse | null>(
+    null,
+  );
   const previewRequest = useRef<PlanPreviewRequest>();
   const submitIntent = useRef<DeliveryIntent>({
     version: requirementVersion ?? data.version,
@@ -289,7 +293,7 @@ export function DeliveryTaskPlanEditor({
     });
   const loadLatest = () =>
     void guarded(async () => {
-      setLatest(await fetchRequirementDetail(projectId, requirement.id));
+      setLatest(await fetchEditableRequirement(projectId, requirement.id));
     });
   const adopt = () => {
     const req = latest?.requirement;
@@ -314,7 +318,11 @@ export function DeliveryTaskPlanEditor({
       version: latest.version,
       revision: req.flow.revision,
       requirement: req,
-      workspace: baseline.workspace,
+      workspace: {
+        ...baseline.workspace,
+        version: latest.version,
+        query_generation: latest.query_generation,
+      },
       basis: req.basis,
     });
     if (changed) {

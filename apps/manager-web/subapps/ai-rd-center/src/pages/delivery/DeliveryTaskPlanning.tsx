@@ -1,10 +1,14 @@
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { projectSessionKey } from "@/lib/projectPortfolio";
+import {
+  fetchRequirementDefinition,
+  requirementReadMatches,
+  type RequirementHead,
+} from "@/lib/deliveryRequirementReads";
 import { Alert, Button, Tag } from "antd";
 import { useTranslation } from "react-i18next";
-import type {
-  DeliveryRequirement,
-  DeliveryTask,
-  DeliveryTaskData,
-} from "@/lib/delivery";
+import type { DeliveryTask, DeliveryTaskData } from "@/lib/delivery";
 
 export function DeliveryTaskPlanning({
   task,
@@ -15,7 +19,7 @@ export function DeliveryTaskPlanning({
   canEdit,
 }: {
   task: DeliveryTask;
-  requirement?: DeliveryRequirement;
+  requirement?: RequirementHead;
   data: DeliveryTaskData;
   onTask: (task: Pick<DeliveryTask, "id" | "req_id">) => void;
   onEdit: () => void;
@@ -24,6 +28,45 @@ export function DeliveryTaskPlanning({
   const { t } = useTranslation();
   const tr = (key: string) => t(`delivery.taskPlan.${key}`);
   const plan = task.planning;
+  const [expanded, setExpanded] = useState(false);
+  const definition = useQuery({
+    queryKey: [
+      "delivery-task-parent-definition",
+      data.project.id,
+      projectSessionKey(),
+      requirement?.id,
+      requirement?.basis,
+      data.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchRequirementDefinition(
+        data.project.id,
+        requirement!.id,
+        data.query_generation,
+        signal,
+      ),
+    enabled:
+      expanded &&
+      !!requirement &&
+      !plan?.requirement_snapshot &&
+      plan?.requirement_revision === requirement.flow.revision,
+    retry: false,
+    gcTime: 0,
+  });
+  const criteria =
+    requirement &&
+    !definition.isError &&
+    requirementReadMatches(
+      definition.data,
+      data.project.id,
+      requirement.id,
+      data.query_generation,
+      requirement.basis,
+    ) &&
+    definition.data?.definition.id === requirement.id &&
+    definition.data.version === data.version
+      ? definition.data.definition.acceptance_criteria
+      : undefined;
   return (
     <section className="delivery-task-planning">
       <div className="delivery-task-plan-heading">
@@ -76,7 +119,9 @@ export function DeliveryTaskPlanning({
             </div>
           )}
           {plan.source && (
-            <details>
+            <details
+              onToggle={(event) => setExpanded(event.currentTarget.open)}
+            >
               <summary>
                 {tr("planOrigin")} ·{" "}
                 {tr(plan.source === "manual" ? "manualSource" : plan.source)}
@@ -98,9 +143,10 @@ export function DeliveryTaskPlanning({
                   {(plan.requirement_criteria_indices || []).map((index) => (
                     <li key={index}>
                       {plan.requirement_snapshot?.acceptance_criteria[index] ||
-                        (plan.requirement_revision === requirement.flow.revision
-                          ? requirement.acceptance_criteria[index]
-                          : `${index + 1} · ${t("delivery.oldRevision")}`)}
+                        (plan.requirement_revision ===
+                          requirement.flow.revision && criteria
+                          ? criteria[index]
+                          : `${index + 1} · ${t("deliveryCollaboration.definitionUnavailable")}`)}
                     </li>
                   ))}
                 </ul>

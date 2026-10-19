@@ -1,4 +1,23 @@
 import { request } from "./http";
+export {
+  fetchRequirementDefinition,
+  fetchRequirementRecords,
+  fetchRequirementRecord,
+  fetchRequirementImpact,
+  fetchRequirementImpactPage,
+  fetchRequirementImpactItem,
+} from "./deliveryRequirementReads";
+import type {
+  RequirementHead,
+  RequirementHeadResponse,
+} from "./deliveryRequirementReads";
+import {
+  fetchRequirementDefinition,
+  combineRequirementDefinition,
+  validRequirementResourceId,
+  type RequirementDefinitionResponse,
+  type RequirementEditableResponse,
+} from "./deliveryRequirementReads";
 import type { QueryClient } from "@tanstack/react-query";
 import type {
   DeliveryExecution,
@@ -117,12 +136,7 @@ export type DeliveryDisplayContext = DeliveryContext & {
     activeResources: number;
   };
 };
-export type RequirementDetail = {
-  project_id: string;
-  version: number;
-  query_generation: number;
-  requirement: DeliveryRequirement;
-};
+export type RequirementDetail = RequirementHeadResponse;
 export type TaskDetail = {
   project_id: string;
   version: number;
@@ -138,7 +152,8 @@ export type DeliveryTaskData = {
   query_generation: number;
   planning_basis: string;
   task: DeliveryTask;
-  requirement: DeliveryRequirement | null;
+  requirement: RequirementHead | null;
+  requirement_definition?: RequirementDefinitionResponse;
   members: DeliveryMember[];
   dependencies: TaskSummary[];
 };
@@ -275,8 +290,9 @@ export function fetchRequirementDetail(
   signal?: AbortSignal,
   queryGeneration?: number | null,
 ) {
+  if (!validRequirementResourceId(id)) throw new Error("requirementIdInvalid");
   return request<RequirementDetail>(
-    `/api/v1/delivery/requirements/${encodeURIComponent(id)}`,
+    `/api/v1/delivery/requirements/${encodeURIComponent(id)}${queryGeneration ? `?query_generation=${queryGeneration}` : ""}`,
     { headers: scoped(projectId), signal },
   ).then((value) => {
     if (queryGeneration !== undefined)
@@ -296,6 +312,23 @@ export function fetchTaskDetail(
     `/api/v1/delivery/tasks/${encodeURIComponent(id)}`,
     { headers: scoped(projectId), signal },
   );
+}
+export async function fetchEditableRequirement(
+  projectId: string,
+  id: string,
+  signal?: AbortSignal,
+): Promise<RequirementEditableResponse> {
+  const head = await fetchRequirementDetail(projectId, id, signal);
+  const definition = await fetchRequirementDefinition(
+    projectId,
+    id,
+    head.query_generation,
+    signal,
+  );
+  return {
+    ...head,
+    requirement: combineRequirementDefinition(head, definition),
+  };
 }
 export function fetchExecutionDetail(
   projectId: string,
@@ -455,6 +488,42 @@ export async function fetchDeliveryTaskData(
     members: members.items.map((item) => item.data),
     dependencies: dependencies.items.map((item) => item.data),
   };
+}
+export async function fetchDeliveryTaskEditData(
+  projectId: string,
+  taskId: string,
+  signal?: AbortSignal,
+  queryGeneration?: number | null,
+): Promise<DeliveryTaskData> {
+  const data = await fetchDeliveryTaskData(
+    projectId,
+    taskId,
+    signal,
+    queryGeneration,
+  );
+  if (!data.requirement) {
+    if (data.task.req_id)
+      throw new Error("HTTP 404: current_requirement_unavailable");
+    return data;
+  }
+  const definition = await fetchRequirementDefinition(
+    projectId,
+    data.requirement.id,
+    data.query_generation,
+    signal,
+  );
+  combineRequirementDefinition(
+    {
+      project_id: projectId,
+      requirement_id: data.requirement.id,
+      version: data.version,
+      query_generation: data.query_generation,
+      as_of: definition.as_of,
+      requirement: data.requirement,
+    },
+    definition,
+  );
+  return { ...data, requirement_definition: definition };
 }
 export function assertDeliveryGeneration(
   first: { project_id: string; query_generation: number | null },

@@ -300,18 +300,6 @@ def _exact(db, project, kind, entity_id):
     return stamp, row, data
 
 
-def requirement_detail(db, project, entity_id):
-    stamp, row, derived = _exact(db, project, "requirement", entity_id)
-    flow = workspace_path(db, project, "flows", entity_id) or default_flow()
-    value = {
-        **serialize(row),
-        **{key: item for key, item in derived.items() if key not in {"gates", "flow"}},
-        "flow": {**flow, **derived["flow"], "gates": derived["gates"]},
-    }
-    _unchanged(db, project, stamp)
-    return {**metadata(db, project, stamp), "requirement": value}
-
-
 def task_detail(db, project, entity_id):
     stamp, row, derived = _exact(db, project, "task", entity_id)
     planning = workspace_path(db, project, "task_details", entity_id) or {}

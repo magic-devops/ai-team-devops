@@ -1,5 +1,5 @@
 import {
-  fetchDeliveryTaskData,
+  fetchDeliveryTaskEditData,
   type DeliveryCommandAck,
 } from "@/lib/deliveryQuery";
 import {
@@ -162,7 +162,7 @@ export function ExecutionPlanEditor({
     setError("");
     try {
       const [latestWorkspace, latestTargets] = await Promise.all([
-        fetchDeliveryTaskData(draft.projectId, draft.taskId),
+        fetchDeliveryTaskEditData(draft.projectId, draft.taskId),
         fetchDeliveryTargets(draft.projectId),
       ]);
       const latestBindings = draft.executorMemberId
@@ -604,7 +604,7 @@ export function ExecutionPlanEditor({
                       {latestRequirement.flow.revision}
                     </p>
                     <ul>
-                      {latestRequirement.acceptance_criteria.map(
+                      {candidate?.workspace.requirement_definition?.definition.acceptance_criteria.map(
                         (criterion, index) => (
                           <li key={index}>{criterion}</li>
                         ),

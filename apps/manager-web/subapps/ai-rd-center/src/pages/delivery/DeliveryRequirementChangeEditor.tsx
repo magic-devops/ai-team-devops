@@ -1,3 +1,6 @@
+import { requirementReasonText } from "@/lib/deliveryRequirementPresentation";
+import { projectSessionKey } from "@/lib/projectPortfolio";
+import { beginProgressExactRead } from "@/lib/deliveryProgress";
 import type { DiscussionAdoption } from "@/lib/deliveryDiscussions";
 import {
   DiscussionAdoptionSource,
@@ -6,32 +9,31 @@ import {
 } from "./DeliveryDiscussionAdoptionSource";
 import { DeliveryReferenceSelect } from "@/components/DeliveryReferenceSelect";
 import {
-  fetchRequirementDetail,
+  fetchEditableRequirement,
   fetchDeliveryContext,
-  type RequirementDetail,
 } from "@/lib/deliveryQuery";
 import type { DeliveryCommandAck } from "@/lib/deliveryQuery";
 import { useRef, useState } from "react";
 import { Alert, Button, Input, Modal, Select, Tag } from "antd";
 import { useTranslation } from "react-i18next";
 import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
-import {
-  type DeliveryRequirement,
-  type DeliveryContext,
-  type DeliveryIntent,
-} from "@/lib/delivery";
+import { type DeliveryContext, type DeliveryIntent } from "@/lib/delivery";
 import {
   collaborationFailure,
-  collaborationSessionKey,
   previewRequirementChange,
-  prepareRequirementChange,
   requirementDefinitionChanges,
-  saveRequirementChange,
-  collaborationSourceHref,
   type RequirementChangePreview,
   type RequirementDefinition,
-  type RequirementCurrentLinks,
 } from "@/lib/deliveryCollaboration";
+import {
+  prepareRequirementOriginal,
+  useRequirementCommand,
+} from "@/lib/deliveryRequirementCommand";
+import type {
+  RequirementEditable,
+  RequirementEditableResponse,
+  RequirementImpactCounts,
+} from "@/lib/deliveryRequirementReads";
 import { ActivityFieldChanges } from "./DeliveryActivityFeed";
 import "./delivery-collaboration.css";
 
@@ -45,7 +47,7 @@ type Draft = {
   milestone_id: string;
   blocked_reason: string;
 };
-function draftOf(requirement: DeliveryRequirement): Draft {
+function draftOf(requirement: RequirementEditable): Draft {
   return {
     title: requirement.title,
     description: requirement.description,
@@ -67,89 +69,62 @@ const definitionOf = (draft: Draft): RequirementDefinition => ({
 });
 export function RequirementImpactFacts({
   preview,
-  links,
-  projectId,
-  background,
-  onNavigate,
+  counts,
 }: {
   preview?: RequirementChangePreview;
-  links?: RequirementCurrentLinks;
-  projectId: string;
-  background?: string;
-  onNavigate?: (href: string) => void;
+  counts?: RequirementImpactCounts | null;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryCollaboration.${key}`);
-  const scope = preview?.impact || links;
-  if (!scope) return null;
-  const groups = [
-    ["tasks", "task", scope.task_ids],
-    ["dependentTasks", "task", scope.dependent_task_ids],
-    ["executions", "execution", scope.execution_ids],
-    ["candidates", "release_candidate", scope.release_candidate_ids],
-    ["deployments", "deployment", scope.deployment_ids],
-  ] as const;
+  const value = preview?.impact.counts || counts;
   return (
     <section className="delivery-collaboration-impact">
       <h3>{tr("impact")}</h3>
       <p className="delivery-collaboration-help">{tr("impactHint")}</p>
       {preview?.impact.invalidates_current_acceptance && (
-        <Alert type="warning" showIcon title={tr("acceptanceInvalidates")} />
+        <Alert type="warning" title={tr("acceptanceInvalidates")} />
       )}
-      <dl>
-        {groups.map(([label, kind, ids]) => (
-          <div key={label}>
-            <dt>
-              {tr(label)} <Tag>{ids.length}</Tag>
-            </dt>
-            <dd>
-              {ids.length ? (
-                ids.map((id) => {
-                  const href =
-                    onNavigate && background
-                      ? collaborationSourceHref(
-                          {
-                            kind,
-                            id,
-                            available: true,
-                            label: null,
-                            reason: null,
-                          },
-                          projectId,
-                          background,
-                        )
-                      : null;
-                  return href ? (
-                    <Button
-                      key={id}
-                      size="small"
-                      type="link"
-                      onClick={() => onNavigate?.(href)}
-                    >
-                      {id}
-                    </Button>
-                  ) : (
-                    <code key={id}>{id}</code>
-                  );
-                })
-              ) : (
-                <span>{tr("none")}</span>
-              )}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {((scope.restricted_execution_count || 0) > 0 ||
-        (scope.restricted_deployment_count || 0) > 0) && (
-        <Alert type="info" title={tr("restrictedLinks")} />
+      {value ? (
+        <dl>
+          {(
+            [
+              ["tasks", "direct_task"],
+              ["dependentTasks", "dependent_task"],
+              ["executions", "execution"],
+              ["candidates", "release_candidate"],
+              ["deployments", "deployment"],
+            ] as const
+          ).map(([label, key]) => (
+            <div key={key}>
+              <dt>{tr(label)}</dt>
+              <dd>
+                <Tag>{value[key]}</Tag>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <Alert type="info" title={tr("impactUnavailable")} />
       )}
+      {!!value &&
+        (value.restricted_execution > 0 || value.restricted_deployment > 0) && (
+          <Alert
+            type="info"
+            title={tr("restrictedLinks")}
+            description={`${tr("executions")}: ${value.restricted_execution} · ${tr("deployments")}: ${value.restricted_deployment}`}
+          />
+        )}
       {preview?.reasons.map((reason) => (
-        <Alert key={reason.code} type="warning" title={reason.message} />
+        <Alert
+          key={reason.code}
+          type="warning"
+          title={requirementReasonText(t, reason.code)}
+        />
       ))}
     </section>
   );
 }
-export function DeliveryRequirementChangeEditor({
+export function RequirementChangeForm({
   workspace,
   requirement,
   requirementVersion,
@@ -158,23 +133,26 @@ export function DeliveryRequirementChangeEditor({
   onClose,
   onUnresolvedChange = () => {},
   initialSource,
+  command,
 }: {
   workspace: DeliveryContext;
-  requirement: DeliveryRequirement;
+  requirement: RequirementEditable;
   requirementVersion?: number;
   sessionId: string;
   onSaved: (workspace: DeliveryCommandAck) => void;
   onClose: () => void;
   onUnresolvedChange?: (value: boolean) => void;
   initialSource?: DiscussionAdoption;
+  command: ReturnType<typeof useRequirementCommand>;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryCollaboration.${key}`);
-  const origin = useRef(collaborationSessionKey());
+  const origin = useRef(projectSessionKey());
   const source = useDiscussionAdoptionSource(initialSource);
   const [pinned, setPinned] = useState(() => ({
     requirement: structuredClone(requirement),
     version: requirementVersion ?? workspace.version,
+    generation: workspace.query_generation,
     writable: workspace.permissions.write,
   }));
   const [draft, setDraft] = useState<Draft>(() => {
@@ -201,20 +179,20 @@ export function DeliveryRequirementChangeEditor({
   const [preview, setPreview] = useState<RequirementChangePreview | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [conflict, setConflict] = useState(false),
-    [unknown, setUnknown] = useState(false);
+    [conflict, setConflict] = useState(false);
+  const unknown = command.state.phase === "unknown";
   const [latest, setLatest] = useState<
-    (RequirementDetail & { permissions: DeliveryContext["permissions"] }) | null
+    | (RequirementEditableResponse & {
+        permissions: DeliveryContext["permissions"];
+      })
+    | null
   >(null);
   const intent = useRef<DeliveryIntent>({
     version: requirementVersion ?? workspace.version,
     key: crypto.randomUUID(),
   });
-  const pending = useRef<ReturnType<typeof prepareRequirementChange> | null>(
-    null,
-  );
   const current = () => {
-    if (origin.current !== collaborationSessionKey())
+    if (origin.current !== projectSessionKey())
       throw new Error(tr("scopeChanged"));
   };
   const changes = requirementDefinitionChanges(
@@ -222,8 +200,18 @@ export function DeliveryRequirementChangeEditor({
     definitionOf(draft),
   );
   const definitionChanged = Object.keys(changes).length > 0;
-  const locked = busy || unknown || !pinned.writable;
+  const locked = busy || command.state.phase !== "idle" || !pinned.writable;
+  const synchronousBusy = useRef(false);
+  const draftRevision = useRef(0),
+    renderedRevision = draftRevision.current;
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => {
+    if (
+      synchronousBusy.current ||
+      (command.snapshot().phase !== "idle" &&
+        command.snapshot().phase !== "refused")
+    )
+      return;
+    draftRevision.current++;
     dirty.current.add(key);
     setDraft((valueBefore) => ({ ...valueBefore, [key]: value }));
     setPreview(null);
@@ -252,18 +240,54 @@ export function DeliveryRequirementChangeEditor({
       ),
     };
   };
+  const invalidDraft =
+    Array.from(draft.title.trim()).length > 256 ||
+    !draft.title.trim() ||
+    Array.from(draft.description).length > 20000 ||
+    Array.from(draft.blocked_reason).length > 2000 ||
+    definitionOf(draft).acceptance_criteria.length > 80 ||
+    definitionOf(draft).acceptance_criteria.some(
+      (value) => Array.from(value).length > 2000,
+    ) ||
+    (!!draft.due_on &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(draft.due_on) ||
+        !Number.isFinite(Date.parse(draft.due_on + "T00:00:00Z")) ||
+        new Date(draft.due_on + "T00:00:00Z").toISOString().slice(0, 10) !==
+          draft.due_on));
   const hasChanges = Object.keys(payload()).length > 1;
   const showError = (failure: unknown) => {
     const problem = collaborationFailure(failure);
-    setError(problem.conflict ? tr("conflict") : problem.message);
+    setError(
+      problem.conflict
+        ? tr("conflict")
+        : [
+              "requirementProofRequired",
+              "requirementInputInvalid",
+              "retainedOriginalInvalid",
+              "retainedOriginalUnavailable",
+            ].includes(problem.message)
+          ? tr(problem.message)
+          : problem.message === "ackMismatch"
+            ? tr("unknownWrite")
+            : tr("readFailed"),
+    );
     setConflict(problem.conflict);
     return problem;
   };
   const generatePreview = async () => {
-    if (locked || conflict || !definitionChanged || !draft.title.trim()) return;
+    if (
+      synchronousBusy.current ||
+      locked ||
+      conflict ||
+      !definitionChanged ||
+      invalidDraft
+    )
+      return;
+    synchronousBusy.current = true;
     setBusy(true);
     setError("");
     setPreview(null);
+    const ticket = beginProgressExactRead();
     try {
       current();
       const result = await previewRequirementChange(
@@ -273,10 +297,12 @@ export function DeliveryRequirementChangeEditor({
         changes,
       );
       current();
+      if (!ticket.current()) return;
       if (
         result.project_id !== workspace.project.id ||
         result.requirement_id !== requirement.id ||
         result.requirement_basis !== pinned.requirement.basis ||
+        result.query_generation !== pinned.generation ||
         result.version !== pinned.version
       )
         throw new Error("HTTP 409: preview basis changed");
@@ -284,71 +310,82 @@ export function DeliveryRequirementChangeEditor({
     } catch (failure) {
       showError(failure);
     } finally {
+      ticket.finish();
+      synchronousBusy.current = false;
       setBusy(false);
     }
   };
   const confirm = async (retry = false) => {
     if (
+      synchronousBusy.current ||
       busy ||
+      renderedRevision !== draftRevision.current ||
       (!retry &&
-        (unknown ||
+        (command.snapshot().phase !== "idle" ||
           conflict ||
           !hasChanges ||
+          invalidDraft ||
           !pinned.writable ||
-          (definitionChanged && !preview?.allowed)))
+          (definitionChanged &&
+            (!preview?.allowed || !preview.available || !preview.complete))))
     )
       return;
+    synchronousBusy.current = true;
     setBusy(true);
     setError("");
     try {
       current();
-      const command = retry
-        ? pending.current
-        : prepareRequirementChange(
-            intent.current,
-            pinned.requirement.basis,
-            payload(),
-            definitionChanged,
-            preview?.preview_basis || null,
-            source.current.current?.reference,
+      const result = retry
+        ? await command.replay()
+        : await command.run(
+            prepareRequirementOriginal(
+              intent.current,
+              requirement.id,
+              pinned.requirement.basis,
+              Object.fromEntries(
+                Object.entries(payload()).filter(([key]) => key !== "id"),
+              ),
+              definitionChanged,
+              preview,
+              workspace.project.id,
+              source.current.current?.reference,
+            ),
           );
-      if (!command) throw new Error(tr("previewRequired"));
-      pending.current = command;
-      intent.current = command.intent;
-      onUnresolvedChange(true);
-      const result = await saveRequirementChange(
-        workspace.project.id,
-        command.intent,
-        command.payload,
-        command.source_reference,
-      );
       current();
-      if (result.project_id !== workspace.project.id)
-        throw new Error(tr("scopeChanged"));
-      setUnknown(false);
-      onUnresolvedChange(false);
-      onSaved(result);
-      onClose();
+      const state = command.snapshot();
+      if (result) {
+        command.reset();
+        onUnresolvedChange(false);
+        onSaved(result);
+        onClose();
+      } else if (state.error) showError(new Error(state.error));
     } catch (failure) {
-      const problem = showError(failure);
-      setUnknown(problem.unknown);
-      if (!problem.unknown) onUnresolvedChange(false);
+      showError(failure);
     } finally {
+      synchronousBusy.current = false;
       setBusy(false);
     }
   };
   const readLatest = async () => {
-    if (busy || unknown) return;
+    if (synchronousBusy.current || busy || unknown) return;
+    synchronousBusy.current = true;
+    const ticket = beginProgressExactRead();
     setBusy(true);
     setLatest(null);
     try {
       current();
       const [detail, context] = await Promise.all([
-        fetchRequirementDetail(workspace.project.id, requirement.id),
+        fetchEditableRequirement(workspace.project.id, requirement.id),
         fetchDeliveryContext(workspace.project.id),
       ]);
       const result = { ...detail, permissions: context.permissions };
       current();
+      if (!ticket.current()) return;
+      if (
+        context.project_id !== workspace.project.id ||
+        context.query_generation !== detail.query_generation
+      )
+        throw new Error(tr("scopeUnavailable"));
       if (
         result.project_id !== workspace.project.id ||
         result.requirement.id !== requirement.id
@@ -356,8 +393,10 @@ export function DeliveryRequirementChangeEditor({
         throw new Error(tr("requirementUnavailable"));
       setLatest(result);
     } catch (failure) {
-      setError((failure as Error).message);
+      setError(tr("readFailed"));
     } finally {
+      ticket.finish();
+      synchronousBusy.current = false;
       setBusy(false);
     }
   };
@@ -367,10 +406,12 @@ export function DeliveryRequirementChangeEditor({
     const row = latest.requirement;
     if (!row) return;
     const next = draftOf(row);
+    draftRevision.current++;
     for (const key of dirty.current) next[key] = draft[key];
     setPinned({
       requirement: structuredClone(row),
       version: latest.version,
+      generation: latest.query_generation,
       writable: latest.permissions.write,
     });
     setDraft(next);
@@ -379,10 +420,10 @@ export function DeliveryRequirementChangeEditor({
     setLatest(null);
     setError("");
     intent.current = { version: latest.version, key: crypto.randomUUID() };
-    pending.current = null;
+    command.reset();
   };
   const cancel = () => {
-    if (!busy && !unknown) onClose();
+    if (!synchronousBusy.current && !command.unresolved) onClose();
   };
   return (
     <Modal
@@ -413,7 +454,7 @@ export function DeliveryRequirementChangeEditor({
               type="primary"
               data-action="preview-change"
               loading={busy}
-              disabled={locked || conflict || !draft.title.trim()}
+              disabled={locked || conflict || invalidDraft}
               onClick={generatePreview}
             >
               {tr("preview")}
@@ -427,7 +468,11 @@ export function DeliveryRequirementChangeEditor({
                 locked ||
                 conflict ||
                 !hasChanges ||
-                (definitionChanged && !preview?.allowed)
+                invalidDraft ||
+                (definitionChanged &&
+                  (!preview?.allowed ||
+                    !preview.complete ||
+                    !preview.available))
               }
               onClick={() => confirm()}
             >
@@ -447,6 +492,9 @@ export function DeliveryRequirementChangeEditor({
         {t("delivery.revision", { number: pinned.requirement.flow.revision })} ·
         v{pinned.version}
       </p>
+      {invalidDraft && (
+        <Alert type="warning" title={tr("requirementInputInvalid")} />
+      )}
       {error && <Alert type="error" showIcon role="alert" title={error} />}
       {unknown && (
         <Alert
@@ -456,7 +504,7 @@ export function DeliveryRequirementChangeEditor({
           description={tr("unknownWriteHint")}
         />
       )}
-      {conflict && (
+      {(conflict || command.state.phase === "refused") && (
         <section className="delivery-collaboration-conflict">
           <p>{tr("draftRetained")}</p>
           <Button data-action="read-latest" loading={busy} onClick={readLatest}>
@@ -500,7 +548,6 @@ export function DeliveryRequirementChangeEditor({
           <Input
             aria-label={t("delivery.titleField")}
             value={draft.title}
-            maxLength={256}
             disabled={locked}
             onChange={(event) => update("title", event.target.value)}
           />
@@ -510,7 +557,6 @@ export function DeliveryRequirementChangeEditor({
           <Input.TextArea
             aria-label={t("delivery.description")}
             value={draft.description}
-            maxLength={20000}
             autoSize={{ minRows: 3, maxRows: 8 }}
             disabled={locked}
             onChange={(event) => update("description", event.target.value)}
@@ -521,7 +567,6 @@ export function DeliveryRequirementChangeEditor({
           <Input.TextArea
             aria-label={t("delivery.criteria")}
             value={draft.criteria}
-            maxLength={20000}
             autoSize={{ minRows: 3, maxRows: 8 }}
             disabled={locked}
             onChange={(event) => update("criteria", event.target.value)}
@@ -545,7 +590,7 @@ export function DeliveryRequirementChangeEditor({
           <label>
             {t("delivery.owner")}
             <ProjectOwnerSelect
-              queryGeneration={workspace.query_generation}
+              queryGeneration={pinned.generation}
               label={t("delivery.owner")}
               value={draft.owner_id}
               disabled={locked}
@@ -568,7 +613,7 @@ export function DeliveryRequirementChangeEditor({
             {t("delivery.milestone")}
             <DeliveryReferenceSelect
               kind="milestone"
-              queryGeneration={workspace.query_generation}
+              queryGeneration={pinned.generation}
               label={t("delivery.milestone")}
               value={draft.milestone_id}
               options={[{ value: "", label: tr("none") }]}
@@ -582,7 +627,6 @@ export function DeliveryRequirementChangeEditor({
           <Input.TextArea
             aria-label={t("delivery.blockedReason")}
             value={draft.blocked_reason}
-            maxLength={2000}
             autoSize={{ minRows: 2, maxRows: 4 }}
             disabled={locked}
             onChange={(event) => update("blocked_reason", event.target.value)}
@@ -595,11 +639,15 @@ export function DeliveryRequirementChangeEditor({
           data-session={sessionId}
         >
           <h3>{tr("definitionChanges")}</h3>
+          <Button
+            data-action="refresh-preview"
+            disabled={locked || conflict}
+            onClick={generatePreview}
+          >
+            {tr("preview")}
+          </Button>
           <ActivityFieldChanges changes={preview.changes} />
-          <RequirementImpactFacts
-            preview={preview}
-            projectId={workspace.project.id}
-          />
+          <RequirementImpactFacts preview={preview} />
           <p className="delivery-collaboration-help">{tr("confirmHint")}</p>
         </section>
       )}

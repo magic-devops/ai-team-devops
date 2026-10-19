@@ -81,26 +81,23 @@ class RequirementVersion(CollaborationContract):
     flow_revision: int | None
 
 
-class RequirementHistory(CollaborationContract):
-    project_id: str
-    requirement_id: str
-    current_basis: str | None
-    items: list[RequirementVersion]
-    next_cursor: str | None
-    earlier_history_unknown: bool = True
-    current_links: "RequirementLinks | None" = None
-
-
 class RequirementVersionDetail(CollaborationContract):
     project_id: str
     requirement_id: str
     item: RequirementVersion
 
 
+def _omitted_change_default(schema):
+    # Internal None represents omission; explicit JSON null is rejected below.
+    schema.pop("default", None)
+
+
 class DefinitionChanges(CollaborationContract):
-    title: str | None = Field(default=None, min_length=1, max_length=256)
-    description: str | None = Field(default=None, max_length=20000)
-    acceptance_criteria: list[str] | None = Field(default=None, max_length=80)
+    title: str = Field(default=None, min_length=1, max_length=256, json_schema_extra=_omitted_change_default)
+    description: str = Field(default=None, max_length=20000, json_schema_extra=_omitted_change_default)
+    acceptance_criteria: list[str] = Field(
+        default=None, max_length=80, json_schema_extra=_omitted_change_default
+    )
 
     @model_validator(mode="after")
     def canonical_definition_fields(self):
@@ -124,42 +121,3 @@ class DefinitionChanges(CollaborationContract):
 class RequirementChangePreviewInput(CollaborationContract):
     requirement_basis: str = Field(pattern=r"^[0-9a-f]{64}$")
     changes: DefinitionChanges
-
-
-class ChangeImpact(CollaborationContract):
-    task_ids: list[str]
-    dependent_task_ids: list[str]
-    execution_ids: list[str]
-    release_candidate_ids: list[str]
-    deployment_ids: list[str]
-    invalidates_current_acceptance: bool
-    restricted_execution_count: int = 0
-    restricted_deployment_count: int = 0
-
-
-class RequirementLinks(CollaborationContract):
-    requirement_basis: str
-    task_ids: list[str]
-    dependent_task_ids: list[str]
-    execution_ids: list[str]
-    release_candidate_ids: list[str]
-    deployment_ids: list[str]
-    restricted_execution_count: int
-    restricted_deployment_count: int
-
-
-class CollaborationReason(CollaborationContract):
-    code: str
-    message: str
-
-
-class RequirementChangePreview(CollaborationContract):
-    project_id: str
-    requirement_id: str
-    version: int
-    requirement_basis: str
-    preview_basis: str
-    changes: list[FieldChange]
-    impact: ChangeImpact
-    allowed: bool
-    reasons: list[CollaborationReason]

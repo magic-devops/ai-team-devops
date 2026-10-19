@@ -96,7 +96,7 @@ def _requirement_guard(db, project, data, row, values, body):
         )
     if row is not None:
         from .delivery_contract import RequirementEdit
-        from .delivery_requirement_history import require_change_preview
+        from .delivery_requirement_proof import require_change_preview
 
         definition = {
             key: values[key] for key in ("title", "description", "acceptance_criteria") if key in values
@@ -135,7 +135,7 @@ def _record_basis(db, project, data, row, values, body):
                 fail("task_basis_changed", "Task scope changed; review its current definition")
     elif body.module == "requirements":
         from .delivery_plan import requirement_basis
-        from .delivery_requirement_history import change_facts
+        from .delivery_requirement_proof import change_facts
 
         if body.requirement_basis is not None and body.requirement_basis != requirement_basis(row):
             fail("requirement_basis_changed", "Requirement changed; review its current definition")

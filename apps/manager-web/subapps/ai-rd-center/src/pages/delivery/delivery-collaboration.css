@@ -13,6 +13,46 @@
   gap: 8px;
   margin: 12px 0;
 }
+.delivery-requirement-records,
+.delivery-record-fields,
+.delivery-collaboration-current-impact {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.delivery-record-fields > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 120px) minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.delivery-record-fields dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.delivery-record-fields dd {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+.delivery-collaboration-original {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 42dvh;
+  overflow-y: auto;
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .delivery-record-fields > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .delivery-collaboration-toolbar > .ant-btn {
+    max-width: 100%;
+    height: auto;
+    white-space: normal;
+  }
+}
 .delivery-collaboration-toolbar h3 {
   flex: 1;
   margin: 0;

@@ -1,4 +1,66 @@
 const zh = {
+  sourceUnknown: "来源未记录",
+  statusUnknown: "状态暂不可读",
+  stageUnknown: "阶段未记录",
+  recordType: "原始记录",
+  reviewDecision: "评审记录",
+  originalRecord: "查看原始记录",
+  completeReadBudget: "完整范围超出本次读取预算，不能按部分结果确认修改。",
+  originalUnavailable: "必要原件暂不可验证，请重新读取。",
+  targetRequirement: "目标需求",
+  submittedVersion: "提交依据版本",
+  proposedChanges: "原请求中的修改",
+  retainedDiscussionSource: "此原请求已固定所采纳的讨论来源。",
+  technicalTrace: "查看技术追溯信息",
+  sourceReview: "审阅讨论来源",
+  reviewSource: "使用此来源继续编辑",
+  sourceReviewRequired:
+    "所选讨论来源已变化或不可读，请返回讨论重新选择，不能作为无来源修改继续。",
+  sourceReviewHint:
+    "这里只重新读取所选结论。审阅并确认后才填入草稿，尚未提交需求修改。",
+  nextPage: "下一页",
+  definitionUnavailable: "当前定义尚未读取或已不可用，不能按空内容处理",
+  readCurrentDefinition: "读取当前定义后比较",
+  recordCount: "已记录",
+  recordsHint:
+    "每页 20 条摘要；选择一条后读取原件。位置仅在本次读取依据内有效。",
+  recordUnavailable: "选中的记录不可用，请重新读取此页",
+  generationChanged: "当前读取依据已变化，请返回第一页重新选择",
+  impactKind: "关联类别",
+  openCurrentTarget: "核对并打开当前对象",
+  requirementProofRequired: "请重新预览完整的需求变化与影响",
+  requirementInputInvalid: "请检查标题、日期和验收标准等输入",
+  retainedOriginalInvalid:
+    "保存的原请求不可用，当前结果仍未知，不能重新准备请求",
+  retainedOriginalUnavailable: "无法保存原请求，请检查会话存储后重试",
+  impactKinds: {
+    direct_task: "直接任务",
+    dependent_task: "下游任务",
+    execution: "执行",
+    release_candidate: "版本候选",
+    deployment: "部署",
+  },
+  recordFields: {
+    id: "标识",
+    kind: "类型",
+    title: "标题",
+    content: "内容",
+    url: "链接",
+    result: "结果",
+    source: "来源",
+    revision: "流程修订",
+    at: "记录时间",
+    stale: "依据已失效",
+    stage: "流程阶段",
+    comment: "评审意见",
+    actor: "操作者",
+    decision: "评审结论",
+    version: "版本",
+    environment: "环境",
+    artifact_url: "产物链接",
+    rollback_plan: "回滚方案",
+    verification: "验证记录",
+  },
   actions: {
     "member.runtime.bind": "关联成员运行配置",
     "member.runtime.unbind": "解除成员运行关联",
@@ -112,6 +174,75 @@ const zh = {
   },
 };
 const en: typeof zh = {
+  sourceUnknown: "Source not recorded",
+  statusUnknown: "Status unavailable",
+  stageUnknown: "Stage not recorded",
+  recordType: "Recorded item",
+  reviewDecision: "Review record",
+  originalRecord: "View original record",
+  completeReadBudget:
+    "The complete scope exceeds this read budget. Partial results cannot authorize a change.",
+  originalUnavailable:
+    "A necessary original cannot be verified. Read it again.",
+  targetRequirement: "Target requirement",
+  submittedVersion: "Submitted version",
+  proposedChanges: "Changes in the original request",
+  retainedDiscussionSource:
+    "The adopted discussion source is fixed in this original request.",
+  technicalTrace: "Technical trace details",
+  sourceReview: "Review discussion source",
+  reviewSource: "Use this source and continue editing",
+  sourceReviewRequired:
+    "The selected discussion source changed or is unavailable. Return to the discussion and select it again; it cannot silently become an unsourced edit.",
+  sourceReviewHint:
+    "Only the selected conclusion is reread here. Review and confirm before filling the draft. No requirement changes have been submitted.",
+  nextPage: "Next page",
+  definitionUnavailable:
+    "The current definition has not been read or is unavailable. It is not empty content.",
+  readCurrentDefinition: "Read current definition to compare",
+  recordCount: "Recorded",
+  recordsHint:
+    "20 summaries per page. Select a record to read its original. Positions are valid only for this read basis.",
+  recordUnavailable: "This record is unavailable. Read the page again.",
+  generationChanged:
+    "The read basis changed. Return to the first page and select again.",
+  impactKind: "Association category",
+  openCurrentTarget: "Verify and open current object",
+  requirementProofRequired:
+    "Preview the complete requirement changes and impact again",
+  requirementInputInvalid: "Check the title, dates and acceptance criteria",
+  retainedOriginalInvalid:
+    "The retained original is unavailable. The result remains unknown; a new request cannot be prepared.",
+  retainedOriginalUnavailable:
+    "Could not retain the original request. Check session storage and retry.",
+  impactKinds: {
+    direct_task: "Direct tasks",
+    dependent_task: "Dependent tasks",
+    execution: "Executions",
+    release_candidate: "Release candidates",
+    deployment: "Deployments",
+  },
+  recordFields: {
+    id: "Identifier",
+    kind: "Type",
+    title: "Title",
+    content: "Content",
+    url: "Link",
+    result: "Result",
+    source: "Source",
+    revision: "Workflow revision",
+    at: "Recorded at",
+    stale: "Invalidated basis",
+    stage: "Stage",
+    comment: "Review comment",
+    actor: "Actor",
+    decision: "Review decision",
+    version: "Version",
+    environment: "Environment",
+    artifact_url: "Artifact link",
+    rollback_plan: "Rollback plan",
+    verification: "Verification record",
+  },
   actions: {
     "member.runtime.bind": "Bound member runtime",
     "member.runtime.unbind": "Unbound member runtime",
@@ -237,6 +368,75 @@ const en: typeof zh = {
   },
 };
 const ja: typeof zh = {
+  sourceUnknown: "出典は未記録",
+  statusUnknown: "状態は利用できません",
+  stageUnknown: "工程は未記録",
+  recordType: "記録",
+  reviewDecision: "レビュー記録",
+  originalRecord: "元の記録を表示",
+  completeReadBudget:
+    "範囲全体が今回の取得上限を超えています。一部の結果で変更を承認できません。",
+  originalUnavailable: "必要な原本を検証できません。再取得してください。",
+  targetRequirement: "対象の要件",
+  submittedVersion: "送信時の根拠バージョン",
+  proposedChanges: "元の要求に含まれる変更",
+  retainedDiscussionSource:
+    "この元の要求では採用した議論の出典が固定されています。",
+  technicalTrace: "技術的な追跡情報",
+  sourceReview: "議論の出典を確認",
+  reviewSource: "この出典を使用して編集を続ける",
+  sourceReviewRequired:
+    "選択した出典は変更されたか利用できません。議論に戻って選び直してください。出典なしの編集には切り替えません。",
+  sourceReviewHint:
+    "選択した結論のみ再取得します。確認してから下書きに反映します。要件の変更はまだ送信されていません。",
+  nextPage: "次のページ",
+  definitionUnavailable:
+    "現在の定義は未取得または利用できません。空の内容とは扱いません。",
+  readCurrentDefinition: "現在の定義を取得して比較",
+  recordCount: "記録済み",
+  recordsHint:
+    "1ページ20件の概要です。選択した記録のみ原文を取得します。位置は今回の取得根拠内でのみ有効です。",
+  recordUnavailable:
+    "選択した記録は利用できません。ページを再取得してください。",
+  generationChanged:
+    "取得の根拠が変わりました。先頭ページに戻って選び直してください。",
+  impactKind: "関連の種類",
+  openCurrentTarget: "確認して現在の対象を開く",
+  requirementProofRequired: "要件の変更と影響の全体を再プレビューしてください",
+  requirementInputInvalid:
+    "タイトル、日付、受入基準などの入力を確認してください",
+  retainedOriginalInvalid:
+    "保存した元の要求は利用できません。結果は不明のため、新しい要求は準備できません。",
+  retainedOriginalUnavailable:
+    "元の要求を保存できません。セッションストレージを確認して再試行してください。",
+  impactKinds: {
+    direct_task: "直接タスク",
+    dependent_task: "依存タスク",
+    execution: "実行",
+    release_candidate: "リリース候補",
+    deployment: "デプロイ",
+  },
+  recordFields: {
+    id: "識別子",
+    kind: "種類",
+    title: "タイトル",
+    content: "内容",
+    url: "リンク",
+    result: "結果",
+    source: "出典",
+    revision: "工程の改訂",
+    at: "記録日時",
+    stale: "無効な根拠",
+    stage: "工程",
+    comment: "レビュー意見",
+    actor: "操作者",
+    decision: "レビュー結果",
+    version: "バージョン",
+    environment: "環境",
+    artifact_url: "成果物リンク",
+    rollback_plan: "ロールバック計画",
+    verification: "検証記録",
+  },
   actions: {
     "member.runtime.bind": "メンバーの実行構成を関連付け",
     "member.runtime.unbind": "メンバーの実行構成を解除",

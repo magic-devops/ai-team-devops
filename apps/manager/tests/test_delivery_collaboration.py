@@ -22,6 +22,13 @@ def history(client, rid, **params):
     return client.get(f"/api/v1/delivery/requirements/{rid}/history", params=params)
 
 
+def observed_definition(client, rid, metadata):
+    response = client.get(f"/api/v1/delivery/requirements/{rid}/history/{metadata['id']}")
+    assert response.status_code == 200, response.text
+    assert response.json()["item"]["basis"] == metadata["basis"]
+    return response.json()["item"]["definition"]
+
+
 def preview(client, rid, changes, basis=None):
     current = client.get("/api/v1/delivery/workspace").json()
     req = next(row for row in current["requirements"] if row["id"] == rid)
@@ -115,7 +122,7 @@ def test_history_records_only_actual_definitions_and_reads_are_pure(env):
     rid = requirement(client)
     initial = history(client, rid)
     assert initial.status_code == 200, initial.text
-    assert initial.json()["items"][0]["definition"]["title"] == "Search"
+    assert observed_definition(client, rid, initial.json()["items"][0])["title"] == "Search"
     assert initial.json()["items"][0]["number"] == 1
     with sessions() as db:
         before = {
@@ -167,7 +174,7 @@ def test_change_requires_current_definition_and_exact_preview(env):
     assert again.status_code == 200 and again.json()["replayed"] is True
     versions = history(client, rid).json()["items"]
     assert len(versions) == 2 and versions[0]["number"] == 2
-    assert versions[0]["definition"]["description"] == "Reviewed change"
+    assert observed_definition(client, rid, versions[0])["description"] == "Reviewed change"
     body["expected_version"] = saved.json()["version"]
     body["idempotency_key"] = "old-definition-request"
     stale = client.post("/api/v1/delivery/commands", json=body)
@@ -205,7 +212,7 @@ def test_generic_orm_and_core_changes_capture_once_without_fabricating_old_conte
         db.execute(update(Requirement).where(Requirement.id == "prior").values(title="Core change"))
         db.commit()
     result = history(client, "prior").json()
-    assert [row["definition"]["title"] for row in result["items"]] == [
+    assert [observed_definition(client, "prior", row)["title"] for row in result["items"]] == [
         "Core change",
         "First observed",
         "First observed",
@@ -216,7 +223,10 @@ def test_generic_orm_and_core_changes_capture_once_without_fabricating_old_conte
         db.get(Requirement, "prior").description = "rolled back"
         db.flush()
         db.rollback()
-    assert history(client, "prior").json() == result
+    after = history(client, "prior").json()
+    assert {key: value for key, value in after.items() if key != "as_of"} == {
+        key: value for key, value in result.items() if key != "as_of"
+    }
 
 
 def test_activity_and_history_scope_access_is_rechecked(env):
@@ -247,8 +257,14 @@ def test_empty_change_preview_lists_actual_direct_and_transitive_dependencies(en
     dependent = next(row for row in independent["tasks"] if row["id"] != first["id"])
     read = preview(client, rid, {})
     assert read.status_code == 200, read.text
-    assert read.json()["impact"]["task_ids"] == [first["id"]]
-    assert read.json()["impact"]["dependent_task_ids"] == [dependent["id"]]
+    assert read.json()["impact"]["counts"]["direct_task"] == 1
+    assert read.json()["impact"]["counts"]["dependent_task"] == 1
+    for kind, identity in (("direct_task", first["id"]), ("dependent_task", dependent["id"])):
+        page = client.get(
+            f"/api/v1/delivery/requirements/{rid}/impact/items",
+            params={"kind": kind, "query_generation": read.json()["query_generation"]},
+        )
+        assert page.status_code == 200 and [row["id"] for row in page.json()["items"]] == [identity]
     assert read.json()["impact"]["invalidates_current_acceptance"] is False
     fixed = preview(client, rid, {"description": "Reviewed"}).json()
     with sessions() as db:
@@ -327,12 +343,16 @@ def test_viewer_reads_current_links_without_a_write_preview(bridge):
     client.app.dependency_overrides[current_user] = lambda: User(
         id="reader", tenant_id="tenant", username="reader", role="viewer", status="active"
     )
-    response = history(client, rid)
+    response = client.get(f"/api/v1/delivery/requirements/{rid}/impact")
     assert response.status_code == 200, response.text
-    links = response.json()["current_links"]
-    assert links["requirement_basis"] == response.json()["current_basis"]
-    assert links["task_ids"] == [task["id"]]
-    assert links["execution_ids"] == [] and links["restricted_execution_count"] == 1
+    links = response.json()
+    assert links["counts"]["direct_task"] == 1
+    assert links["counts"]["execution"] == 0 and links["counts"]["restricted_execution"] == 1
+    page = client.get(
+        f"/api/v1/delivery/requirements/{rid}/impact/items",
+        params={"kind": "direct_task", "query_generation": links["query_generation"]},
+    )
+    assert page.status_code == 200 and [row["id"] for row in page.json()["items"]] == [task["id"]]
     assert entry["id"] not in str(links)
 
 
