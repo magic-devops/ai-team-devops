@@ -46,11 +46,14 @@ def test_progress_cli_preserves_the_server_record_and_exact_filter_intent(
     monkeypatch, command, method, arguments
 ):
     seen = []
-    expected = {
-        "project_id": "selected",
-        "days": [{"date": "2026-10-15", "metrics": None}],
-        "tasks": [{"id": "T-deleted", "title": "Historical title"}],
-    }
+    expected = {"project_id": "selected"}
+    if method == "delivery_progress":
+        expected.update(days=[{"date": "2026-10-15", "metrics": None}],
+                        current={"scope": {"kind": "milestone", "id": "milestone-one", "label": "Milestone"},
+                                 "metrics": {"tasks_total": 500}})
+    else:
+        kind = "observation" if method == "delivery_progress_observation" else "baseline"
+        expected[kind] = {"id": arguments["id"], "task_count": 500, "requirement_count": 80, "available": True}
 
     class Client:
         def __getattr__(self, name):

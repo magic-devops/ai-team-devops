@@ -1,162 +1,44 @@
-"""Pure project-scoped reads of persistent UTC progress and immutable baselines."""
+"""Small truthful UTC progress series; fixed originals have independent SQL pages."""
 
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import HTTPException
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, true
 
-from .delivery_progress_baseline import baseline_view, compare_scope, get_baseline, timestamp
-from .delivery_progress_facts import capture_facts, metrics, select_scope
-from .sql_models import DeliveryProgressBaseline, DeliveryProgressObservation, DeliveryWorkspace
-
-_METADATA_BATCH = 128
+from . import sql_models as m
+from .delivery_activity_cursor import decode_cursor, encode_cursor
+from .delivery_progress_baseline import timestamp
+from .delivery_progress_current import current_stamp, scope_metrics, selected_scope
+from .delivery_progress_json import (
+    baseline_metadata,
+    counts_metrics,
+    fail,
+    field,
+    items_query,
+    scope_filter,
+    source,
+    sqlite_only,
+)
+from .delivery_progress_json import (
+    metadata as source_metadata,
+)
+from .delivery_query_read import _unchanged, metadata
+from .delivery_service import stamp
 
 
 def _observation_scope(project):
-    return (
-        DeliveryProgressObservation.project_id == project.id,
-        DeliveryProgressObservation.tenant_id == project.tenant_id,
-    )
-
-
-def _scope_projection(scope):
-    collection = "milestones" if scope == "milestone" else "sprints"
-    # Project only the small scope collection, never the lifetime task snapshots.
-    return DeliveryProgressObservation.data["scopes"][collection].label("progress_scope_projection")
-
-
-def _contains_scope(projected, scope_id):
-    return isinstance(projected, list) and any(
-        isinstance(item, dict) and item.get("id") == scope_id for item in projected
-    )
-
-
-def _scope_boundary(db, project, scope, scope_id, *, reverse=False):
-    observation = DeliveryProgressObservation
-    cursor = None
-    while True:
-        query = select(observation.observed_at, observation.seq, _scope_projection(scope)).where(
-            *_observation_scope(project)
-        )
-        if cursor is not None:
-            at, seq = cursor
-            query = query.where(
-                or_(observation.observed_at < at, and_(observation.observed_at == at, observation.seq < seq))
-                if reverse
-                else or_(
-                    observation.observed_at > at, and_(observation.observed_at == at, observation.seq > seq)
-                )
-            )
-        ordering = (
-            (observation.observed_at.desc(), observation.seq.desc())
-            if reverse
-            else (observation.observed_at, observation.seq)
-        )
-        batch = db.execute(query.order_by(*ordering).limit(_METADATA_BATCH)).all()
-        if not batch:
-            return None
-        for row in batch:
-            if _contains_scope(row.progress_scope_projection, scope_id):
-                return row.observed_at
-        cursor = (batch[-1].observed_at, batch[-1].seq)
-
-
-def _coverage_bounds(db, project, scope, scope_id):
-    observation = DeliveryProgressObservation
-    if scope == "project":
-        return db.execute(
-            select(func.min(observation.observed_at), func.max(observation.observed_at)).where(
-                *_observation_scope(project)
-            )
-        ).one()
-    first = _scope_boundary(db, project, scope, scope_id)
-    return (
-        (first, _scope_boundary(db, project, scope, scope_id, reverse=True))
-        if first is not None
-        else (None, None)
-    )
-
-
-def _daily_observations(db, project, scope, scope_id, start, end):
-    if start > end:
-        return []
-    observation = DeliveryProgressObservation
-    filters = (
-        *_observation_scope(project),
-        observation.observed_day >= start.isoformat(),
-        observation.observed_day <= end.isoformat(),
-    )
-    if scope == "project":
-        ranked = (
-            select(
-                observation.seq,
-                func.row_number()
-                .over(
-                    partition_by=observation.observed_day,
-                    order_by=(observation.observed_at.desc(), observation.seq.desc()),
-                )
-                .label("daily_rank"),
-            )
-            .where(*filters)
-            .subquery()
-        )
-        query = (
-            select(observation).join(ranked, observation.seq == ranked.c.seq).where(ranked.c.daily_rank == 1)
-        )
-    else:
-        # A scope can disappear later on the same day. Find the latest *valid*
-        # scope record using bounded, small projections before loading facts.
-        projected = db.execute(
-            select(
-                observation.seq,
-                observation.observed_day,
-                _scope_projection(scope),
-            )
-            .where(*filters)
-            .order_by(
-                observation.observed_day,
-                observation.observed_at.desc(),
-                observation.seq.desc(),
-            )
-            .execution_options(stream_results=True)
-        ).yield_per(_METADATA_BATCH)
-        selected = {}
-        try:
-            for row in projected:
-                if row.observed_day not in selected and _contains_scope(
-                    row.progress_scope_projection, scope_id
-                ):
-                    selected[row.observed_day] = row.seq
-        finally:
-            projected.close()
-        if not selected:
-            return []
-        query = select(observation).where(
-            *_observation_scope(project), observation.seq.in_(selected.values())
-        )
-    # This is the only full-facts query: at most one observation per requested UTC date.
-    return db.scalars(query.order_by(observation.observed_day)).all()
-
-
-def _version(db, project):
-    row = db.get(DeliveryWorkspace, project.id)
-    return row.version if row else 0
+    return scope_filter(project, m.DeliveryProgressObservation)
 
 
 def _scope_valid(scope, scope_id):
-    if (
-        scope not in {"project", "milestone", "sprint"}
-        or (scope == "project" and scope_id)
-        or (scope != "project" and not scope_id)
-    ):
-        raise HTTPException(422, "Choose a project scope without scope_id or a named milestone/sprint scope")
+    if scope not in {"project", "milestone", "sprint"} or (scope == "project" and scope_id) or (scope != "project" and not scope_id):
+        fail("progress_scope_invalid", "Choose project without an ID or a named milestone/sprint", 422)
 
 
 def _range(starts_on, ends_on, today):
     end = ends_on or today
     start = starts_on or end - timedelta(days=29)
     if start > end or (end - start).days >= 366:
-        raise HTTPException(422, "Use an ordered date range of at most 366 UTC days")
+        fail("progress_range_invalid", "Use an ordered date range of at most 366 UTC days", 422)
     return start, end
 
 
@@ -164,174 +46,129 @@ def _dates(start, end):
     return [start + timedelta(days=index) for index in range((end - start).days + 1)]
 
 
-def _remaining(tasks, task_ids):
-    verified = {task["id"] for task in tasks if task["status"] == "verified_completed"}
-    return len(set(task_ids) - verified)
+def _scope_observations(project, scope, scope_id):
+    model = m.DeliveryProgressObservation
+    query = select(model.seq, model.id, model.observed_day, model.observed_at, model.source).where(*_observation_scope(project))
+    if scope != "project":
+        collection = "milestones" if scope == "milestone" else "sprints"
+        scopes = func.json_each(model.data, '$.scopes.' + collection).table_valued("key", "value", "type").alias("observed_scopes")
+        query = query.where(select(1).select_from(scopes).where(field(scopes, "id") == scope_id).exists())
+    return query
 
 
-def _current_scope(facts, scope, scope_id, baseline=None):
-    try:
-        return select_scope(facts, scope, scope_id)
-    except HTTPException as exc:
-        if exc.status_code != 404 or baseline is None:
-            raise
-        return {
-            "scope": baseline["scope"],
-            "tasks": [],
-            "requirements": [],
-            "task_ids": [],
-            "basis": "",
-            "metrics": metrics([], []),
-        }
+def _coverage_bounds(db, project, scope, scope_id):
+    if scope != "project":
+        sqlite_only(db)
+    rows = _scope_observations(project, scope, scope_id).subquery("coverage_observations")
+    return db.execute(select(func.min(rows.c.observed_at), func.max(rows.c.observed_at))).one()
+
+
+def _daily_observations(db, project, scope, scope_id, start, end):
+    rows = _scope_observations(project, scope, scope_id).where(
+        m.DeliveryProgressObservation.observed_day >= start.isoformat(), m.DeliveryProgressObservation.observed_day <= end.isoformat()
+    ).subquery("valid_observations")
+    ranked = select(*rows.c, func.row_number().over(partition_by=rows.c.observed_day,
+        order_by=(rows.c.observed_at.desc(), rows.c.seq.desc())).label("daily_rank")).subquery("daily_ranked")
+    return db.execute(select(ranked).where(ranked.c.daily_rank == 1).order_by(ranked.c.observed_day)).mappings().all()
+
+
+def _remaining(db, project, original, baseline_id):
+    baseline = m.DeliveryProgressBaseline
+    fixed = func.json_each(baseline.data, '$.task_ids').table_valued("key", "value", "type").alias("baseline_ids")
+    tasks, tq = items_query(original, "tasks", "verified_historical_tasks")
+    verified = tq.with_only_columns(1).where(field(tasks, "status") == "verified_completed", field(tasks, "id") == fixed.c.value).exists()
+    return db.scalar(select(func.count()).select_from(baseline).join(fixed, true()).where(
+        *scope_filter(project, baseline), baseline.id == baseline_id, ~verified))
 
 
 def _ideal(baseline, start, end):
-    if not baseline or not baseline["starts_on"] or not baseline["ends_on"]:
+    if not baseline or not baseline["starts_on"] or not baseline["ends_on"] or baseline["task_count"] is None:
         return []
-    plan_start = date.fromisoformat(baseline["starts_on"])
-    plan_end = date.fromisoformat(baseline["ends_on"])
-    total = len(baseline["task_ids"])
-    span = (plan_end - plan_start).days
-    return (
-        [
-            {
-                "date": day.isoformat(),
-                "remaining": round(total * (plan_end - day).days / span, 6) if span else 0.0,
-            }
-            for day in _dates(max(start, plan_start), min(end, plan_end))
-        ]
-        if max(start, plan_start) <= min(end, plan_end)
-        else []
-    )
+    plan_start, plan_end = date.fromisoformat(baseline["starts_on"]), date.fromisoformat(baseline["ends_on"])
+    span, total = (plan_end - plan_start).days, baseline["task_count"]
+    return [{"date": day.isoformat(), "remaining": round(total * (plan_end - day).days / span, 6) if span else 0.0}
+        for day in _dates(max(start, plan_start), min(end, plan_end))] if max(start, plan_start) <= min(end, plan_end) else []
 
 
-def progress(
-    db, project, *, starts_on=None, ends_on=None, scope="project", scope_id="", baseline_id="", now=None
-):
+def progress(db, project, *, starts_on=None, ends_on=None, scope="project", scope_id="", baseline_id="", now=None):
+    sqlite_only(db)
     _scope_valid(scope, scope_id)
     now = now or datetime.now(timezone.utc)
     start, end = _range(starts_on, ends_on, now.date())
-    facts = capture_facts(db, project)
-    selected = None
+    current = current_stamp(db, project)
+    baseline = None
     if baseline_id:
-        selected_row = get_baseline(db, project, baseline_id)
-        if selected_row.scope_kind != scope or selected_row.scope_id != scope_id:
-            raise HTTPException(422, "Choose the baseline's original project, milestone or sprint scope")
-        selected = baseline_view(selected_row)
-    current = _current_scope(facts, scope, scope_id, selected)
-    rows = _daily_observations(db, project, scope, scope_id, start, min(end, now.date()))
-    first_observed, last_observed = _coverage_bounds(db, project, scope, scope_id)
-    baseline_rows = db.scalars(
-        select(DeliveryProgressBaseline)
-        .where(
-            DeliveryProgressBaseline.project_id == project.id,
-            DeliveryProgressBaseline.tenant_id == project.tenant_id,
-            DeliveryProgressBaseline.scope_kind == scope,
-            DeliveryProgressBaseline.scope_id == scope_id,
-        )
-        .order_by(DeliveryProgressBaseline.created_at.desc(), DeliveryProgressBaseline.id.desc())
-    ).all()
+        original = source(db, project, "baseline", baseline_id)
+        if original["scope"]["kind"] != scope or original["scope"]["id"] != scope_id:
+            fail("progress_baseline_scope_invalid", "Choose the baseline's original scope", 422)
+        baseline = baseline_metadata(db, original)
+        if not baseline["available"]:
+            fail("progress_snapshot_unavailable", "The selected baseline cannot be verified")
+    selected, available = selected_scope(db, project, scope, scope_id, fallback=baseline["scope"] if baseline else None)
+    metrics = scope_metrics(db, project, selected, available=available)
+    rows = _daily_observations(db, project, scope, scope_id, start, min(end, now.date())) if start <= min(end, now.date()) else []
     by_day = {}
     for row in rows:
-        try:
-            historical = select_scope(row.data, scope, scope_id)
-        except HTTPException as exc:
-            if exc.status_code != 404:
-                raise
-            continue
-        by_day[row.observed_day] = (row, historical)
-    days = []
-    observed_days, missing_days, future_days = [], [], []
+        original = source(db, project, "observation", row["id"], scope=scope, scope_id=scope_id)
+        by_day[row["observed_day"]] = {"date": row["observed_day"], "observation_id": row["id"],
+            "observed_at": timestamp(row["observed_at"]), "source": row["source"], "metrics": counts_metrics(db, original),
+            "baseline_remaining": _remaining(db, project, original, baseline_id) if baseline else None}
+    first, last = _coverage_bounds(db, project, scope, scope_id)
+    days, observed, missing, future = [], [], [], []
     for day in _dates(start, end):
         key = day.isoformat()
-        pair = by_day.get(key) if day <= now.date() else None
-        if pair:
-            row, historical = pair
-            observed_days.append(key)
-            days.append(
-                {
-                    "date": key,
-                    "observation_id": row.id,
-                    "observed_at": timestamp(row.observed_at),
-                    "source": row.source,
-                    "metrics": historical["metrics"],
-                    "baseline_remaining": _remaining(historical["tasks"], selected["task_ids"])
-                    if selected
-                    else None,
-                }
-            )
+        if key in by_day and day <= now.date():
+            observed.append(key)
+            days.append(by_day[key])
         else:
-            (future_days if day > now.date() else missing_days).append(key)
-            days.append(
-                {
-                    "date": key,
-                    "observation_id": None,
-                    "observed_at": None,
-                    "source": None,
-                    "metrics": None,
-                    "baseline_remaining": None,
-                }
-            )
-    return {
-        "project_id": project.id,
-        "version": _version(db, project),
-        "as_of": timestamp(now),
-        "timezone": "UTC",
-        "scope": current["scope"],
-        "range": {"starts_on": start.isoformat(), "ends_on": end.isoformat()},
-        "scopes": facts["scopes"],
-        "current": current,
-        "coverage": {
-            "first_observed_at": timestamp(first_observed),
-            "last_observed_at": timestamp(last_observed),
-            "observed_days": observed_days,
-            "missing_days": missing_days,
-            "future_days": future_days,
-        },
-        "days": days,
-        "baselines": [baseline_view(row, summary=True) for row in baseline_rows],
-        "baseline": selected,
-        "comparison": compare_scope(selected, current) if selected else None,
-        "ideal": _ideal(selected, start, end),
-    }
+            (future if day > now.date() else missing).append(key)
+            days.append({"date": key, "observation_id": None, "observed_at": None, "source": None, "metrics": None, "baseline_remaining": None})
+    _unchanged(db, project, current)
+    return {**metadata(db, project, current), "as_of": timestamp(now), "timezone": "UTC", "scope": selected,
+        "range": {"starts_on": start.isoformat(), "ends_on": end.isoformat()}, "current": {"scope": selected, "metrics": metrics},
+        "coverage": {"first_observed_at": timestamp(first), "last_observed_at": timestamp(last),
+            "observed_days": observed, "missing_days": missing, "future_days": future},
+        "days": days, "baseline": baseline, "ideal": _ideal(baseline, start, end)}
 
 
 def observation_detail(db, project, observation_id, *, scope="project", scope_id=""):
     _scope_valid(scope, scope_id)
-    row = db.scalar(
-        select(DeliveryProgressObservation).where(
-            DeliveryProgressObservation.id == observation_id,
-            DeliveryProgressObservation.project_id == project.id,
-            DeliveryProgressObservation.tenant_id == project.tenant_id,
-        )
-    )
-    if row is None:
-        raise HTTPException(404, "Progress observation not found in this project")
-    frozen = select_scope(row.data, scope, scope_id)
-    return {
-        "id": row.id,
-        "project_id": project.id,
-        "observed_at": timestamp(row.observed_at),
-        "observed_day": row.observed_day,
-        "source": row.source,
-        "actor": row.actor,
-        "source_version": row.source_version,
-        "scope": frozen["scope"],
-        "current": frozen,
-    }
+    return source_metadata(db, project, "observation", observation_id, scope=scope, scope_id=scope_id)
 
 
-def baseline_detail(db, project, baseline_id, *, now=None):
-    row = get_baseline(db, project, baseline_id)
-    frozen = baseline_view(row)
-    facts = capture_facts(db, project)
-    # Deleting a scope must preserve the historical plan and labels.
-    current = _current_scope(facts, row.scope_kind, row.scope_id, frozen)
-    return {
-        "project_id": project.id,
-        "version": _version(db, project),
-        "as_of": timestamp(now or datetime.now(timezone.utc)),
-        "baseline": frozen,
-        "current": current,
-        "comparison": compare_scope(frozen, current),
-    }
+def baseline_detail(db, project, baseline_id):
+    return source_metadata(db, project, "baseline", baseline_id)
+
+
+def baselines(db, project, user, *, scope="project", scope_id="", limit=20, cursor=""):
+    sqlite_only(db)
+    _scope_valid(scope, scope_id)
+    if type(limit) is not int or not 1 <= limit <= 100:
+        fail("progress_page_invalid", "Choose a page size between 1 and 100", 422)
+    model = m.DeliveryProgressBaseline
+    filters = (*scope_filter(project, model), model.scope_kind == scope, model.scope_id == scope_id)
+    signature = [project.tenant_id, project.id, user.id, "progress-baselines", scope, scope_id, limit]
+    if cursor:
+        upper, after = decode_cursor(cursor, signature)
+        if (len(upper) != 2 or type(upper[0]) is not int or upper[0] < 0 or not isinstance(upper[1], str)
+                or len(after) != 2 or not all(isinstance(value, str) for value in after)):
+            fail("progress_cursor_invalid", "Invalid baseline catalogue cursor", 422)
+        try:
+            previous = datetime.fromisoformat(after[0])
+        except ValueError:
+            fail("progress_cursor_invalid", "Invalid baseline catalogue position", 422)
+    else:
+        upper, after = [db.scalar(select(func.max(model.source_version)).where(*filters)) or 0, stamp()], None
+    query = select(model.id, model.created_at).where(*filters, model.source_version <= upper[0])
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    if after:
+        query = query.where(or_(model.created_at < previous, and_(model.created_at == previous, model.id < after[1])))
+    rows = db.execute(query.order_by(model.created_at.desc(), model.id.desc()).limit(limit + 1)).all()
+    items = [baseline_metadata(db, source(db, project, "baseline", row.id)) for row in rows[:limit]]
+    if items:
+        selected = items[0]["scope"]
+    else:
+        first = db.scalar(select(model.id).where(*filters).order_by(model.created_at.desc(), model.id.desc()).limit(1))
+        selected = source(db, project, "baseline", first)["scope"] if first else selected_scope(db, project, scope, scope_id)[0]
+    return {"project_id": project.id, "as_of": upper[1], "scope": selected, "items": items, "total": total, "limit": limit,
+        "next_cursor": encode_cursor(signature, upper, [rows[limit - 1].created_at.isoformat(), rows[limit - 1].id]) if len(rows) > limit else None}

@@ -1,5 +1,3 @@
-import { useDeliveryMemberReferences } from "@/lib/deliveryQueryHooks";
-import type { DeliveryCommandAck } from "@/lib/deliveryQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -10,64 +8,48 @@ import {
   Select,
   Skeleton,
   Tag,
-  Tooltip,
 } from "antd";
-import { ArrowRight, Camera, LockKeyhole, RefreshCw } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  prepareDeliveryIntent,
-  saveDelivery,
-  type DeliveryInboxTarget,
-  type DeliveryIntent,
-  type DeliveryContext,
+import type {
+  DeliveryCommandAck,
+  DeliveryInboxTarget,
+  DeliveryContext,
 } from "@/lib/delivery";
-import { planError } from "@/lib/deliveryTaskPlan";
+import { projectSessionKey } from "@/lib/projectPortfolio";
+import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
+import { DeliveryReferenceSelect } from "@/components/DeliveryReferenceSelect";
 import {
   defaultProgressRange,
   fetchDeliveryProgress,
   fetchDeliveryProgressSummary,
-  fetchProgressObservation,
   parseProgressRoute,
   progressHash,
   progressRangeProblem,
   progressDateChange,
-  type DeliveryProgress as ProgressData,
   type ProgressRoute,
 } from "@/lib/deliveryProgress";
-import { DeliveryEditor, type EditorSpec } from "./DeliveryEditor";
-import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
 import { DeliveryProgressCharts } from "./DeliveryProgressCharts";
 import {
-  DeliveryProgressComparison,
   DeliveryProgressHistory,
-  DeliveryProgressSnapshot,
   progressDateTime,
 } from "./DeliveryProgressDetails";
+import {
+  DeliveryProgressBaselineCatalogue,
+  DeliveryProgressSnapshotBrowser,
+  DeliveryProgressComparisonBrowser,
+} from "./DeliveryProgressBrowser";
+import { DeliveryProgressCommands } from "./DeliveryProgressCommands";
 import { DeliveryQueryError } from "./DeliveryQueryViews";
 
-function progressQueryKey(
-  projectId: string,
-  sessionId: string,
-  route: ProgressRoute,
-) {
-  return [
-    "delivery-progress",
-    projectId,
-    sessionId,
-    route.startsOn,
-    route.endsOn,
-    route.scope,
-    route.scopeId,
-    route.baselineId,
-  ];
-}
 type Props = {
   projectId: string;
   sessionId: string;
   workspace: DeliveryContext;
   onWorkspace: (data: DeliveryCommandAck) => void;
   onOpenTask: (target: DeliveryInboxTarget) => void;
+  onPending?: (identity: string, value: boolean) => void;
 };
 export function DeliveryProgress({
   projectId,
@@ -75,22 +57,20 @@ export function DeliveryProgress({
   workspace,
   onWorkspace,
   onOpenTask,
+  onPending,
 }: Props) {
-  const { t, i18n } = useTranslation();
-  const tr = (key: string, options?: Record<string, unknown>) =>
-    t(`deliveryProgress.${key}`, options);
-  const qc = useQueryClient();
-  const identity = useMemberIdentity();
+  const { t, i18n } = useTranslation(),
+    tr = (key: string, options?: Record<string, unknown>) =>
+      t(`deliveryProgress.${key}`, options),
+    qc = useQueryClient();
   const [route, setRoute] = useState(() => parseProgressRoute(location.hash));
   const [dateDraft, setDateDraft] = useState(() => ({
     startsOn: route.startsOn,
     endsOn: route.endsOn,
   }));
-  const [editor, setEditor] = useState<EditorSpec | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const [recorded, setRecorded] = useState(false);
-  const recordIntent = useRef<DeliveryIntent>();
+  const [blocked, setBlocked] = useState(false);
+  const pending = useRef(new Map<string, boolean>()),
+    owner = useRef(projectSessionKey());
   useEffect(() => {
     const sync = () => {
       const next = parseProgressRoute(location.hash);
@@ -104,227 +84,87 @@ export function DeliveryProgress({
       window.removeEventListener("popstate", sync);
     };
   }, []);
-  const changeRoute = useCallback(
-    (patch: Partial<ProgressRoute>, replace = false) => {
-      const next = { ...parseProgressRoute(location.hash), ...patch };
-      const hash = progressHash(next);
-      history[replace ? "replaceState" : "pushState"](
-        null,
-        "",
-        `${location.pathname}${location.search}${hash}`,
-      );
-      setRoute(next);
-      setDateDraft({ startsOn: next.startsOn, endsOn: next.endsOn });
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    },
-    [],
-  );
-  const rangeProblem = progressRangeProblem(route.startsOn, route.endsOn);
-  const scopeProblem = route.scope !== "project" && !route.scopeId;
-  const dateDraftProblem = progressRangeProblem(
-    dateDraft.startsOn,
-    dateDraft.endsOn,
-  );
-  const key = [
-    ...progressQueryKey(projectId, sessionId, route),
-    workspace.query_generation,
-  ];
+  const current = () => owner.current === projectSessionKey();
+  const changeRoute = useCallback((patch: Partial<ProgressRoute>) => {
+    if (!current() || [...pending.current.values()].some(Boolean)) return;
+    const next = { ...parseProgressRoute(location.hash), ...patch };
+    history.pushState(
+      null,
+      "",
+      `${location.pathname}${location.search}${progressHash(next)}`,
+    );
+    setRoute(next);
+    setDateDraft({ startsOn: next.startsOn, endsOn: next.endsOn });
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, []);
+  const rangeProblem = progressRangeProblem(route.startsOn, route.endsOn),
+    scopeProblem = route.scope !== "project" && !route.scopeId,
+    dateDraftProblem = progressRangeProblem(
+      dateDraft.startsOn,
+      dateDraft.endsOn,
+    );
   const query = useQuery({
-    queryKey: key,
-    queryFn: ({ signal }) =>
-      fetchDeliveryProgress(
-        projectId,
-        scopeProblem
-          ? { ...route, scope: "project", scopeId: "", baselineId: "" }
-          : route,
-        signal,
-      ),
-    enabled: !rangeProblem,
-    gcTime: 0,
-    refetchInterval: 10000,
-  });
-  const data = query.data;
-  const observation = useQuery({
     queryKey: [
-      "delivery-progress-observation",
+      "delivery-progress",
       projectId,
       sessionId,
-      route.observationId,
+      route.startsOn,
+      route.endsOn,
       route.scope,
       route.scopeId,
+      route.baselineId,
+      workspace.query_generation,
     ],
-    queryFn: ({ signal }) =>
-      fetchProgressObservation(projectId, route.observationId, route, signal),
-    enabled: Boolean(route.observationId),
-    gcTime: 0,
+    queryFn: ({ signal }) => fetchDeliveryProgress(projectId, route, signal),
+    enabled: !rangeProblem && !scopeProblem && !blocked,
     retry: false,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchInterval: blocked ? false : 10000,
   });
-  const memberRefs = useDeliveryMemberReferences(
-    projectId,
-    sessionId,
-    [...(data?.current.tasks || []), ...(data?.baseline?.tasks || [])]
-      .flatMap((task) => [
-        task.owner_id,
-        ...(task.allocations || []).map((allocation) => allocation.member_id),
-      ])
-      .concat(
-        data?.baseline?.created_by ? [`user:${data.baseline.created_by}`] : [],
-      ),
-    workspace.query_generation,
+  const data =
+    !query.isError &&
+    current() &&
+    query.data?.project_id === projectId &&
+    query.data.scope.kind === route.scope &&
+    (route.scope === "project" || query.data.scope.id === route.scopeId)
+      ? query.data
+      : undefined;
+  const unavailable =
+    !data || query.isError || Boolean(rangeProblem || scopeProblem);
+  const sourceKind = route.baselineDetail ? "baseline" : "observation",
+    requestedSource = route.baselineDetail
+      ? route.baselineId
+      : route.observationId;
+  const inspector = useDrawerIdentity(
+    `${projectId}:${sessionId}:${sourceKind}:${route.scope}:${route.scopeId}`,
+    requestedSource,
   );
-  const scopeOptions =
-    data?.scopes[route.scope === "sprint" ? "sprints" : "milestones"] || [];
-  const refresh = () => void query.refetch();
-  const saveResult = (updated: DeliveryCommandAck) => {
-    onWorkspace(updated);
+  const refresh = () => {
+    if (current() && !blocked) void query.refetch();
+  };
+  const saved = (ack: DeliveryCommandAck) => {
+    if (!current() || ack.project_id !== projectId) return;
+    onWorkspace(ack);
     void qc.invalidateQueries({
       queryKey: ["delivery-progress", projectId, sessionId],
     });
-  };
-  const record = async () => {
-    if (busy || !data) return;
-    setBusy(true);
-    setActionError("");
-    setRecorded(false);
-    if (!recordIntent.current || recordIntent.current.version !== data.version)
-      recordIntent.current = {
-        version: data.version,
-        key: crypto.randomUUID(),
-      };
-    try {
-      const updated = await saveDelivery(
-        projectId,
-        "progress.record",
-        {},
-        recordIntent.current.version,
-        recordIntent.current.key,
-      );
-      saveResult(updated);
-      setRecorded(true);
-      recordIntent.current = undefined;
-      await query.refetch();
-    } catch (error) {
-      const failure = planError(error);
-      setActionError(
-        failure.conflict ? t("delivery.conflict") : failure.message,
-      );
-      if (failure.conflict) await query.refetch();
-    } finally {
-      setBusy(false);
-    }
-  };
-  const freeze = () => {
-    if (!data) return;
-    const frozenRoute = { ...route, observationId: "" };
-    let pinned = structuredClone(data);
-    let latest: ProgressData | undefined;
-    let intent: DeliveryIntent = {
-      version: data.version,
-      key: crypto.randomUUID(),
-    };
-    const freezeHint = (facts: ProgressData) =>
-      `${tr("freezeHint")} ${tr("freezeScope")}: ${facts.scope.label} · ${tr("freezeCount", { count: facts.current.task_ids.length })}. ${tr("basisHint")} ${tr("freezeDates")}`;
-    const scopeDates =
-      data.scope.kind === "project"
-        ? workspace.project
-        : scopeOptions.find((scope) => scope.id === route.scopeId);
-    setEditor({
-      title: tr("freeze"),
-      hint: freezeHint(data),
-      fields: [
-        { key: "title", label: tr("titleField"), required: true, max: 200 },
-        { key: "starts_on", label: tr("startsOn"), type: "date" },
-        { key: "ends_on", label: tr("endsOn"), type: "date" },
-        { key: "note", label: tr("note"), type: "area", max: 4000 },
-      ],
-      values: {
-        title: `${data.scope.label} · ${new Date().toISOString().slice(0, 10)}`,
-        starts_on: scopeDates?.starts_on || "",
-        ends_on: scopeDates?.ends_on || "",
-        note: "",
-      },
-      submit: async (values) => {
-        if (
-          values.starts_on &&
-          values.ends_on &&
-          String(values.starts_on) > String(values.ends_on)
-        )
-          throw new Error(tr("dateOrder"));
-        const payload = {
-          title: String(values.title || "").trim(),
-          scope: pinned.scope.kind,
-          scope_id: pinned.scope.id,
-          task_ids: [...pinned.current.task_ids],
-          basis: pinned.current.basis,
-          starts_on: values.starts_on || null,
-          ends_on: values.ends_on || null,
-          note: String(values.note || "").trim(),
-        };
-        intent = prepareDeliveryIntent(intent, "baseline.create", payload);
-        try {
-          const updated = await saveDelivery(
-            projectId,
-            "baseline.create",
-            payload,
-            intent.version,
-            intent.key,
-          );
-          saveResult(updated);
-          changeRoute({
-            ...frozenRoute,
-            baselineId:
-              updated.resource.kind === "baseline" ? updated.resource.id : "",
-          });
-        } catch (error) {
-          const failure = planError(error);
-          const result = new Error(
-            failure.conflict ? t("delivery.conflict") : failure.message,
-          );
-          result.name = failure.conflict ? "DeliveryConflict" : "Error";
-          throw result;
-        }
-      },
-      loadLatest: async () => {
-        latest = await fetchDeliveryProgress(projectId, {
-          ...frozenRoute,
-          baselineId: "",
-        });
-        return {
-          version: latest.version,
-          items: [
-            { label: tr("freezeScope"), value: latest.scope.label },
-            {
-              label: tr("taskCount"),
-              value: String(latest.current.task_ids.length),
-            },
-            {
-              label: tr("tasks"),
-              value:
-                latest.current.tasks
-                  .map(
-                    (task) =>
-                      `${task.title} (${task.id}) · ${identity(memberRefs.members, task.owner_id)} · ${task.estimate || "—"} · ${task.starts_on || "—"} → ${task.ends_on || "—"}`,
-                  )
-                  .join("\n") || tr("noTasks"),
-            },
-          ],
-        };
-      },
-      adoptVersion: (version) => {
-        if (latest) pinned = latest;
-        intent = { version, key: crypto.randomUUID() };
-        setEditor((current) =>
-          current ? { ...current, hint: freezeHint(pinned) } : current,
-        );
-      },
+    void qc.invalidateQueries({
+      queryKey: ["delivery-progress-baselines", projectId, sessionId],
     });
+    if (ack.action === "baseline.create" && ack.resource.kind === "baseline")
+      changeRoute({
+        baselineId: ack.resource.id,
+        catalogueOpen: false,
+        baselineDetail: false,
+        observationId: "",
+      });
+    void query.refetch();
   };
-  const openObservation = useCallback(
-    (id: string) => changeRoute({ observationId: id }),
-    [changeRoute],
-  );
-  const openCurrentTask = (target: DeliveryInboxTarget) => {
-    onOpenTask(target);
+  const childPending = (identity: string, value: boolean) => {
+    pending.current.set(identity, value);
+    setBlocked([...pending.current.values()].some(Boolean));
+    onPending?.(identity, value);
   };
   return (
     <div className="delivery-progress-page">
@@ -333,54 +173,40 @@ export function DeliveryProgress({
           <h2>{tr("title")}</h2>
           <p className="delivery-hint">{tr("subtitle")}</p>
         </div>
-        <div className="delivery-actions">
-          <Tooltip title={tr("recordHint")}>
-            <Button
-              icon={<Camera size={15} />}
-              loading={busy}
-              disabled={
-                !workspace.permissions.write ||
-                !data ||
-                Boolean(rangeProblem || scopeProblem)
-              }
-              onClick={() => void record()}
-            >
-              {tr("record")}
-            </Button>
-          </Tooltip>
-          <Button
-            type="primary"
-            icon={<LockKeyhole size={15} />}
-            disabled={
-              !workspace.permissions.approve ||
-              !data ||
-              Boolean(rangeProblem || scopeProblem)
-            }
-            onClick={freeze}
-          >
-            {tr("freeze")}
-          </Button>
-          <Button
-            aria-label={tr("refresh")}
-            icon={<RefreshCw size={15} />}
-            loading={query.isFetching}
-            onClick={refresh}
-            disabled={Boolean(rangeProblem || scopeProblem)}
-          />
-        </div>
+        <Button
+          disabled={blocked || Boolean(rangeProblem || scopeProblem)}
+          loading={query.isFetching}
+          onClick={refresh}
+        >
+          {tr("refresh")}
+        </Button>
       </div>
+      <DeliveryProgressCommands
+        projectId={projectId}
+        route={route}
+        data={data}
+        canWrite={workspace.permissions.write}
+        canApprove={workspace.permissions.approve}
+        unavailable={unavailable}
+        onSaved={saved}
+        onRefresh={refresh}
+        onPending={childPending}
+      />
       <div className="delivery-progress-filters">
         <label>
           <span>{tr("scope")}</span>
           <Select
             aria-label={tr("scope")}
             value={route.scope}
+            disabled={blocked}
             onChange={(scope) =>
               changeRoute({
                 scope,
                 scopeId: "",
                 baselineId: "",
                 observationId: "",
+                baselineDetail: false,
+                catalogueOpen: false,
               })
             }
             options={["project", "milestone", "sprint"].map((scope) => ({
@@ -392,17 +218,20 @@ export function DeliveryProgress({
         {route.scope !== "project" && (
           <label>
             <span>{tr("chooseScope")}</span>
-            <Select
-              aria-label={tr("chooseScope")}
+            <DeliveryReferenceSelect
+              kind={route.scope}
               value={route.scopeId || undefined}
-              placeholder={tr("chooseScope")}
+              label={tr("chooseScope")}
+              disabled={blocked}
+              queryGeneration={workspace.query_generation}
               onChange={(scopeId) =>
-                changeRoute({ scopeId, baselineId: "", observationId: "" })
+                changeRoute({
+                  scopeId,
+                  baselineId: "",
+                  observationId: "",
+                  baselineDetail: false,
+                })
               }
-              options={scopeOptions.map((scope) => ({
-                value: scope.id,
-                label: scope.title,
-              }))}
             />
           </label>
         )}
@@ -412,6 +241,7 @@ export function DeliveryProgress({
             type="date"
             aria-label={tr("startsOn")}
             value={dateDraft.startsOn}
+            disabled={blocked}
             onChange={(event) =>
               progressDateChange(setDateDraft, "startsOn", event)
             }
@@ -423,92 +253,77 @@ export function DeliveryProgress({
             type="date"
             aria-label={tr("endsOn")}
             value={dateDraft.endsOn}
+            disabled={blocked}
             onChange={(event) =>
               progressDateChange(setDateDraft, "endsOn", event)
             }
           />
         </label>
         <Button
-          disabled={Boolean(dateDraftProblem)}
-          onClick={() => changeRoute({ ...dateDraft, observationId: "" })}
+          disabled={blocked || Boolean(dateDraftProblem)}
+          onClick={() =>
+            changeRoute({
+              ...dateDraft,
+              observationId: "",
+              baselineDetail: false,
+            })
+          }
         >
           {tr("applyRange")}
         </Button>
-        <label className="delivery-progress-baseline-filter">
-          <span>{tr("baseline")}</span>
-          <Select
-            aria-label={tr("baseline")}
-            value={route.baselineId}
-            onChange={(baselineId) =>
-              changeRoute({ baselineId, observationId: "" })
+        <Button
+          disabled={blocked || Boolean(scopeProblem)}
+          onClick={() => changeRoute({ catalogueOpen: true })}
+        >
+          {t("deliveryProgress.bounded.catalogue")}
+        </Button>
+        {route.baselineId && (
+          <Button
+            disabled={blocked}
+            onClick={() =>
+              changeRoute({ baselineId: "", baselineDetail: false })
             }
-            options={[
-              { value: "", label: tr("noBaseline") },
-              ...(data?.baselines || []).map((baseline) => ({
-                value: baseline.id,
-                label: baseline.title,
-              })),
-            ]}
-          />
-        </label>
-        <div className="delivery-progress-presets">
-          {[14, 30, 90].map((count) => (
-            <Button
-              size="small"
-              key={count}
-              onClick={() => {
-                const endsOn = defaultProgressRange().endsOn;
-                const startsOn = new Date(
-                  Date.parse(`${endsOn}T00:00:00Z`) - (count - 1) * 86400000,
+          >
+            {tr("noBaseline")}
+          </Button>
+        )}
+      </div>
+      <div className="delivery-progress-presets">
+        {[14, 30, 90].map((count) => (
+          <Button
+            size="small"
+            key={count}
+            disabled={blocked}
+            onClick={() => {
+              const endsOn = defaultProgressRange().endsOn;
+              changeRoute({
+                startsOn: new Date(
+                  Date.parse(endsOn + "T00:00:00Z") - (count - 1) * 86400000,
                 )
                   .toISOString()
-                  .slice(0, 10);
-                changeRoute({ startsOn, endsOn, observationId: "" });
-              }}
-            >
-              {tr("recentDays", { count })}
-            </Button>
-          ))}
-        </div>
+                  .slice(0, 10),
+                endsOn,
+                observationId: "",
+                baselineDetail: false,
+              });
+            }}
+          >
+            {tr("recentDays", { count })}
+          </Button>
+        ))}
       </div>
       {dateDraftProblem && (
-        <Alert type="warning" showIcon title={tr(dateDraftProblem)} />
+        <Alert type="warning" title={tr(dateDraftProblem)} />
       )}
-      {rangeProblem && <Alert type="error" showIcon title={tr(rangeProblem)} />}
-      {scopeProblem && (
-        <Alert type="info" showIcon title={tr("missingScope")} />
-      )}
+      {rangeProblem && <Alert type="error" title={tr(rangeProblem)} />}
+      {scopeProblem && <Alert type="info" title={tr("missingScope")} />}
       {query.error && (
-        <Alert
-          type="error"
-          showIcon
-          title={tr(data ? "stale" : "readFailed")}
-          description={query.error.message}
-          action={<Button onClick={refresh}>{tr("refresh")}</Button>}
-        />
-      )}
-      {actionError && (
-        <Alert
-          type="error"
-          showIcon
-          title={actionError}
-          closable
-          onClose={() => setActionError("")}
-        />
-      )}
-      {recorded && (
-        <Alert
-          type="success"
-          showIcon
-          title={tr("recordSuccess")}
-          closable
-          onClose={() => setRecorded(false)}
-        />
+        <DeliveryQueryError error={query.error} onRetry={refresh} />
       )}
       {query.isPending && !rangeProblem && !scopeProblem && (
         <Skeleton active paragraph={{ rows: 7 }} />
       )}
-      {data && !rangeProblem && !scopeProblem && (
+      {data && (
         <>
           <div className="delivery-progress-coverage">
             <span>
@@ -530,7 +345,7 @@ export function DeliveryProgress({
             </small>
             <Tag>UTC</Tag>
           </div>
-          <div className="delivery-progress-current">
+          <section className="delivery-progress-current">
             <div className="delivery-section-heading">
               <h3>{tr("current")}</h3>
               <small>
@@ -539,16 +354,14 @@ export function DeliveryProgress({
               </small>
             </div>
             <div className="delivery-progress-metrics">
-              {(
-                [
-                  ["total", data.current.metrics.tasks_total],
-                  ["verified", data.current.metrics.verified_completed],
-                  ["remaining", data.current.metrics.remaining],
-                  ["review", data.current.metrics.awaiting_review],
-                ] as const
-              ).map(([label, value]) => (
+              {[
+                ["total", data.current.metrics.tasks_total],
+                ["verified", data.current.metrics.verified_completed],
+                ["remaining", data.current.metrics.remaining],
+                ["review", data.current.metrics.awaiting_review],
+              ].map(([label, value]) => (
                 <div key={label}>
-                  <span>{tr(label)}</span>
+                  <span>{tr(String(label))}</span>
                   <strong>{value}</strong>
                 </div>
               ))}
@@ -559,97 +372,135 @@ export function DeliveryProgress({
               {data.current.metrics.requirements_accepted}/
               {data.current.metrics.requirements_total} · {tr("recordedHint")}
             </p>
-          </div>
+          </section>
           {!data.coverage.observed_days.length && (
             <Alert
               type="info"
-              showIcon
               title={tr("noHistory")}
               description={tr("noHistoryHint")}
             />
           )}
           <p className="delivery-hint">{tr("gapHint")}</p>
-          <DeliveryProgressCharts data={data} onOpen={openObservation} />
+          <DeliveryProgressCharts
+            data={data}
+            onOpen={(id) =>
+              changeRoute({ observationId: id, baselineDetail: false })
+            }
+          />
           {data.baseline && (
             <section className="delivery-panel delivery-progress-baseline">
               <div className="delivery-section-heading">
                 <div>
-                  <Tag icon={<LockKeyhole size={11} />}>{tr("immutable")}</Tag>
+                  <Tag>{tr("immutable")}</Tag>
                   <h2>{data.baseline.title}</h2>
                 </div>
                 <Button
-                  size="small"
-                  disabled={!workspace.permissions.approve}
-                  onClick={freeze}
+                  disabled={blocked}
+                  onClick={() =>
+                    changeRoute({ baselineDetail: true, observationId: "" })
+                  }
                 >
-                  {tr("replan")}
+                  {t("deliveryProgress.bounded.viewBaseline")}
                 </Button>
               </div>
               <p>
-                {tr("frozenCount", { count: data.baseline.task_ids.length })} ·{" "}
-                {data.baseline.scope.label} · {data.baseline.starts_on || "—"} →{" "}
-                {data.baseline.ends_on || "—"}
+                {tr("frozenCount", { count: data.baseline.task_count ?? "—" })}{" "}
+                · {data.baseline.scope.label} · {data.baseline.starts_on || "—"}{" "}
+                → {data.baseline.ends_on || "—"}
               </p>
               <small>
-                {tr("createdBy")}:{" "}
-                {memberRefs.members.find(
-                  (member) => member.id === `user:${data.baseline!.created_by}`,
-                )?.name || data.baseline.created_by}{" "}
-                · {tr("createdAt")}:{" "}
+                {tr("createdAt")}:{" "}
                 {progressDateTime(data.baseline.created_at, i18n.language)} UTC
                 · {tr("sourceVersion")}: {data.baseline.source_version}
               </small>
               {data.baseline.note && (
                 <p className="delivery-description">{data.baseline.note}</p>
               )}
-              {data.comparison && (
-                <DeliveryProgressComparison
-                  members={memberRefs.members}
-                  comparison={data.comparison}
-                  onOpenTask={openCurrentTask}
-                />
-              )}
+              <DeliveryProgressComparisonBrowser
+                projectId={projectId}
+                sessionId={sessionId}
+                baselineId={data.baseline.id}
+                generation={data.query_generation}
+                disabled={blocked}
+                onOpenTask={onOpenTask}
+              />
             </section>
           )}
-          <DeliveryProgressHistory data={data} onOpen={openObservation} />
+          <DeliveryProgressHistory
+            data={data}
+            onOpen={(id) =>
+              changeRoute({ observationId: id, baselineDetail: false })
+            }
+          />
         </>
       )}
       <Drawer
-        open={Boolean(route.observationId)}
-        onClose={() => changeRoute({ observationId: "" })}
-        title={tr("history")}
-        width={660}
-        className="delivery-inspector delivery-progress-drawer"
+        open={Boolean(route.catalogueOpen)}
+        title={t("deliveryProgress.bounded.catalogue")}
+        size="min(760px, 100vw)"
         destroyOnHidden
+        closable={!blocked}
+        maskClosable={!blocked}
+        keyboard={!blocked}
+        onClose={() => changeRoute({ catalogueOpen: false })}
+        className="delivery-inspector delivery-progress-drawer"
       >
-        {observation.isPending && <Skeleton active />}
-        {observation.error && (
-          <Alert
-            type="error"
-            showIcon
-            title={tr("observationFailed")}
-            description={observation.error.message}
-            action={
-              <Button onClick={() => void observation.refetch()}>
-                {tr("refresh")}
-              </Button>
+        {route.catalogueOpen && (
+          <DeliveryProgressBaselineCatalogue
+            key={`${projectId}:${sessionId}:${route.scope}:${route.scopeId}`}
+            projectId={projectId}
+            sessionId={sessionId}
+            route={route}
+            disabled={blocked}
+            onSelect={(id, view) =>
+              changeRoute({
+                baselineId: id,
+                baselineDetail: view,
+                observationId: "",
+                catalogueOpen: false,
+              })
             }
           />
         )}
-        {observation.data && (
-          <DeliveryProgressSnapshot
-            observation={observation.data}
-            onOpenTask={openCurrentTask}
-          />
-        )}
       </Drawer>
-      {editor && (
-        <DeliveryEditor spec={editor} onClose={() => setEditor(null)} />
-      )}
+      <Drawer
+        open={Boolean(requestedSource)}
+        title={tr(route.baselineDetail ? "baseline" : "history")}
+        size="min(760px, 100vw)"
+        destroyOnHidden
+        closable={!blocked}
+        maskClosable={!blocked}
+        keyboard={!blocked}
+        afterOpenChange={inspector.afterOpenChange}
+        onClose={() =>
+          changeRoute({ observationId: "", baselineDetail: false })
+        }
+        className="delivery-inspector delivery-progress-drawer"
+      >
+        {inspector.displayId &&
+          !/^HTTP 403:/.test(
+            String(
+              query.error instanceof Error
+                ? query.error.message
+                : query.error || "",
+            ),
+          ) && (
+            <DeliveryProgressSnapshotBrowser
+              key={`${projectId}:${sessionId}:${sourceKind}:${inspector.displayId}:${route.scope}:${route.scopeId}`}
+              projectId={projectId}
+              sessionId={sessionId}
+              sourceKind={sourceKind}
+              sourceId={inspector.displayId}
+              route={route}
+              disabled={blocked}
+              generation={workspace.query_generation}
+              onOpenTask={onOpenTask}
+            />
+          )}
+      </Drawer>
     </div>
   );
 }
-
 export function DeliveryProgressSummary({
   projectId,
   sessionId,

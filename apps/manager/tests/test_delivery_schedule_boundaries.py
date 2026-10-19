@@ -15,6 +15,19 @@ env = delivery_env
 bridge = delivery_bridge
 
 
+def observed_task(client, task_id):
+    series = client.get("/api/v1/delivery/progress")
+    assert series.status_code == 200, series.text
+    observation_id = next(
+        day["observation_id"] for day in reversed(series.json()["days"]) if day["observation_id"]
+    )
+    exact = client.get(f"/api/v1/delivery/progress/observations/{observation_id}/tasks/{task_id}")
+    assert exact.status_code == 200, exact.text
+    assert exact.json()["source_id"] == observation_id
+    assert exact.json()["item"]["id"] == task_id
+    return exact.json()["item"]
+
+
 @pytest.mark.parametrize("value", [86400, "86400", "2026-10-19T00:00:00Z"])
 @pytest.mark.parametrize("entry", ["update", "create", "plan"])
 def test_all_task_date_inputs_reject_epoch_numbers_and_timestamps_before_any_write(env, entry, value):
@@ -106,9 +119,9 @@ def test_schedule_and_progress_consume_the_same_effective_blocked_state(env, kin
             workspace.data = data
             db.commit()
     scheduled = next(t for t in schedule(client).json()["tasks"] if t["id"] == work["id"])
-    progress = next(
-        t for t in client.get("/api/v1/delivery/progress").json()["current"]["tasks"] if t["id"] == work["id"]
-    )
+    proof = client.get("/api/v1/delivery/progress/freeze-proof").json()
+    progress = observed_task(client, work["id"])
+    assert proof["complete"] and proof["metrics"]["status_counts"]["blocked"] >= 1
     assert scheduled["delivery_status"] == progress["status"] == "blocked"
 
 
@@ -127,7 +140,7 @@ def test_schedule_requires_the_same_current_native_review_evidence_as_progress(b
         workspace.data = data
         db.commit()
     scheduled = next(t for t in schedule(client).json()["tasks"] if t["id"] == work["id"])
-    progress = next(
-        t for t in client.get("/api/v1/delivery/progress").json()["current"]["tasks"] if t["id"] == work["id"]
-    )
+    proof = client.get("/api/v1/delivery/progress/freeze-proof").json()
+    progress = observed_task(client, work["id"])
+    assert proof["complete"] and proof["metrics"]["status_counts"]["in_progress"] >= 1
     assert scheduled["delivery_status"] == progress["status"] == "in_progress"

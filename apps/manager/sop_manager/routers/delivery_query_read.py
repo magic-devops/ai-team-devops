@@ -139,6 +139,7 @@ def _filters(query, model, filters, *, omit_stage=False):
         "priority": getattr(model, "priority", None),
         "owner_id": fact.owner_id,
         "milestone_id": fact.milestone_id,
+        "sprint_id": getattr(model, "sprint_id", None),
         "stage": fact.status,
         "status": fact.status,
         "severity": getattr(model, "severity", None),

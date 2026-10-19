@@ -571,6 +571,7 @@ def test_runtime_reference_redacts_current_acl_and_original_replay_requires_orig
         record_adoption_links,
         validate_source_reference,
     )
+    from sop_manager.routers.delivery_query_index import SCHEMA_VERSION
     from sqlalchemy import insert
 
     client, sessions, actor = env
@@ -603,7 +604,7 @@ def test_runtime_reference_redacts_current_acl_and_original_replay_requires_orig
             insert(m.DeliveryQueryState).values(
                 tenant_id="tenant",
                 project_id="project",
-                schema_version=4,
+                schema_version=SCHEMA_VERSION,
                 generation=1,
                 source_version=0,
                 computed_at=datetime.utcnow(),

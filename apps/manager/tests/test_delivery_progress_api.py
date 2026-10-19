@@ -72,8 +72,11 @@ def _observe(db, public_id, at, facts=None, project_id="project", tenant_id="ten
         fingerprint=public_id,
         data=facts or _facts(),
     )
-    db.add(row)
-    db.flush()
+    from sop_manager.project_write_guard import progress_snapshot_write_scope
+
+    with progress_snapshot_write_scope(db, tenant_id, project_id, "observation"):
+        db.add(row)
+        db.flush()
     return row
 
 
@@ -81,7 +84,7 @@ def test_progress_get_is_pure_and_has_no_manufactured_initial_history(env):
     client, sessions, _ = env
     with sessions() as db:
         # Simulate a pre-existing project whose history predates this feature.
-        db.query(_models()[0]).filter_by(tenant_id="tenant", project_id="project").delete()
+        db.connection().execute(_models()[0].__table__.delete().where(_models()[0].tenant_id == "tenant", _models()[0].project_id == "project"))
         db.commit()
         before = {model: db.query(model).count() for model in (*_models(), DeliveryWorkspace, DeliveryEvent, DeliveryReceipt)}
     response = client.get("/api/v1/delivery/progress")
@@ -92,7 +95,7 @@ def test_progress_get_is_pure_and_has_no_manufactured_initial_history(env):
     assert body["current"]["metrics"]["tasks_total"] == 0
     assert len(body["days"]) == 30 and all(point["metrics"] is None for point in body["days"])
     assert body["coverage"]["first_observed_at"] is None
-    assert body["baselines"] == [] and body["baseline"] is None and body["ideal"] == []
+    assert "baselines" not in body and body["baseline"] is None and body["ideal"] == []
     with sessions() as db:
         for model in (*_models(), DeliveryWorkspace, DeliveryEvent, DeliveryReceipt):
             assert db.query(model).filter_by(tenant_id="tenant", project_id="project").count() == 0
@@ -104,7 +107,7 @@ def test_daily_series_selects_latest_actual_observation_and_retains_gaps(env):
     today = datetime.now(timezone.utc).date()
     first = today - timedelta(days=2)
     with sessions() as db:
-        db.query(_models()[0]).filter_by(tenant_id="tenant", project_id="project").delete()
+        db.connection().execute(_models()[0].__table__.delete().where(_models()[0].tenant_id == "tenant", _models()[0].project_id == "project"))
         _observe(db, "observation-first", datetime.combine(first, datetime.min.time()), _facts("First"))
         _observe(
             db,
@@ -126,7 +129,7 @@ def test_daily_series_selects_latest_actual_observation_and_retains_gaps(env):
     assert body["coverage"]["observed_days"] == [first.isoformat()]
     assert body["coverage"]["missing_days"] == [(today - timedelta(days=1)).isoformat(), today.isoformat()]
     assert body["coverage"]["future_days"] == [(today + timedelta(days=1)).isoformat()]
-    assert body["current"]["tasks"] == []
+    assert body["current"]["metrics"]["tasks_total"] == 0
 
 
 def test_history_is_independent_of_two_hundred_event_window_and_tie_uses_sequence(env):
@@ -140,8 +143,8 @@ def test_history_is_independent_of_two_hundred_event_window_and_tie_uses_sequenc
         "/api/v1/delivery/progress", params={"starts_on": "2026-01-01", "ends_on": "2026-01-01"}
     ).json()
     assert body["days"][0]["observation_id"] == "observation-204"
-    detail = client.get("/api/v1/delivery/progress/observations/observation-0")
-    assert detail.status_code == 200 and detail.json()["current"]["tasks"][0]["title"] == "Task 0"
+    detail = client.get("/api/v1/delivery/progress/observations/observation-0/tasks/TASK-history")
+    assert detail.status_code == 200 and detail.json()["item"]["title"] == "Task 0"
 
 
 def test_observation_scope_uses_frozen_facts_even_after_scope_deleted(env):
@@ -154,8 +157,9 @@ def test_observation_scope_uses_frozen_facts_even_after_scope_deleted(env):
         params={"scope": "milestone", "scope_id": "milestone-history"},
     )
     assert result.status_code == 200, result.text
-    assert result.json()["scope"]["label"] == "Deleted milestone"
-    assert result.json()["current"]["task_ids"] == ["TASK-history"]
+    assert result.json()["observation"]["scope"]["label"] == "Deleted milestone"
+    page = client.get("/api/v1/delivery/progress/observations/observation-deleted-scope/tasks", params={"scope": "milestone", "scope_id": "milestone-history"})
+    assert [item["id"] for item in page.json()["items"]] == ["TASK-history"]
     assert (
         client.get("/api/v1/delivery/progress?scope=milestone&scope_id=milestone-history").status_code == 404
     )
@@ -237,7 +241,8 @@ def test_current_task_facts_use_real_business_rows(env):
     )
     assert created.status_code == 200
     body = client.get("/api/v1/delivery/progress").json()
-    assert body["current"]["tasks"][0]["title"] == "Current task"
+    task_page = client.get("/api/v1/delivery/tasks").json()
+    assert task_page["items"][0]["title"] == "Current task"
     assert body["current"]["metrics"]["tasks_total"] == 1
     assert body["current"]["metrics"]["verified_completed"] == 0
 
@@ -265,8 +270,12 @@ def test_missing_legacy_estimate_remains_missing_in_live_and_frozen_facts(env):
         db.commit()
     response = client.get("/api/v1/delivery/progress")
     assert response.status_code == 200, response.text
-    current = response.json()["current"]
-    assert current["tasks"][0]["estimate"] is None
+    current = client.get("/api/v1/delivery/progress/freeze-proof").json()
+    with sessions() as db:
+        observation = _models()[0]
+        identity = db.query(observation.id).order_by(observation.seq.desc()).first()[0]
+    exact = client.get(f"/api/v1/delivery/progress/observations/{identity}/tasks/TASK-no-estimate")
+    assert exact.json()["item"]["estimate"] is None
     frozen = command(
         client,
         "baseline.create",

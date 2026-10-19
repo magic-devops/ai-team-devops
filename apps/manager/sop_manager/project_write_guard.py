@@ -161,6 +161,13 @@ def issue_origin_rebuild_scope(db, tenant_id, project_id):
     return _scope(db, tenant_id, project_id, "issue_origin_rebuild")
 
 
+def progress_snapshot_write_scope(db, tenant_id, project_id, kind):
+    """Only actual capture and baseline commands may append fixed originals."""
+    if kind not in {"observation", "baseline"}:
+        raise ValueError("Unknown progress snapshot kind")
+    return _scope(db, tenant_id, project_id, "progress_" + kind)
+
+
 def in_lifecycle_scope(db, tenant_id, project_id):
     return _permission(db, (str(tenant_id), str(project_id)), "lifecycle") is not None
 
@@ -482,6 +489,12 @@ def _check_write(db, table, operation, old, values, *, user_cascade=False):
             return
         if not _restricted_write(db, table, scope, operation, old, values):
             _deny("project_archived", "Archived projects are read-only; restore the project before editing")
+    snapshots = {"delivery_progress_observations": "observation", "delivery_progress_baselines": "baseline"}
+    if table.name in snapshots:
+        if operation != "insert":
+            _deny("progress_snapshot_immutable", "Progress observations and baselines are append-only")
+        if not _permission(db, scope, "progress_" + snapshots[table.name]):
+            _deny("progress_snapshot_command_required", "Only actual progress capture or baseline commands may append snapshots")
 
 
 def _scoped(table):

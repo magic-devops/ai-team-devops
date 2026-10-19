@@ -99,7 +99,7 @@ def capture_facts(db, project):
     return evaluate_project(db, project).facts
 
 
-def _facts_from_evaluation(db, project, snapshot, verification):
+def _facts_from_evaluation(db, project, snapshot, verification, *, scopes=None):
     task_groups, issue_groups = defaultdict(list), defaultdict(list)
     for task in snapshot["tasks"]:
         task_groups[task["req_id"]].append(task)
@@ -140,7 +140,7 @@ def _facts_from_evaluation(db, project, snapshot, verification):
             {
                 "id": task["id"],
                 "title": task["title"],
-                "req_id": task["req_id"],
+                "req_id": task["req_id"] or "",
                 "sprint_id": task.get("sprint_id") or "",
                 "milestone_id": flow.get("milestone_id", ""),
                 "owner_id": task.get("owner_id") or "",
@@ -171,7 +171,7 @@ def _facts_from_evaluation(db, project, snapshot, verification):
         )
     sprints = [
         {"id": s.id, "title": s.goal or s.id, "starts_on": _date(s.started_at), "ends_on": _date(s.ends_at)}
-        for s in records(db, Sprint, project).order_by(Sprint.id).all()
+        for s in (records(db, Sprint, project).order_by(Sprint.id).all() if scopes is None else [])
     ]
     milestones = [
         {
@@ -191,7 +191,7 @@ def _facts_from_evaluation(db, project, snapshot, verification):
         },
         "tasks": tasks,
         "requirements": requirements,
-        "scopes": {"milestones": milestones, "sprints": sprints},
+        "scopes": scopes if scopes is not None else {"milestones": milestones, "sprints": sprints},
     }
 
 

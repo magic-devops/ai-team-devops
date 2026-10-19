@@ -60,12 +60,15 @@ export function DeliveryRequirementHistory({
     retry: false,
   });
   const data =
+    !(query.isError && /^HTTP (403|404):/.test(query.error?.message || "")) &&
     query.data?.project_id === projectId &&
     query.data.requirement_id === requirement.id
       ? query.data
       : undefined;
   const selected =
     route.versionId &&
+    !(query.isError && /^HTTP 403:/.test(query.error?.message || "")) &&
+    !(exact.isError && /^HTTP (403|404):/.test(exact.error?.message || "")) &&
     exact.data?.project_id === projectId &&
     exact.data.requirement_id === requirement.id &&
     exact.data.item.id === route.versionId

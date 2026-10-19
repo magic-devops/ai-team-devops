@@ -464,11 +464,25 @@ function ProjectDelivery() {
     return () => cancelAnimationFrame(frame);
   }, [selectedId, selectedTaskId, detailTab]);
   const retainedRequirement = useRef<RequirementDetail>();
-  if (retainedRequirement.current?.requirement.id !== selectedId)
+  const detailDenied =
+    detailQuery.isError &&
+    /^HTTP (403|404):/.test(detailQuery.error?.message || "");
+  if (
+    detailDenied ||
+    retainedRequirement.current?.requirement.id !== selectedId
+  )
     retainedRequirement.current = undefined;
-  if (detailQuery.data?.requirement.id === selectedId)
+  if (
+    !detailQuery.isError &&
+    !detailQuery.isPending &&
+    detailQuery.data?.project_id === projectId &&
+    detailQuery.data.requirement.id === selectedId
+  )
     retainedRequirement.current = detailQuery.data;
-  const selected = retainedRequirement.current?.requirement;
+  const selected =
+    !detailDenied && originScope.current === sessionSnapshot()
+      ? retainedRequirement.current?.requirement
+      : undefined;
   const selectedOwner = useQuery({
     queryKey: [
       "delivery-requirement-owner",
@@ -1182,6 +1196,9 @@ function ProjectDelivery() {
           workspace={data}
           onWorkspace={saveWorkspace}
           onOpenTask={openTarget}
+          onPending={(identity, pending) =>
+            executionPending(`progress:${identity}`, pending)
+          }
         />
       )}
       {view === "inbox" && (

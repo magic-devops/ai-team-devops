@@ -294,7 +294,8 @@ def test_owner_display_rename_preserves_planning_and_progress_baseline_scope(env
         db.get(User, "lead").username = "Changed display name"
         db.commit()
     assert client.get("/api/v1/delivery/workspace").json()["planning_basis"] == before
-    assert client.get("/api/v1/delivery/progress").json()["current"]["basis"] == payload["basis"]
+    proof = client.get("/api/v1/delivery/progress/freeze-proof").json()
+    assert proof["complete"] and proof["basis"] == payload["basis"]
     accepted = command(client, "baseline.create", payload)
     assert accepted.status_code == 200, accepted.text
 

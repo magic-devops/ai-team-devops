@@ -147,8 +147,11 @@ def record_observation(
         fingerprint=fingerprint,
         data=facts,
     )
-    db.add(row)
-    db.flush()
+    from sop_manager.project_write_guard import progress_snapshot_write_scope
+
+    with progress_snapshot_write_scope(db, project.tenant_id, project.id, "observation"):
+        db.add(row)
+        db.flush()
     recorded[key] = fingerprint
     return row
 

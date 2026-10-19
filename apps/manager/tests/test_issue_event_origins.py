@@ -227,7 +227,7 @@ def test_explicit_rebuild_repairs_only_verified_origins_in_archived_projects(env
     assert table_snapshot(sessions) == before
     rebuilt = client.post("/api/v1/delivery/query/rebuild")
     assert rebuilt.status_code == 200, rebuilt.text
-    assert rebuilt.json()["query_state"]["schema_version"] == 4
+    assert rebuilt.json()["query_state"]["schema_version"] == 5
     assert rebuilt.json()["origin_rebuild"] == {"added": 1, "existing": 0, "skipped": 0}
     after = table_snapshot(sessions)
     for table in before:

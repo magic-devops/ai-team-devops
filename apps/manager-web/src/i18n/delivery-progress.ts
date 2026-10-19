@@ -438,4 +438,164 @@ const ja: typeof zh = {
     recorded_status: "記録状態",
   },
 };
-export const progressTranslations = { "zh-CN": zh, "en-US": en, "ja-JP": ja };
+const boundedRows = [
+  [
+    "proofRequired",
+    "Read the complete scope proof again before freezing this plan.",
+    "请重新读取完整范围证明，再冻结此计划。",
+    "計画を凍結する前に、全範囲の証明を再取得してください。",
+  ],
+  ["notCaptured", "Not captured", "未捕获", "未記録"],
+  ["taskId", "Task ID", "任务 ID", "タスク ID"],
+  ["catalogue", "Baseline catalogue", "基线目录", "基準計画の一覧"],
+  [
+    "catalogueHint",
+    "Select an exact frozen plan. Pages do not change the plan or comparison totals.",
+    "明确选择原固定计划，目录分页不会改变计划或比较总量。",
+    "固定した計画を明示的に選択します。ページで計画や比較の合計は変わりません。",
+  ],
+  ["useBaseline", "Use this baseline", "使用此基线", "この基準を使用"],
+  ["viewBaseline", "View frozen plan", "查看固定原计划", "固定した計画を見る"],
+  [
+    "noBaselines",
+    "No baselines in this scope",
+    "此范围暂无基线",
+    "この範囲には基準計画がありません",
+  ],
+  ["requirements", "Requirements", "需求", "要件"],
+  [
+    "readFailed",
+    "This exact read is unavailable",
+    "无法读取此指定记录",
+    "指定の記録を読み取れません",
+  ],
+  ["pagination", "Detail pages", "明细分页", "詳細のページ"],
+  [
+    "pageCount",
+    "Page {{page}} · {{count}} of {{total}}",
+    "第 {{page}} 页 · 本页 {{count}} / 共 {{total}} 条",
+    "{{page}} ページ · {{total}} 件中 {{count}} 件",
+  ],
+  ["first", "First page", "首页", "最初のページ"],
+  ["next", "Next page", "下一页", "次のページ"],
+  [
+    "openOriginalItem",
+    "Read exact frozen item",
+    "读取指定原项",
+    "指定の固定項目を読む",
+  ],
+  [
+    "openCurrentRequirement",
+    "Open current requirement",
+    "打开当前需求",
+    "現在の要件を開く",
+  ],
+  [
+    "frozenRequirement",
+    "Frozen revision {{revision}} · stage {{stage}}",
+    "固定修订 {{revision}} · 阶段 {{stage}}",
+    "固定リビジョン {{revision}} · 段階 {{stage}}",
+  ],
+  ["incomplete", "Uncaptured fields", "历史字段不完整", "記録されていない項目"],
+  [
+    "diffHint",
+    "Totals cover the entire comparison. Changed and uncaptured fields can overlap. Open a category to read its page.",
+    "总数覆盖完整比较，变更与历史字段不完整可以重叠。选择分类后再读取该页。",
+    "合計は比較全体の値です。変更と未記録項目は重なる場合があります。分類を選択するとページを読み込みます。",
+  ],
+  [
+    "openDifference",
+    "Read exact difference",
+    "读取指定差异",
+    "指定の差分を読む",
+  ],
+  [
+    "recordUnknown",
+    "Observation request result is unknown",
+    "记录观察的请求结果未知",
+    "観測記録リクエストの結果が不明です",
+  ],
+  [
+    "originalLocked",
+    "The original body, version and request key are retained. Retry the original request; changing scope or starting a replacement is blocked.",
+    "原正文、版本和请求键已保留。请重试原请求，当前不能换范围或另发替代请求。",
+    "元の本文、バージョン、リクエストキーを保持しています。元のリクエストを再試行してください。範囲変更や代替送信はできません。",
+  ],
+  [
+    "retryOriginal",
+    "Retry original request",
+    "重试原请求",
+    "元のリクエストを再試行",
+  ],
+  [
+    "commandFailed",
+    "Request could not be confirmed",
+    "无法确认请求结果",
+    "リクエスト結果を確認できません",
+  ],
+  [
+    "readCurrent",
+    "Read current version",
+    "读取当前版本",
+    "現在のバージョンを読む",
+  ],
+  [
+    "freezeTitle",
+    "Review the complete scope and freeze",
+    "核对完整范围并冻结",
+    "範囲全体を確認して固定",
+  ],
+  [
+    "proofHint",
+    "Explicitly read the complete scope proof before freezing. A task page cannot replace the full reviewed scope. Completeness is not task acceptance.",
+    "冻结前明确读取完整范围证明。任务分页不能代替完整审核范围，证明完整不等于任务已验收。",
+    "固定前に範囲全体の証明を明示的に読み込みます。タスクの1ページは全体の代わりになりません。完全性は検収を意味しません。",
+  ],
+  [
+    "unknown",
+    "Freeze request result is unknown",
+    "冻结请求结果未知",
+    "固定リクエストの結果が不明です",
+  ],
+  [
+    "readProof",
+    "Read complete scope proof",
+    "读取完整范围证明",
+    "範囲全体の証明を読む",
+  ],
+  [
+    "proofComplete",
+    "Complete scope is ready for review",
+    "完整范围已就绪，请核对",
+    "範囲全体を確認できます",
+  ],
+  [
+    "proofUnavailable",
+    "Scope proof is incomplete or over budget; freezing is unavailable",
+    "范围证明不完整或超出预算，不能冻结",
+    "証明が不完全または上限超過のため固定できません",
+  ],
+  [
+    "adoptFreshProof",
+    "Keep edits and explicitly read a new proof",
+    "保留编辑并明确重读新证明",
+    "編集を保持して新しい証明を読む",
+  ],
+  [
+    "confirmFreeze",
+    "Confirm frozen baseline",
+    "确认冻结基线",
+    "基準計画の固定を確定",
+  ],
+];
+const withBounded = (base: typeof en, language: number) => ({
+  ...base,
+  bounded: Object.fromEntries(
+    boundedRows.map((row) => [row[0], row[language + 1]]),
+  ),
+});
+export const progressTranslations = {
+  "zh-CN": withBounded(zh, 1),
+  "en-US": withBounded(en, 0),
+  "ja-JP": withBounded(ja, 2),
+};

@@ -262,8 +262,12 @@ def test_reservation_change_is_observed_and_compared_to_immutable_delivery_basel
     with sessions() as db:
         assert db.query(models.DeliveryProgressObservation).count() == observed_before + 1
         assert db.query(models.DeliveryProgressBaseline).one().data == original
-    value = client.get("/api/v1/delivery/progress", params={"baseline_id": baseline_id}).json()
-    change = value["comparison"]["changed"][0]
+    response = client.get(
+        f"/api/v1/delivery/progress/baselines/{baseline_id}/comparison/items/{work['id']}",
+        params={"kind": "changed"},
+    )
+    assert response.status_code == 200, response.text
+    change = response.json()["item"]
     assert change["fields"] == ["allocations"]
     assert change["before"]["allocations"][0]["quantity_per_day"] == 2
     assert change["after"]["allocations"][0]["quantity_per_day"] == 3

@@ -1,14 +1,13 @@
-import { Alert, Button, Empty, Tag } from "antd";
+import { Alert, Button } from "antd";
 import { useState } from "react";
 import { getProjectId } from "@/lib/authStorage";
+import { projectSessionKey } from "@/lib/projectPortfolio";
 import { fetchTaskDetail } from "@/lib/deliveryQuery";
 import { allocationSummary } from "@/lib/deliveryScheduling";
 import { useTranslation } from "react-i18next";
 import {
-  progressStates,
-  type DeliveryProgress,
-  type ProgressComparison,
-  type ProgressObservation,
+  beginProgressExactRead,
+  type ProgressSeries,
   type ProgressTask,
 } from "@/lib/deliveryProgress";
 import type { DeliveryInboxTarget } from "@/lib/delivery";
@@ -31,7 +30,7 @@ export function DeliveryProgressHistory({
   data,
   onOpen,
 }: {
-  data: DeliveryProgress;
+  data: Pick<ProgressSeries, "days" | "coverage">;
   onOpen: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -109,21 +108,34 @@ export function DeliveryProgressHistory({
   );
 }
 type TaskNavigation = {
+  projectId?: string;
   currentTasks?: { id: string; req_id: string }[];
   onOpenTask: (target: DeliveryInboxTarget) => void;
 };
-function CurrentTaskButton({
+export function CurrentTaskButton({
   task,
   onOpenTask,
-}: TaskNavigation & { task: ProgressTask }) {
+  projectId,
+}: TaskNavigation & { task: Pick<ProgressTask, "id"> }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const project = projectId || getProjectId() || "",
+    owner = projectSessionKey();
   const open = async () => {
+    if (owner !== projectSessionKey()) return;
+    const read = beginProgressExactRead();
     setBusy(true);
     setError("");
     try {
-      const detail = await fetchTaskDetail(getProjectId() || "", task.id);
+      const detail = await fetchTaskDetail(project, task.id);
+      if (
+        !read.current() ||
+        owner !== projectSessionKey() ||
+        detail.project_id !== project ||
+        detail.task.id !== task.id
+      )
+        return;
       onOpenTask({
         view: "progress",
         requirement_id: detail.task.req_id,
@@ -131,9 +143,10 @@ function CurrentTaskButton({
         detail: "tasks",
       });
     } catch (failure) {
-      setError((failure as Error).message);
+      if (read.current()) setError((failure as Error).message);
     } finally {
-      setBusy(false);
+      if (read.current()) setBusy(false);
+      read.finish();
     }
   };
   return (
@@ -145,104 +158,25 @@ function CurrentTaskButton({
     </>
   );
 }
-export function DeliveryProgressSnapshot({
-  observation,
-  currentTasks,
-  onOpenTask,
-}: TaskNavigation & { observation: ProgressObservation }) {
-  const { t, i18n } = useTranslation();
-  const tr = (key: string) => t(`deliveryProgress.${key}`);
-  return (
-    <div className="delivery-progress-snapshot">
-      <Tag>{tr("historical")}</Tag>
-      <h2>{progressDateTime(observation.observed_at, i18n.language)} UTC</h2>
-      <p className="delivery-hint">{tr("scopeReadOnly")}</p>
-      <dl className="delivery-facts">
-        <div>
-          <dt>{tr("scope")}</dt>
-          <dd>{observation.scope.label}</dd>
-        </div>
-        <div>
-          <dt>{tr("source")}</dt>
-          <dd>
-            {t(`deliveryProgress.sources.${observation.source}`, {
-              defaultValue: observation.source,
-            })}
-          </dd>
-        </div>
-        <div>
-          <dt>{tr("createdBy")}</dt>
-          <dd>{observation.actor || "—"}</dd>
-        </div>
-        <div>
-          <dt>{tr("sourceVersion")}</dt>
-          <dd>{observation.source_version}</dd>
-        </div>
-        <div>
-          <dt>{tr("taskCount")}</dt>
-          <dd>{observation.current.metrics.tasks_total}</dd>
-        </div>
-        <div>
-          <dt>{tr("verified")}</dt>
-          <dd>{observation.current.metrics.verified_completed}</dd>
-        </div>
-        <div>
-          <dt>{tr("recorded")}</dt>
-          <dd>{observation.current.metrics.recorded_completed}</dd>
-        </div>
-        <div>
-          <dt>{tr("acceptedRequirements")}</dt>
-          <dd>
-            {observation.current.metrics.requirements_accepted}/
-            {observation.current.metrics.requirements_total}
-          </dd>
-        </div>
-      </dl>
-      <div className="delivery-state-counts">
-        {progressStates.map((state) => (
-          <span key={state}>
-            <i className={`delivery-state-dot ${state}`} />
-            {tr(`states.${state}`)}{" "}
-            <b>{observation.current.metrics.status_counts[state]}</b>
-          </span>
-        ))}
-      </div>
-      <h3>{tr("historicalTask")}</h3>
-      {observation.current.tasks.length ? (
-        <div className="delivery-progress-task-list">
-          {observation.current.tasks.map((task) => (
-            <article key={task.id}>
-              <div>
-                <strong>{task.title}</strong>
-                <small>
-                  {task.id} · {task.assigned_to || "—"} · {task.estimate || "—"}
-                </small>
-                <Tag>{tr(`states.${task.status}`)}</Tag>
-              </div>
-              <CurrentTaskButton
-                task={task}
-                currentTasks={currentTasks}
-                onOpenTask={onOpenTask}
-              />
-            </article>
-          ))}
-        </div>
-      ) : (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={tr("noTasks")}
-        />
-      )}
-    </div>
-  );
-}
+type ProgressComparisonView = {
+  incomplete_plan_fields: string[];
+  added: ProgressTask[];
+  removed: ProgressTask[];
+  changed: {
+    id: string;
+    before: ProgressTask;
+    after: ProgressTask;
+    fields: string[];
+  }[];
+};
 export function DeliveryProgressComparison({
   comparison,
   currentTasks,
   onOpenTask,
+  projectId,
   members = [],
 }: TaskNavigation & {
-  comparison: ProgressComparison;
+  comparison: ProgressComparisonView;
   members?: { id: string; name: string }[];
 }) {
   const { t } = useTranslation();
@@ -252,6 +186,8 @@ export function DeliveryProgressComparison({
     if (field === "allocations")
       return allocationSummary(task.allocations, members, t);
     const value = task[field as keyof ProgressTask];
+    if (field === "estimate" && value === null)
+      return tr("bounded.notCaptured");
     if (
       [
         "acceptance_criteria",
@@ -284,7 +220,6 @@ export function DeliveryProgressComparison({
     <div className="delivery-progress-comparison">
       <div className="delivery-section-heading">
         <h3>{tr("changes")}</h3>
-        <small>{tr("unchanged", { count: comparison.unchanged_count })}</small>
       </div>
       {Boolean(comparison.incomplete_plan_fields?.length) && (
         <Alert
@@ -330,6 +265,7 @@ export function DeliveryProgressComparison({
                         </div>
                         <CurrentTaskButton
                           task={task}
+                          projectId={projectId}
                           currentTasks={currentTasks}
                           onOpenTask={onOpenTask}
                         />
@@ -420,6 +356,7 @@ export function DeliveryProgressComparison({
                     </div>
                     <CurrentTaskButton
                       task={change.after}
+                      projectId={projectId}
                       currentTasks={currentTasks}
                       onOpenTask={onOpenTask}
                     />

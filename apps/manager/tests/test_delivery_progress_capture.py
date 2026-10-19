@@ -195,7 +195,9 @@ def test_core_executemany_primary_keys_do_not_create_unrelated_project_observati
         row = models.DeliveryProgressObservation
         # An old project may have missed days. Updating another project cannot
         # manufacture a new day's checkpoint for this unrelated one.
-        db.query(row).filter_by(project_id="unrelated").update({"observed_day": "2020-01-01"})
+        # Historical fixture preparation uses a migration connection; ordinary
+        # Session writes must preserve the append-only production original.
+        db.connection().execute(update(row).where(row.tenant_id == "tenant", row.project_id == "unrelated").values(observed_day="2020-01-01"))
         db.commit()
         before = db.query(row).filter_by(project_id="unrelated").count()
         db.execute(update(models.Task), [{"id": "T-1", "status": "in_progress"}])

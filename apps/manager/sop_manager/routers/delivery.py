@@ -26,9 +26,6 @@ from .delivery_contract import (
     PAYLOADS,
     STAGES,
     Command,
-    ProgressBaselineResponse,
-    ProgressObservationResponse,
-    ProgressResponse,
     TaskPlanPreview,
     TaskReviewCurrentResponse,
     TaskReviewDetailResponse,
@@ -54,6 +51,21 @@ from .delivery_execution_runtime_contract import (
 )
 from .delivery_issue_contract import DiagnosisHistory, DiagnosisView, IssueDetail, IssueDiagnosisGenerate
 from .delivery_issue_origin_contract import IssueOriginDetail, IssueOrigins
+from .delivery_progress_contract import (
+    ComparisonKind,
+    ProgressBaselineMetadataResponse,
+    ProgressBaselinesResponse,
+    ProgressComparisonDetailResponse,
+    ProgressComparisonPageResponse,
+    ProgressComparisonSummaryResponse,
+    ProgressFreezeProofResponse,
+    ProgressObservationMetadataResponse,
+    ProgressSeriesResponse,
+    ProgressSnapshotRequirementDetail,
+    ProgressSnapshotRequirementPage,
+    ProgressSnapshotTaskDetail,
+    ProgressSnapshotTaskPage,
+)
 from .delivery_query_contract import (
     CommandAck,
     DeliveryContext,
@@ -115,6 +127,13 @@ def _project(db, user, pid):
         raise HTTPException(404, "Project not found")
     check_project_access(user, pid, db)
     return project
+
+
+def _progress_project(db, user, pid):
+    active = db.get(User, user.id, populate_existing=True)
+    if active is None or active.status != "active":
+        raise HTTPException(401, "Active identity required")
+    return _project(db, active, pid)
 
 
 def _role_permissions(db, user, project):
@@ -251,6 +270,7 @@ def delivery_task_page(
     requirement_id: str = Query("", max_length=64), q: str = Query("", max_length=200),
     status: DeliveryStatus | Literal[""] = "", priority: str = Query("", max_length=8),
     owner_id: str = Query("", max_length=100), milestone_id: str = Query("", max_length=64),
+    sprint_id: str = Query("", max_length=100),
     sort: QuerySort = "created_desc", cursor: str = Query("", max_length=4000),
     limit: int = Query(20, ge=1, le=100), project_id: str = Header(default="", alias="X-Project-Id"),
 ):
@@ -259,7 +279,7 @@ def delivery_task_page(
     if sort == "due_asc":
         raise HTTPException(422, "Task queries do not support due date sorting")
     filters = {"requirement_id": requirement_id, "q": q, "status": status, "priority": priority,
-               "owner_id": owner_id, "milestone_id": milestone_id, "sort": sort}
+               "owner_id": owner_id, "milestone_id": milestone_id, "sprint_id": sprint_id, "sort": sort}
     return entity_page(db, _project(db, user, project_id), user, "task", filters, limit=limit, cursor=cursor)
 
 
@@ -653,7 +673,7 @@ def delivery_progress_summary(
     return progress_summary(db, _project(db, user, project_id), starts_on=starts_on, ends_on=ends_on)
 
 
-@router.get("/progress", response_model=ProgressResponse)
+@router.get("/progress", response_model=ProgressSeriesResponse)
 def delivery_progress(
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_session)],
@@ -668,7 +688,7 @@ def delivery_progress(
 
     return progress(
         db,
-        _project(db, user, project_id),
+        _progress_project(db, user, project_id),
         starts_on=starts_on,
         ends_on=ends_on,
         scope=scope,
@@ -677,7 +697,7 @@ def delivery_progress(
     )
 
 
-@router.get("/progress/observations/{observation_id}", response_model=ProgressObservationResponse)
+@router.get("/progress/observations/{observation_id}", response_model=ProgressObservationMetadataResponse)
 def delivery_progress_observation(
     observation_id: str,
     user: Annotated[User, Depends(current_user)],
@@ -689,11 +709,34 @@ def delivery_progress_observation(
     from .delivery_progress_query import observation_detail
 
     return observation_detail(
-        db, _project(db, user, project_id), observation_id, scope=scope, scope_id=scope_id
+        db, _progress_project(db, user, project_id), observation_id, scope=scope, scope_id=scope_id
     )
 
 
-@router.get("/progress/baselines/{baseline_id}", response_model=ProgressBaselineResponse)
+@router.get("/progress/baselines", response_model=ProgressBaselinesResponse)
+def delivery_progress_baselines(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_query import baselines
+
+    return baselines(db, _progress_project(db, user, project_id), user, scope=scope, scope_id=scope_id, limit=limit, cursor=cursor)
+
+
+@router.get("/progress/freeze-proof", response_model=ProgressFreezeProofResponse)
+def delivery_progress_freeze_proof(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_current import freeze_proof
+
+    return freeze_proof(db, _progress_project(db, user, project_id), scope=scope, scope_id=scope_id)
+
+
+@router.get("/progress/baselines/{baseline_id}", response_model=ProgressBaselineMetadataResponse)
 def delivery_progress_baseline(
     baseline_id: str,
     user: Annotated[User, Depends(current_user)],
@@ -702,7 +745,135 @@ def delivery_progress_baseline(
 ):
     from .delivery_progress_query import baseline_detail
 
-    return baseline_detail(db, _project(db, user, project_id), baseline_id)
+    return baseline_detail(db, _progress_project(db, user, project_id), baseline_id)
+
+
+@router.get("/progress/observations/{observation_id}/tasks", response_model=ProgressSnapshotTaskPage)
+def delivery_progress_observation_tasks(
+    observation_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_json import snapshot_page
+
+    return snapshot_page(db, _progress_project(db, user, project_id), user, "observation", observation_id, "tasks",
+        limit=limit, cursor=cursor, scope=scope, scope_id=scope_id)
+
+
+@router.get("/progress/observations/{observation_id}/tasks/{task_id}", response_model=ProgressSnapshotTaskDetail)
+def delivery_progress_observation_task(
+    observation_id: str, task_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_json import snapshot_detail
+
+    return snapshot_detail(db, _progress_project(db, user, project_id), "observation", observation_id, "tasks", task_id, scope=scope, scope_id=scope_id)
+
+
+@router.get("/progress/observations/{observation_id}/requirements", response_model=ProgressSnapshotRequirementPage)
+def delivery_progress_observation_requirements(
+    observation_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_json import snapshot_page
+
+    return snapshot_page(db, _progress_project(db, user, project_id), user, "observation", observation_id, "requirements",
+        limit=limit, cursor=cursor, scope=scope, scope_id=scope_id)
+
+
+@router.get("/progress/observations/{observation_id}/requirements/{requirement_id}", response_model=ProgressSnapshotRequirementDetail)
+def delivery_progress_observation_requirement(
+    observation_id: str, requirement_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "milestone", "sprint"] = "project", scope_id: str = Query("", max_length=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_json import snapshot_detail
+
+    return snapshot_detail(db, _progress_project(db, user, project_id), "observation", observation_id, "requirements", requirement_id, scope=scope, scope_id=scope_id)
+
+
+@router.get("/progress/baselines/{baseline_id}/tasks", response_model=ProgressSnapshotTaskPage)
+def delivery_progress_baseline_tasks(
+    baseline_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_json import snapshot_page
+
+    return snapshot_page(db, _progress_project(db, user, project_id), user, "baseline", baseline_id, "tasks",
+        limit=limit, cursor=cursor)
+
+
+@router.get("/progress/baselines/{baseline_id}/tasks/{task_id}", response_model=ProgressSnapshotTaskDetail)
+def delivery_progress_baseline_task(
+    baseline_id: str, task_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_json import snapshot_detail
+
+    return snapshot_detail(db, _progress_project(db, user, project_id), "baseline", baseline_id, "tasks", task_id)
+
+
+@router.get("/progress/baselines/{baseline_id}/requirements", response_model=ProgressSnapshotRequirementPage)
+def delivery_progress_baseline_requirements(
+    baseline_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_json import snapshot_page
+
+    return snapshot_page(db, _progress_project(db, user, project_id), user, "baseline", baseline_id, "requirements",
+        limit=limit, cursor=cursor)
+
+
+@router.get("/progress/baselines/{baseline_id}/requirements/{requirement_id}", response_model=ProgressSnapshotRequirementDetail)
+def delivery_progress_baseline_requirement(
+    baseline_id: str, requirement_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_json import snapshot_detail
+
+    return snapshot_detail(db, _progress_project(db, user, project_id), "baseline", baseline_id, "requirements", requirement_id)
+
+
+@router.get("/progress/baselines/{baseline_id}/comparison", response_model=ProgressComparisonSummaryResponse)
+def delivery_progress_comparison(
+    baseline_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    query_generation: int | None = Query(None, ge=1),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_comparison import comparison_summary
+
+    return comparison_summary(db, _progress_project(db, user, project_id), baseline_id, query_generation=query_generation)
+
+
+@router.get("/progress/baselines/{baseline_id}/comparison/items", response_model=ProgressComparisonPageResponse)
+def delivery_progress_comparison_items(
+    baseline_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    kind: ComparisonKind = "changed", limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000),
+    query_generation: int | None = Query(None, ge=1),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_comparison import comparison_page
+
+    return comparison_page(db, _progress_project(db, user, project_id), user, baseline_id, kind=kind, limit=limit,
+        cursor=cursor, query_generation=query_generation)
+
+
+@router.get("/progress/baselines/{baseline_id}/comparison/items/{task_id}", response_model=ProgressComparisonDetailResponse)
+def delivery_progress_comparison_item(
+    baseline_id: str, task_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    kind: ComparisonKind = "changed", query_generation: int | None = Query(None, ge=1),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_comparison import comparison_detail
+
+    return comparison_detail(db, _progress_project(db, user, project_id), baseline_id, task_id, kind=kind,
+        query_generation=query_generation)
 
 
 @router.get("/team-runtime-bindings", response_model=TeamRuntimeBindingsResponse)
@@ -1182,6 +1353,13 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
     try:
         from .delivery_discussion_adoption import prepare_adoption, record_adoption
 
+        progress_proof = None
+        if body.action == "baseline.create":
+            from .delivery_progress_current import freeze_proof
+
+            progress_proof = freeze_proof(db, project, scope=payload.scope, scope_id=payload.scope_id, internal=True)
+            if not progress_proof[0]["available"] or not progress_proof[0]["complete"]:
+                raise HTTPException(413, {"code": "progress_proof_unavailable", "message": "The complete baseline approval exceeds its canonical proof budget", "reasons": progress_proof[0]["reasons"]})
         source = prepare_adoption(db, project, user, body, request)
         row = db.get(DeliveryWorkspace, project.id)
         if not row:
@@ -1210,8 +1388,13 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
         from .delivery_progress_capture import reserve_workspace_version
 
         reservation = reserve_workspace_version(db, project, next_version)
-        data = reconcile(db, project, row.data)
-        applied = _apply(db, project, user, data, body.action, payload, request, command_key=body.idempotency_key)
+        data = row.data if body.action == "baseline.create" else reconcile(db, project, row.data)
+        if progress_proof is not None:
+            from .delivery_progress_baseline import apply_progress
+
+            applied = apply_progress(db, project, user, body.action, payload, proof=progress_proof)
+        else:
+            applied = _apply(db, project, user, data, body.action, payload, request, command_key=body.idempotency_key)
         resource_id, before = applied[:2]
         event_data = {"before": before, "input": payload.model_dump(mode="json", exclude_unset=body.action == "project.update")}
         if body.action == "project.update" and "vector_db_config" in event_data["input"]:
@@ -1227,7 +1410,7 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
             + (list(source.runtime_scopes) if source is not None else [])
         ))
         db.flush()
-        if body.action != "project.lifecycle" and not body.action.startswith(("release.", "deployment.")):
+        if body.action not in {"project.lifecycle", "baseline.create"} and not body.action.startswith(("release.", "deployment.")):
             remember_basis(db, project, data)
         updated = db.execute(
             update(DeliveryWorkspace)

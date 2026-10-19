@@ -7,7 +7,6 @@ import {
   progressHash,
   progressRangeProblem,
   progressSeries,
-  currentProgressTaskTarget,
   preserveProgressRoute,
   fetchDeliveryProgress,
   fetchProgressObservation,
@@ -119,19 +118,7 @@ describe("durable progress navigation and series", () => {
     expect(points.states.awaiting_review).toEqual([1, null, 1, null]);
     expect(points.observations).toEqual(["first", null, "last", null]);
   });
-  it("opens only actual current task identities and leaves deleted historical tasks read only", () => {
-    const tasks = [{ id: "T & exact", req_id: "REQ/1" }];
-    expect(currentProgressTaskTarget("T & exact", tasks)).toEqual({
-      view: "progress",
-      requirement_id: "REQ/1",
-      detail: "tasks",
-      task_id: "T & exact",
-    });
-    expect(currentProgressTaskTarget("deleted", tasks)).toBeNull();
-    expect(
-      currentProgressTaskTarget("legacy", [{ id: "legacy", req_id: "" }])
-        ?.requirement_id,
-    ).toBe("");
+  it("keeps the selected historical scope while exact current task navigation closes the observation", () => {
     const historical =
       "#/dev-flow?view=progress&progress_scope=sprint&scope_id=S1&baseline_id=B1&observation_id=O1";
     const current = preserveProgressRoute(
@@ -145,11 +132,6 @@ describe("durable progress navigation and series", () => {
       observationId: "",
     });
     expect(parseProgressRoute(historical).observationId).toBe("O1");
-    expect(
-      currentProgressTaskTarget("present", [
-        { id: "present", req_id: "new-req" },
-      ])?.requirement_id,
-    ).toBe("new-req");
   });
   it("sends explicit project scope, exact URL encoded resource IDs and abort signals on all three reads", async () => {
     const signal = new AbortController().signal;
@@ -161,6 +143,20 @@ describe("durable progress navigation and series", () => {
       baselineId: "B?",
       observationId: "",
     };
+    vi.mocked(request)
+      .mockResolvedValueOnce({
+        project_id: "p-one",
+        scope: { kind: "sprint", id: "S &1", label: "Sprint" },
+        baseline: { id: "B?" },
+      })
+      .mockResolvedValueOnce({
+        project_id: "p-one",
+        observation: {
+          id: "O/&?",
+          scope: { kind: "sprint", id: "S &1", label: "Sprint" },
+        },
+      })
+      .mockResolvedValueOnce({ project_id: "p-one", baseline: { id: "B/&?" } });
     await fetchDeliveryProgress("p-one", query, signal);
     await fetchProgressObservation("p-one", "O/&?", query, signal);
     await fetchProgressBaseline("p-one", "B/&?", signal);

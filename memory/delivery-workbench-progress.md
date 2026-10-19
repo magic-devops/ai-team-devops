@@ -551,3 +551,27 @@ Web提供紧凑来源摘要、创建/修改/删除和真实producer、跨页选�
 最终实际socket HTTP4使用生产登录/权限/中间件/会话，验证成功后丢ACK、SQLite原件重开重放且业务版本仅增1，opened和结构化事件真实Issue、25来源页外规则诊断、旧依据拒绝、人审唯一需求和Issue仍open。实际编译TS来源API/精确回执返回、固定窗口、删除历史和SDK/CLI读取覆盖36表零写；自有服务已退出，外部模型调用0。早期HTTP1字段夹具错、HTTP2并行源变化、HTTP3为最后before形状修复前版本，及两轮因最终修复中断的Manager全量均保留，未计作最终通过。Web初轮815通过，恢复权限修复后使用新完整复跑。
 
 证据 `.sop-runtime/delivery-evidence/issue-origins/`。重要源、唯一文件与产物先盘点/散列保全再清理精确任务临时目录；全部本地提交和clean核对以独立commit-receipt为准，不push，.pnpm-store保持忽略和零跟踪。完整目标active，production_integration_complete=false。显式进度/基线/需求影响有界详情、generic/reflection实际处理、当前390px中英日浏览器视觉、其他数据库/生产身份/模型/基础设施及长期规模仍待完善；既有浏览器协议和12ui安装/上传审批限制不绕过。
+
+## 有界进度、固定历史与完整基线冻结（2026-10-19）
+
+阶段T-bounded-progress，基线af965c8。设计 `docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md`，使用 `docs/DELIVERY_BOUNDED_PROGRESS_GUIDE.md`。当前采用唯一的小型读取合同，删除旧整包响应及无用前端类型；原初进度设计明确标记已被当前合同替代，没有并行兼容实现。
+
+UTC真实燃尽与累计流保持完整范围指标、真实观察ID、缺失/未来空点和固定基线理想线。基线目录20/100行、原观察/基线小头、任务与需求分页/指定原项、比较摘要/分类页/指定变化分别读取。SQL投影不先装整JSON再切片；历史原件独立于当前实体和索引。目录固定原命令版本水位，当前比较固定generation；changed与incomplete可重叠，对象键序无关、数组顺序有意义。
+
+schema5派生进度事实与实际canonical求值同事务维护；GET不修复。当前事实的身份/必要计划字段严格核验，历史缺少计划字段保留unknown。独立Task的合法nullable关联在canonical进度边界规范为空字符串。正常ORM/Session Core不能伪造、修改或删除观察/基线，实际capture与命令使用精确追加能力；归档项目先统一project_archived门禁，active追加保护仍生效。
+
+显式冻结proof核全部范围、必要兄弟/前驱和真实源，10000范围任务/闭包任务/需求、64层依赖无环、16MiB总输入、1MiB单项；SQL先量实际Task/Req/计划/流程/审查/执行/成员必要输入再解码，Issue正文不参与求值便保持deferred。合法空范围可返回[]，损坏/超限不回部分basis/IDs。baseline.create在项目锁内重新求完整canonical结果，CAS后仅同事务复用该结果；旧GET不能代替提交重验，触发器失败证明基线、观察、版本和回执整事务回滚。最终真实全项目观察/查询投影写成本仍保留，未冒称整个小scope写事务已独立化。
+
+Web沿用当前主题和中英日，独立目录及按需详情支持明确项目/返回、页外选择、原件与当前实体导航。记录观察与冻结复用持久原请求控制器，双namespace同步互斥、未知结果锁定原正文/版本/键并支持重载重放；严格核实际ACK。已修实际竞争/过期输入回调、同fingerprint跨scope缓存、403/404历史及当前需求抽屉旧内容、长默认标题、日期顺序和内部错误token。Task/scope原件长度按Unicode codepoint对齐服务器，保留合法Emoji原件。
+
+最终完整Manager **1721**、Web **864/144文件**、SDKCLI **965**通过，前后339/520/130项源码/合同散列一致；TypeScript与Vite通过，36个Python变更文件Ruff指定规则通过。OpenAPI18相关路径/23schema、10个不可达旧进度schema退出，189无关路径不变、1262引用/重复键及实际输入/响应核验通过。SDK离线wheel全部12个Python文件与共享SQL原字节一致；Go源未改，本阶段未重复Go。
+
+最终真实socket `http-final2` 使用生产登录/权限/中间件/会话，243历史任务、242当前任务、25原基线夹具验证小曲线/固定原件、删除历史、目录水位、差异、部分/旧proof拒绝及SDK/CLI读取。使用具有人工批准权限的身份通过真实接口提交完整基线，以及编译生产TS控制器的两动作成功后丢ACK→重建unknown→同原件重放通过，每动作版本只增1；只读覆盖36表零写。25原目录项是从实际canonical事实生成的隔离fixture，未声称25次实际人工批准。外部模型调用0；浏览器视觉未验证。
+
+独立后端最终39探针及Web原SSR2探针同源通过，已复现问题均封卷。首轮完整Manager1711通过/10失败（六旧整包断言、两历史fixture与两归档错误优先级）保留，按新合同保留原业务语义后完整复跑；未恢复旧整包字段或放宽历史保护。HTTP dev1真实发现nullable索引失败、dev2末尾root误给tasks命令--json及初次Ruff默认行长环境不匹配均保留；HTTP final1通过但在最后guard修复前，最终仅采用final2当前源。
+
+证据 `.sop-runtime/delivery-evidence/bounded-progress/`。重要源码、唯一文件及产物先盘点散列保全，再清理精确任务临时目录，不遍历链接；清理、进程核对及全部本地提交以各独立receipt为准，不push，.pnpm-store保持忽略及零跟踪。
+
+下一需求切片的只读证据 `next-requirement-audit/REPORT.md` 已封卷：固定27任务/81条实际flow review时，当前需求头182931字节，history limit1仍装27Task及Workspace，change-preview累计57次/27唯一Task装载；精确版本不依赖当前实体。四请求全36表零写。建议拆分thin head/精确定义/版本metadata/当前五类影响页/完整变更proof，复用schema5与canonical关系，无第二需求真相；RequirementVersion专属追加保护仍是待永久RED验证的静态缺口，未声称新实现完成。
+
+完整目标继续active，production_integration_complete=false。需求当前影响/固定版本关系及变更预览的有界拆分、generic/reflection真实处理仍待完善；本轮需求部分仅定点修缓存，未冒称current impact已分页。其他数据库对这些进度SQL操作明确503，未验证PG/MySQL/MariaDB；实际390px中英日浏览器、生产身份/模型/数据库/基础设施及长期规模验证继续保留。既有浏览器协议及12ui安装/上传审批边界不绕过，SSR/控制器/HTTP/构建不代替实际视觉。

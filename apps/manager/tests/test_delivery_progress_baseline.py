@@ -19,13 +19,13 @@ def _prepare(client):
 
 
 def _payload(client, **changes):
-    progress = client.get("/api/v1/delivery/progress").json()
+    progress = client.get("/api/v1/delivery/progress/freeze-proof").json()
     return {
         "title": "Reviewed delivery plan",
         "scope": "project",
         "scope_id": "",
-        "task_ids": progress["current"]["task_ids"],
-        "basis": progress["current"]["basis"],
+        "task_ids": progress["task_ids"],
+        "basis": progress["basis"],
         "starts_on": "2026-01-01",
         "ends_on": "2026-01-03",
         "note": "Tasks, not hours",
@@ -52,13 +52,14 @@ def test_freeze_creates_immutable_plan_exact_replay_and_fixed_reference_line(env
         "/api/v1/delivery/progress",
         params={"starts_on": "2026-01-01", "ends_on": "2026-01-04", "baseline_id": baseline_id},
     ).json()
-    assert progress["baseline"]["task_ids"] == [task_id]
+    assert progress["baseline"]["task_count"] == 1
+    assert client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}/tasks/{task_id}").json()["item"]["id"] == task_id
     assert progress["ideal"] == [
         {"date": "2026-01-01", "remaining": 1.0},
         {"date": "2026-01-02", "remaining": 0.5},
         {"date": "2026-01-03", "remaining": 0.0},
     ]
-    assert progress["comparison"]["unchanged_count"] == 1
+    assert client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}/comparison").json()["counts"]["unchanged"] == 1
     assert (
         command(
             client,
@@ -159,15 +160,13 @@ def test_comparison_reports_added_removed_and_changed_without_rewriting_plan(env
     third_id = next(task["id"] for task in third.json()["tasks"] if task["id"] != task_id)
     result = client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}")
     assert result.status_code == 200, result.text
-    body = result.json()
-    assert [task["id"] for task in body["comparison"]["added"]] == [third_id]
-    assert [task["id"] for task in body["comparison"]["removed"]] == [second_id]
-    changed = body["comparison"]["changed"][0]
+    path = f"/api/v1/delivery/progress/baselines/{baseline_id}"
+    assert [task["id"] for task in client.get(path + "/comparison/items?kind=added").json()["items"]] == [third_id]
+    assert [task["id"] for task in client.get(path + "/comparison/items?kind=removed").json()["items"]] == [second_id]
+    changed = client.get(path + f"/comparison/items/{task_id}?kind=changed").json()["item"]
     assert changed["id"] == task_id and "estimate" in changed["fields"]
     assert changed["before"]["estimate"] == "M" and changed["after"]["estimate"] == "XL"
-    assert (
-        next(task for task in body["baseline"]["tasks"] if task["id"] == second_id)["title"] == "Test search"
-    )
+    assert client.get(path + f"/tasks/{second_id}").json()["item"]["title"] == "Test search"
     with sessions() as db:
         assert db.query(DeliveryProgressBaseline).one().data == before
 
@@ -191,7 +190,7 @@ def test_no_dates_means_no_ideal_and_each_replan_is_a_new_baseline(env):
         baseline_id = db.query(DeliveryProgressBaseline).first().id
     body = client.get("/api/v1/delivery/progress", params={"baseline_id": baseline_id}).json()
     assert body["ideal"] == []
-    assert len(body["baselines"]) == 2
+    assert client.get("/api/v1/delivery/progress/baselines").json()["total"] == 2
     assert (
         client.get(
             "/api/v1/delivery/progress",
@@ -218,17 +217,17 @@ def test_milestone_baseline_cannot_be_selected_in_different_scope(env):
     milestone_id = milestone.json()["milestones"][0]["id"]
     assert command(client, "requirement.update", {"id": rid, "milestone_id": milestone_id}).status_code == 200
     current = client.get(
-        "/api/v1/delivery/progress", params={"scope": "milestone", "scope_id": milestone_id}
-    ).json()["current"]
+        "/api/v1/delivery/progress/freeze-proof", params={"scope": "milestone", "scope_id": milestone_id}
+    ).json()
     payload = _payload(
         client, scope="milestone", scope_id=milestone_id, task_ids=current["task_ids"], basis=current["basis"]
     )
     saved = command(client, "baseline.create", payload)
     assert saved.status_code == 200, saved.text
     detail = client.get(
-        "/api/v1/delivery/progress", params={"scope": "milestone", "scope_id": milestone_id}
+        "/api/v1/delivery/progress/baselines", params={"scope": "milestone", "scope_id": milestone_id}
     ).json()
-    baseline_id = detail["baselines"][0]["id"]
+    baseline_id = detail["items"][0]["id"]
     assert client.get("/api/v1/delivery/progress", params={"baseline_id": baseline_id}).status_code == 422
 
 
@@ -242,17 +241,10 @@ def test_normal_status_change_advances_progress_without_scope_change(env):
         baseline_id = db.query(DeliveryProgressBaseline).one().id
         db.get(Task, task_id).status = "in_progress"
         db.commit()
-    result = client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}")
+    result = client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}/comparison")
     assert result.status_code == 200, result.text
-    assert result.json()["comparison"] == {
-        "added": [],
-        "removed": [],
-        "changed": [],
-        "unchanged_count": 1,
-        "incomplete_plan_fields": [],
-        "incomplete_task_ids": [],
-    }
-    assert result.json()["current"]["tasks"][0]["status"] == "in_progress"
+    assert result.json()["counts"] == {"added": 0, "removed": 0, "changed": 0, "incomplete": 0, "unchanged": 1}
+    assert client.get("/api/v1/delivery/progress").json()["current"]["metrics"]["status_counts"]["in_progress"] == 1
 
 
 def test_deleted_scope_keeps_baseline_and_historical_progress_readable(env):
@@ -261,8 +253,8 @@ def test_deleted_scope_keeps_baseline_and_historical_progress_readable(env):
     milestone = command(client, "milestone.save", {"title": "Retired launch"}).json()["milestones"][0]["id"]
     assert command(client, "requirement.update", {"id": rid, "milestone_id": milestone}).status_code == 200
     current = client.get(
-        "/api/v1/delivery/progress", params={"scope": "milestone", "scope_id": milestone}
-    ).json()["current"]
+        "/api/v1/delivery/progress/freeze-proof", params={"scope": "milestone", "scope_id": milestone}
+    ).json()
     assert (
         command(
             client,
@@ -288,15 +280,15 @@ def test_deleted_scope_keeps_baseline_and_historical_progress_readable(env):
         db.commit()
     detail = client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}")
     assert detail.status_code == 200, detail.text
-    assert detail.json()["baseline"]["tasks"][0]["id"] == task_id
-    assert detail.json()["current"]["tasks"] == []
+    assert client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}/tasks/{task_id}").json()["item"]["id"] == task_id
+    assert not client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}/comparison").json()["current_scope_available"]
     progress = client.get(
         "/api/v1/delivery/progress",
         params={"scope": "milestone", "scope_id": milestone, "baseline_id": baseline_id},
     )
     assert progress.status_code == 200, progress.text
     assert progress.json()["scope"]["label"] == "Retired launch"
-    assert progress.json()["baseline"]["tasks"][0]["id"] == task_id
+    assert progress.json()["baseline"]["task_count"] == 1
 
 
 def test_freezing_rejects_cross_project_task_associations(env):

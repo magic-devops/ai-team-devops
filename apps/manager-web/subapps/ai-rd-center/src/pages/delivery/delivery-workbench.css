@@ -290,6 +290,61 @@
 .delivery-progress-task-list .ant-btn {
   flex: 0 0 auto;
 }
+.delivery-progress-catalogue,
+.delivery-progress-exact,
+.delivery-progress-proof-facts {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.delivery-progress-exact {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--surface);
+}
+.delivery-progress-exact li,
+.delivery-progress-proof .ant-alert,
+.delivery-progress-proof-facts {
+  overflow-wrap: anywhere;
+}
+.delivery-progress-proof .ant-modal-body {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.delivery-progress-proof-dates {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.delivery-progress-catalogue .ant-btn,
+.delivery-progress-proof .ant-btn,
+.delivery-progress-snapshot .ant-btn,
+.delivery-progress-comparison .ant-btn {
+  max-width: 100%;
+  white-space: normal;
+  height: auto;
+  min-height: 32px;
+}
+@media (max-width: 640px) {
+  .delivery-progress-proof-dates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .delivery-progress-task-list > article,
+  .delivery-progress-pager {
+    flex-wrap: wrap;
+  }
+  .delivery-progress-task-list > article > .delivery-actions {
+    flex-basis: 100%;
+  }
+  .delivery-progress-field-changes dd {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 .delivery-observation-heading,
 .delivery-observation-row {
   display: grid;
@@ -518,18 +573,35 @@
   background: var(--hover, #f1f5f9);
 }
 .delivery-overview-inbox-counts span,
-.delivery-overview-inbox-counts strong { display: block; }
-.delivery-overview-inbox-counts span { font-size: 11px; }
-.delivery-overview-inbox-counts strong { margin-top: 3px; font-size: 17px; }
+.delivery-overview-inbox-counts strong {
+  display: block;
+}
+.delivery-overview-inbox-counts span {
+  font-size: 11px;
+}
+.delivery-overview-inbox-counts strong {
+  margin-top: 3px;
+  font-size: 17px;
+}
 .delivery-overview-inbox-counts > button:focus-visible {
   outline: 2px solid var(--accent, #1677ff);
   outline-offset: 2px;
 }
 @media (max-width: 640px) {
-  .delivery-overview-inbox-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .delivery-attention-pagination { align-items: stretch; }
-  .delivery-attention-pagination > span { flex-basis: 100%; }
-  .delivery-inbox-end > .ant-btn { max-width: 100%; height: auto; white-space: normal; }
+  .delivery-overview-inbox-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .delivery-attention-pagination {
+    align-items: stretch;
+  }
+  .delivery-attention-pagination > span {
+    flex-basis: 100%;
+  }
+  .delivery-inbox-end > .ant-btn {
+    max-width: 100%;
+    height: auto;
+    white-space: normal;
+  }
 }
 .delivery-compact-milestones {
   display: grid;

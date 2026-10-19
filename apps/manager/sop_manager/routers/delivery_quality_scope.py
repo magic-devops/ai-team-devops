@@ -93,12 +93,41 @@ def _objects(db, project, paths):
 
 
 class _Scope:
-    def __init__(self, db, project, requirements, tasks, limit):
+    def __init__(self, db, project, requirements, tasks, limit, *, input_budget=None):
         self.db, self.project, self.limit = db, project, limit
         self.wanted_requirements, self.wanted_tasks = set(requirements), set(tasks)
         self.tasks, self.requirements, self.entries = {}, {}, {}
         self.data = initial_state()
         self.run_ids, self.latest_loaded = set(), set()
+        self.input_budget = input_budget
+        self.path_cache = {}
+
+    def paths(self, paths):
+        if self.input_budget is None:
+            return _paths(self.db, self.project, paths)
+        missing, result = {}, {}
+        for key, path in paths.items():
+            for length in range(len(path), -1, -1):
+                prefix = path[:length]
+                if prefix in self.path_cache:
+                    value = self.path_cache[prefix]
+                    for part in path[len(prefix):]:
+                        value = value.get(part) if isinstance(value, dict) else value[part] if isinstance(value, list) and isinstance(part, int) and 0 <= part < len(value) else None
+                    result[key] = value
+                    break
+            else:
+                missing[key] = path
+        if missing:
+            self.input_budget.paths(self.db, self.project, missing)
+            values = _paths(self.db, self.project, missing)
+            for key, value in values.items():
+                self.path_cache[missing[key]] = value
+            result.update(values)
+        return result
+
+    def source_rows(self, query, columns):
+        if self.input_budget is not None:
+            self.input_budget.rows(self.db, query, columns)
 
     def budget(self, count):
         if count > self.limit:
@@ -111,19 +140,20 @@ class _Scope:
     def facts(self, kind, ids):
         if not ids:
             return {}
-        rows = self.db.execute(
-            select(DeliveryQueryFact.entity_id, DeliveryQueryFact.data).where(
+        query = select(DeliveryQueryFact.entity_id, DeliveryQueryFact.data).where(
                 *scope(self.project, DeliveryQueryFact),
                 DeliveryQueryFact.kind == kind,
                 DeliveryQueryFact.entity_id.in_(ids),
             )
-        ).all()
+        self.source_rows(query, [DeliveryQueryFact.entity_id, DeliveryQueryFact.data])
+        rows = self.db.execute(query).all()
         return dict(rows)
 
     def tasks_and_parents(self):
         condition = or_(Task.id.in_(self.wanted_tasks), Task.req_id.in_(self.wanted_requirements))
         filters = (*scope(self.project, Task), condition)
         self.budget(self.db.scalar(select(func.count()).select_from(Task).where(*filters)))
+        self.source_rows(select(Task).where(*filters, Task.id.not_in(self.tasks)), list(Task.__table__.c))
         new = self.db.scalars(
             select(Task).where(*filters, Task.id.not_in(self.tasks)).execution_options(populate_existing=True)
         ).all()
@@ -136,6 +166,7 @@ class _Scope:
             )
         self.wanted_requirements.update(row.req_id for row in new if row.req_id)
         needed = self.wanted_requirements - self.requirements.keys()
+        self.source_rows(select(Requirement).where(*scope(self.project, Requirement), Requirement.id.in_(needed)), list(Requirement.__table__.c))
         rows = (
             self.db.scalars(
                 select(Requirement)
@@ -159,7 +190,7 @@ class _Scope:
             "blocked_reason",
         )
         paths = {row.id: ("task_details", row.id) for row in new}
-        values = _paths(self.db, self.project, paths)
+        values = self.paths(paths)
         null_plans = _present(
             self.db, self.project, {id: path for id, path in paths.items() if values[id] is None}
         )
@@ -183,9 +214,7 @@ class _Scope:
     def flows(self, rows):
         fields = ("stage", "revision", "blocked_reason", "definition", "tested_work")
         _objects(self.db, self.project, {row.id: ("flows", row.id) for row in rows})
-        values = _paths(
-            self.db, self.project, {(row.id, key): ("flows", row.id, key) for row in rows for key in fields}
-        )
+        values = self.paths({(row.id, key): ("flows", row.id, key) for row in rows for key in fields})
         facts = self.facts("requirement", {row.id for row in rows})
         nullable = {
             (row.id, key): ("flows", row.id, key)
@@ -225,7 +254,7 @@ class _Scope:
                     "artifacts" if kind == "test" else "reviews",
                     position,
                 )
-        records = _paths(self.db, self.project, sources)
+        records = self.paths(sources)
         for (id, kind), record in records.items():
             flow = self.data["flows"][id]
             if (
@@ -243,9 +272,7 @@ class _Scope:
     def read_entries(self, facts):
         if len(self.entries) + len(facts) > self.limit * 3 + 200:
             self.budget(self.limit + 1)
-        values = _paths(
-            self.db, self.project, {id: ("executions", row["position"]) for id, row in facts.items()}
-        )
+        values = self.paths({id: ("executions", row["position"]) for id, row in facts.items()})
         for id, entry in values.items():
             if (
                 not isinstance(entry, dict)
@@ -300,7 +327,9 @@ class _Scope:
                 )
                 .subquery()
             )
-            rows = self.db.execute(select(ranked.c.entity_id, ranked.c.data).where(ranked.c.rank == 1)).all()
+            query = select(ranked.c.entity_id, ranked.c.data).where(ranked.c.rank == 1)
+            self.source_rows(query, [ranked.c.entity_id, ranked.c.data])
+            rows = self.db.execute(query).all()
             self.read_entries(dict(rows))
             self.run_ids.update(needed_runs)
 
@@ -326,15 +355,23 @@ class _Scope:
                     _fail("delivery_query_cursor_stale", "Member proof locations changed; reload the scope.")
                 positions[(id, position)] = ("members", position)
         self.budget(len(positions))
-        members = _paths(self.db, self.project, positions)
+        members = self.paths(positions)
         for (id, _), value in members.items():
             if not isinstance(value, dict) or value.get("id") != id:
                 _fail("delivery_query_cursor_stale", "A member source changed; reload the scope.")
             self.data["members"].append(value)
-        bindings = _paths(self.db, self.project, {id: ("member_runtime_bindings", id) for id in executor_ids})
+        bindings = self.paths({id: ("member_runtime_bindings", id) for id in executor_ids})
         self.data["member_runtime_bindings"] = {
             id: value for id, value in bindings.items() if value is not None
         }
+        if self.input_budget is not None:
+            from .sql_models import ProjectMember, User
+
+            people = [value[5:] for value in owners if value.startswith("user:")]
+            self.source_rows(select(User).where(User.tenant_id == self.project.tenant_id, User.id.in_(people)),
+                [User.id, User.username, User.status, User.role])
+            self.source_rows(select(ProjectMember).where(ProjectMember.project_id == self.project.id, ProjectMember.user_id.in_(people)),
+                [ProjectMember.user_id, ProjectMember.role])
         return TeamContext(self.db, self.project, self.data, owner_ids=owners)
 
     def context(self):
@@ -372,7 +409,11 @@ class _Scope:
             Issue.severity.in_(["P0", "P1"]),
             Issue.status.not_in(["resolved", "closed"]),
         )
-        self.budget(self.db.scalar(select(func.count()).select_from(issues_query.subquery())))
+        self.budget(self.db.scalar(issues_query.with_only_columns(func.count())))
+        if self.input_budget is not None:
+            columns = [Issue.id, Issue.task_id, Issue.title, Issue.severity, Issue.status, Issue.created_at]
+            self.source_rows(issues_query, columns)
+            issues_query = issues_query.options(load_only(*columns))
         issues = self.db.scalars(issues_query.execution_options(populate_existing=True)).all()
         latest = (
             select(func.max(DeliveryTaskReview.seq).label("seq"))
@@ -390,6 +431,10 @@ class _Scope:
         ).all()
         if any((size or 0) > 1024 * 1024 for size in sizes):
             _fail("quality_scope_too_large", "A complete proof source exceeds its bounded read budget.", 413)
+        review_columns = [DeliveryTaskReview.id, DeliveryTaskReview.task_id, DeliveryTaskReview.created_at,
+            DeliveryTaskReview.reviewer_id, DeliveryTaskReview.decision, DeliveryTaskReview.task_basis,
+            DeliveryTaskReview.snapshot, DeliveryTaskReview.invalidated]
+        self.source_rows(select(DeliveryTaskReview).join(latest, DeliveryTaskReview.seq == latest.c.seq), review_columns)
         reviews = self.db.scalars(
             select(DeliveryTaskReview)
             .join(latest, DeliveryTaskReview.seq == latest.c.seq)

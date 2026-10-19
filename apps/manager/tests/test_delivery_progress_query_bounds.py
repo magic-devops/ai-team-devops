@@ -40,7 +40,7 @@ def test_one_day_project_loads_only_daily_latest_snapshot_and_aggregates_lifetim
     today = datetime.now(timezone.utc).date()
     old = today - timedelta(days=500)
     with sessions() as db:
-        db.query(DeliveryProgressObservation).filter_by(tenant_id="tenant", project_id="project").delete()
+        db.connection().execute(DeliveryProgressObservation.__table__.delete().where(DeliveryProgressObservation.tenant_id == "tenant", DeliveryProgressObservation.project_id == "project"))
         for index in range(250):
             _observe(
                 db,
@@ -59,7 +59,7 @@ def test_one_day_project_loads_only_daily_latest_snapshot_and_aggregates_lifetim
         sessions, lambda db, project: progress(db, project, starts_on=today, ends_on=today)
     )
     assert body["days"][0]["observation_id"] == "daily-change-204"
-    assert loaded == ["daily-change-204"]
+    assert loaded == []
     assert body["coverage"]["first_observed_at"].startswith((old - timedelta(days=249)).isoformat())
     assert body["coverage"]["last_observed_at"].startswith(today.isoformat())
     assert any("min(" in statement.lower() and "max(" in statement.lower() for statement in statements)
@@ -76,7 +76,7 @@ def test_named_scope_uses_light_projection_and_last_valid_scope_point_after_dele
         ]
         db.add(DeliveryWorkspace(project_id="project", tenant_id="tenant", data=state, version=0))
         db.commit()
-        db.query(DeliveryProgressObservation).filter_by(tenant_id="tenant", project_id="project").delete()
+        db.connection().execute(DeliveryProgressObservation.__table__.delete().where(DeliveryProgressObservation.tenant_id == "tenant", DeliveryProgressObservation.project_id == "project"))
         absent = deepcopy(_facts())
         absent["scopes"]["milestones"] = []
         absent["tasks"] = []
@@ -107,12 +107,11 @@ def test_named_scope_uses_light_projection_and_last_valid_scope_point_after_dele
     )
     assert body["days"][0]["observation_id"] == "scope-last-valid"
     assert body["days"][0]["metrics"]["tasks_total"] == 1
-    assert loaded == ["scope-last-valid"]
+    assert loaded == []
     assert body["coverage"]["first_observed_at"].startswith(first_day.isoformat())
     assert body["coverage"]["last_observed_at"].endswith("T09:00:00Z")
-    projections = [statement for statement in statements if "progress_scope_projection" in statement]
-    assert projections and all("JSON_EXTRACT" in statement for statement in projections)
-    assert any("LIMIT" in statement for statement in projections)
+    assert any("json_each" in statement.lower() for statement in statements)
+    assert any("row_number()" in statement.lower() for statement in statements)
 
 
 def test_legacy_sprint_reuses_bounded_snapshot_loading_for_long_history(env):
@@ -132,7 +131,7 @@ def test_legacy_sprint_reuses_bounded_snapshot_loading_for_long_history(env):
             )
         )
         db.commit()
-        db.query(DeliveryProgressObservation).filter_by(tenant_id="tenant", project_id="project").delete()
+        db.connection().execute(DeliveryProgressObservation.__table__.delete().where(DeliveryProgressObservation.tenant_id == "tenant", DeliveryProgressObservation.project_id == "project"))
         facts = _facts()
         facts["scopes"]["sprints"] = [
             {
@@ -158,6 +157,6 @@ def test_legacy_sprint_reuses_bounded_snapshot_loading_for_long_history(env):
         lambda db, project: sprint_burndown_history(db, db.get(Sprint, "SPRINT-bounded"), started, ends),
     )
     assert body["actual"][0]["observation_id"] == "current-sprint"
-    assert loaded == ["current-sprint"]
+    assert loaded == []
     assert body["history_available"] is True
-    assert any("progress_scope_projection" in statement for statement in statements)
+    assert any("json_each" in statement.lower() for statement in statements)

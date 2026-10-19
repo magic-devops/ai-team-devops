@@ -22,7 +22,7 @@ def test_progress_preserves_real_gaps_baseline_and_scope_over_http():
     expected = {
         "project_id": "selected",
         "days": [{"date": "2026-10-16", "metrics": None}],
-        "current": {"metrics": {"tasks_total": 3}},
+        "current": {"scope": {"kind": "milestone", "id": "milestone-one", "label": "Milestone"}, "metrics": {"tasks_total": 3}},
         "baseline": {"id": "baseline-one"},
     }
 
@@ -54,9 +54,13 @@ def test_progress_preserves_real_gaps_baseline_and_scope_over_http():
 
 
 @pytest.mark.parametrize("kind", ["observation", "baseline"])
-def test_history_detail_is_a_scoped_read_of_the_original_snapshot(kind):
+def test_history_metadata_is_an_exact_scoped_read_without_item_arrays(kind):
     seen = []
-    expected = {"id": f"{kind}-one", "tasks": [{"id": "T-deleted", "title": "Historical title"}]}
+    expected = {
+        "project_id": "selected",
+        kind: {"id": f"{kind}-one", "task_count": 500, "requirement_count": 80, "available": True,
+               "scope": {"kind": "sprint", "id": "sprint-one", "label": "Frozen sprint"}},
+    }
 
     def handle(request):
         seen.append(request)
@@ -70,6 +74,7 @@ def test_history_detail_is_a_scoped_read_of_the_original_snapshot(kind):
         else:
             result = client.delivery_baseline("baseline-one")
     assert result == expected
+    assert not {"tasks", "requirements", "task_ids", "comparison"} & set(result[kind])
     assert seen[0].method == "GET"
     assert (
         seen[0].url.path

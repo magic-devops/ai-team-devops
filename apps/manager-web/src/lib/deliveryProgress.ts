@@ -1,8 +1,11 @@
 import { request } from "./http";
 import { assertDeliveryGeneration } from "./deliveryQuery";
-import type { DeliveryInboxTarget } from "./delivery";
 import type { ScheduleAllocation } from "./deliveryScheduling";
 import type { TaskAcceptance } from "./taskAcceptance";
+import { safeExecutionReturn } from "./executionCommands";
+import { safePortfolioReturn } from "./projectPortfolioRoute";
+export * from "./deliveryProgressReads";
+export * from "./deliveryProgressCommand";
 
 export const progressStates = [
   "pending",
@@ -21,6 +24,8 @@ export type ProgressRoute = {
   scopeId: string;
   baselineId: string;
   observationId: string;
+  catalogueOpen?: boolean;
+  baselineDetail?: boolean;
 };
 export type ProgressMetrics = {
   tasks_total: number;
@@ -45,36 +50,36 @@ export type ProgressTask = {
   milestone_id: string;
   owner_id: string;
   assigned_to: string;
-  estimate: string;
+  estimate: string | null;
   starts_on: string | null;
   ends_on: string | null;
   basis: string;
   status: ProgressState;
   recorded_status: string;
 };
-export type ProgressFacts = {
-  scope: { kind: ProgressScope; id: string; label: string };
-  tasks: ProgressTask[];
-  requirements: {
-    id: string;
-    title: string;
-    milestone_id: string;
-    sprint_id: string;
-    stage: string;
-    revision: number;
-    basis: string;
-    accepted: boolean;
-    released: boolean;
-  }[];
-  task_ids: string[];
-  basis: string;
-  metrics: ProgressMetrics;
+export type ProgressScopeHeader = {
+  kind: ProgressScope;
+  id: string;
+  label: string;
 };
-export type ProgressScopeOption = {
+export type ProgressRequirement = {
   id: string;
   title: string;
-  starts_on: string | null;
-  ends_on: string | null;
+  milestone_id: string;
+  sprint_id: string;
+  stage: string;
+  revision: number;
+  basis: string;
+  accepted: boolean;
+  released: boolean;
+};
+export type ProgressRange = { starts_on: string; ends_on: string };
+export type ProgressCoverage = {
+  first_observed_at: string | null;
+  last_observed_at: string | null;
+  observed_days: string[];
+  missing_days: string[];
+  future_days: string[];
 };
 export type ProgressDay = {
   date: string;
@@ -84,71 +89,13 @@ export type ProgressDay = {
   metrics: ProgressMetrics | null;
   baseline_remaining: number | null;
 };
-export type ProgressBaseline = {
-  id: string;
-  title: string;
-  scope: ProgressFacts["scope"];
-  starts_on: string | null;
-  ends_on: string | null;
-  note: string;
-  created_at: string;
-  created_by: string;
-  source_version: number;
-  task_ids: string[];
-  basis: string;
-  tasks: ProgressTask[];
-  requirements: ProgressFacts["requirements"];
-  metrics: ProgressMetrics;
-};
-export type ProgressComparison = {
-  incomplete_plan_fields: string[];
-  incomplete_task_ids: string[];
-  added: ProgressTask[];
-  removed: ProgressTask[];
-  changed: {
-    id: string;
-    before: ProgressTask;
-    after: ProgressTask;
-    fields: string[];
-  }[];
-  unchanged_count: number;
-};
-export type DeliveryProgress = {
+export type DeliveryProgressSummary = {
   project_id: string;
   version: number;
   as_of: string;
   timezone: "UTC";
-  scope: ProgressFacts["scope"];
-  range: { starts_on: string; ends_on: string };
-  scopes: { milestones: ProgressScopeOption[]; sprints: ProgressScopeOption[] };
-  current: ProgressFacts;
-  coverage: {
-    first_observed_at: string | null;
-    last_observed_at: string | null;
-    observed_days: string[];
-    missing_days: string[];
-    future_days: string[];
-  };
-  days: ProgressDay[];
-  baselines: Omit<ProgressBaseline, "tasks" | "requirements">[];
-  baseline: ProgressBaseline | null;
-  comparison: ProgressComparison | null;
-  ideal: { date: string; remaining: number }[];
-};
-export type ProgressObservation = {
-  id: string;
-  observed_at: string;
-  observed_day: string;
-  source: string;
-  actor: string;
-  source_version: number;
-  scope: ProgressFacts["scope"];
-  current: ProgressFacts;
-};
-export type DeliveryProgressSummary = Pick<
-  DeliveryProgress,
-  "project_id" | "version" | "as_of" | "timezone" | "range" | "coverage"
-> & {
+  range: ProgressRange;
+  coverage: ProgressCoverage;
   query_generation: number;
   current: { metrics: ProgressMetrics };
 };
@@ -234,9 +181,16 @@ export function parseProgressRoute(
         : "",
     baselineId: p.get("baseline_id") || "",
     observationId: p.get("observation_id") || "",
+    ...(p.get("progress_baselines") === "1" ? { catalogueOpen: true } : {}),
+    ...(p.get("progress_source") === "baseline"
+      ? { baselineDetail: true }
+      : {}),
   };
 }
-export function progressHash(route: ProgressRoute) {
+export function progressHash(
+  route: ProgressRoute,
+  source = typeof location === "undefined" ? "" : location.hash,
+) {
   const p = new URLSearchParams({
     view: "progress",
     starts_on: route.startsOn,
@@ -247,6 +201,16 @@ export function progressHash(route: ProgressRoute) {
     p.set("scope_id", route.scopeId);
   if (route.baselineId) p.set("baseline_id", route.baselineId);
   if (route.observationId) p.set("observation_id", route.observationId);
+  if (route.catalogueOpen) p.set("progress_baselines", "1");
+  if (route.baselineDetail) p.set("progress_source", "baseline");
+  const original = new URLSearchParams(source.split("?")[1]);
+  const project = original.get("project_id");
+  if (project && original.getAll("project_id").length === 1)
+    p.set("project_id", project);
+  const back =
+    safeExecutionReturn(original.get("return_to") || "") ||
+    safePortfolioReturn(original.get("return_to") || "");
+  if (back) p.set("return_to", back);
   return `#/dev-flow?${p}`;
 }
 export function preserveProgressRoute(targetHash: string, sourceHash: string) {
@@ -277,61 +241,4 @@ export function progressSeries(days: ProgressDay[]) {
       ]),
     ) as Record<ProgressState, (number | null)[]>,
   };
-}
-export function currentProgressTaskTarget(
-  id: string,
-  tasks: { id: string; req_id: string }[],
-): DeliveryInboxTarget | null {
-  const task = tasks.find((item) => item.id === id);
-  return task
-    ? {
-        view: "progress",
-        requirement_id: task.req_id,
-        detail: "tasks",
-        task_id: task.id,
-      }
-    : null;
-}
-function scopeParams(route: Pick<ProgressRoute, "scope" | "scopeId">) {
-  const params = new URLSearchParams({ scope: route.scope });
-  if (route.scope !== "project") params.set("scope_id", route.scopeId);
-  return params;
-}
-export function fetchDeliveryProgress(
-  projectId: string,
-  route: ProgressRoute,
-  signal?: AbortSignal,
-) {
-  const params = scopeParams(route);
-  params.set("starts_on", route.startsOn);
-  params.set("ends_on", route.endsOn);
-  if (route.baselineId) params.set("baseline_id", route.baselineId);
-  return request<DeliveryProgress>(`/api/v1/delivery/progress?${params}`, {
-    signal,
-    headers: { "X-Project-Id": projectId },
-  });
-}
-export function fetchProgressObservation(
-  projectId: string,
-  id: string,
-  route: Pick<ProgressRoute, "scope" | "scopeId">,
-  signal?: AbortSignal,
-) {
-  return request<ProgressObservation>(
-    `/api/v1/delivery/progress/observations/${encodeURIComponent(id)}?${scopeParams(route)}`,
-    { signal, headers: { "X-Project-Id": projectId } },
-  );
-}
-export function fetchProgressBaseline(
-  projectId: string,
-  id: string,
-  signal?: AbortSignal,
-) {
-  return request<{
-    baseline: ProgressBaseline;
-    comparison: ProgressComparison;
-  }>(`/api/v1/delivery/progress/baselines/${encodeURIComponent(id)}`, {
-    signal,
-    headers: { "X-Project-Id": projectId },
-  });
 }

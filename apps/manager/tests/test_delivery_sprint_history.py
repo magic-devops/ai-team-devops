@@ -32,8 +32,10 @@ def _task(client):
 
 
 def _observe(db, row_id, at, facts):
-    db.add(
-        DeliveryProgressObservation(
+    # A migration connection seeds fixed observed originals in this fixture;
+    # application Sessions retain the production append-only guard.
+    db.connection().execute(
+        DeliveryProgressObservation.__table__.insert().values(
             id=row_id,
             tenant_id="team",
             project_id="selected",
@@ -46,7 +48,6 @@ def _observe(db, row_id, at, facts):
             data=deepcopy(facts),
         )
     )
-    db.flush()
 
 
 def test_legacy_task_writes_feed_persisted_sprint_history_without_read_writes(env):
@@ -92,7 +93,12 @@ def test_current_live_point_does_not_masquerade_as_persisted_history(env):
     _dates(sessions)
     _task(client)
     with sessions() as db:
-        db.query(DeliveryProgressObservation).filter_by(tenant_id="team", project_id="selected").delete()
+        db.connection().execute(
+            DeliveryProgressObservation.__table__.delete().where(
+                DeliveryProgressObservation.tenant_id == "team",
+                DeliveryProgressObservation.project_id == "selected",
+            )
+        )
         db.commit()
     body = client.get("/api/v1/sprints/SPRINT-selected/burndown", headers=headers()).json()
     assert body["history_available"] is False and body["actual"] == []
@@ -122,7 +128,12 @@ def test_utc_daily_last_and_missing_days_use_only_this_sprints_facts(env):
         )
         db.commit()
         facts = capture_facts(db, db.get(Project, "selected"))
-        db.query(DeliveryProgressObservation).filter_by(tenant_id="team", project_id="selected").delete()
+        db.connection().execute(
+            DeliveryProgressObservation.__table__.delete().where(
+                DeliveryProgressObservation.tenant_id == "team",
+                DeliveryProgressObservation.project_id == "selected",
+            )
+        )
         _observe(db, "sprint-first", datetime(2026, 10, 11, 9), facts)
         last = deepcopy(facts)
         next(task for task in last["tasks"] if task["id"] == task_id).update(

@@ -7,8 +7,11 @@ import { chartPalette, readCssVar } from "@/lib/charts/cssVars";
 import {
   progressSeries,
   progressStates,
-  type DeliveryProgress,
+  type ProgressSeries,
 } from "@/lib/deliveryProgress";
+type DeliveryProgress = Pick<ProgressSeries, "days" | "ideal"> & {
+  baseline: { id: string } | null;
+};
 
 export function progressChartOptions(
   data: DeliveryProgress,

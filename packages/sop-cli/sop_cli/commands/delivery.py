@@ -11,7 +11,7 @@ from .._util import console, get_client, warn
 from . import delivery_discussion
 
 app = typer.Typer(
-    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / progress-freeze-proof / baselines / baseline / baseline-items / baseline-item / baseline-comparison / baseline-comparison-items / baseline-comparison-item / observation / observation-items / observation-item / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
 
 app.add_typer(delivery_discussion.app, name="discussion")
@@ -71,6 +71,7 @@ def tasks(
     priority: Annotated[str, typer.Option("--priority")] = "",
     owner_id: Annotated[str, typer.Option("--owner")] = "",
     milestone_id: Annotated[str, typer.Option("--milestone")] = "",
+    sprint_id: Annotated[str, typer.Option("--sprint")] = "",
     cursor: Annotated[str, typer.Option("--cursor")] = "",
     limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
     sort: Annotated[str, typer.Option("--sort")] = "created_desc",
@@ -84,6 +85,7 @@ def tasks(
         priority=priority,
         owner_id=owner_id,
         milestone_id=milestone_id,
+        sprint_id=sprint_id,
         cursor=cursor,
         limit=limit,
         sort=sort,
@@ -170,6 +172,18 @@ class ProgressScope(str, Enum):
     project = "project"
     milestone = "milestone"
     sprint = "sprint"
+
+
+class ProgressCollection(str, Enum):
+    tasks = "tasks"
+    requirements = "requirements"
+
+
+class ProgressComparisonKind(str, Enum):
+    added = "added"
+    removed = "removed"
+    changed = "changed"
+    incomplete = "incomplete"
 
 
 class ProjectState(str, Enum):
@@ -553,7 +567,7 @@ def progress(
     baseline_id: Annotated[str, typer.Option("--baseline", help="比较不可变计划基线")] = "",
     json_out: Annotated[bool, typer.Option("--json", help="保留历史缺口、范围变化和来源")] = False,
 ):
-    """读取真实历史与当前状态，不创建观测或填补缺失日期。"""
+    """读取完整范围指标和每日小型序列；任务、基线和差异使用独立读取。"""
     try:
         with get_client() as client:
             result = client.delivery_progress(
@@ -576,7 +590,7 @@ def observation(
     scope_id: Annotated[str, typer.Option("--scope-id")] = "",
     json_out: Annotated[bool, typer.Option("--json")] = False,
 ):
-    """查看当时的真实任务快照；历史状态不替代当前任务。"""
+    """查看指定历史观测小头；冻结原项使用 observation-items / observation-item。"""
     try:
         with get_client() as client:
             result = client.delivery_progress_observation(
@@ -624,7 +638,7 @@ def schedule_preview(
 
 @app.command("baseline")
 def baseline(baseline_id: str, json_out: Annotated[bool, typer.Option("--json")] = False):
-    """查看不可变基线；冻结新计划使用 command --file 提交显式范围。"""
+    """查看指定不可变基线小头；分类比较、冻结原项与完整proof分别读取。"""
     try:
         with get_client() as client:
             result = client.delivery_baseline(baseline_id)
@@ -632,6 +646,125 @@ def baseline(baseline_id: str, json_out: Annotated[bool, typer.Option("--json")]
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc
+
+
+@app.command("baselines")
+def baselines(
+    scope: Annotated[ProgressScope, typer.Option("--scope")] = ProgressScope.project,
+    scope_id: Annotated[str, typer.Option("--scope-id")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取独立基线目录的一页；不会自动选择首项或下载全部冻结任务。"""
+    _query_output("delivery_progress_baselines", scope=scope.value, scope_id=scope_id, limit=limit, cursor=cursor)
+
+
+@app.command("observation-items")
+def observation_items(
+    observation_id: str,
+    collection: Annotated[ProgressCollection, typer.Option("--collection")] = ProgressCollection.tasks,
+    scope: Annotated[ProgressScope, typer.Option("--scope")] = ProgressScope.project,
+    scope_id: Annotated[str, typer.Option("--scope-id")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """按原观测、原范围分页读取冻结任务或需求摘要。"""
+    _query_output(
+        "delivery_progress_observation_items", observation_id, collection=collection.value,
+        scope=scope.value, scope_id=scope_id, limit=limit, cursor=cursor,
+    )
+
+
+@app.command("observation-item")
+def observation_item(
+    observation_id: str,
+    item_id: str,
+    collection: Annotated[ProgressCollection, typer.Option("--collection")] = ProgressCollection.tasks,
+    scope: Annotated[ProgressScope, typer.Option("--scope")] = ProgressScope.project,
+    scope_id: Annotated[str, typer.Option("--scope-id")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取指定历史原项；不回退当前业务记录或第一页。"""
+    _query_output(
+        "delivery_progress_observation_item", observation_id, item_id, collection=collection.value,
+        scope=scope.value, scope_id=scope_id,
+    )
+
+
+@app.command("baseline-items")
+def baseline_items(
+    baseline_id: str,
+    collection: Annotated[ProgressCollection, typer.Option("--collection")] = ProgressCollection.tasks,
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取指定基线原scope的一页冻结任务或需求摘要。"""
+    _query_output("delivery_baseline_items", baseline_id, collection=collection.value, limit=limit, cursor=cursor)
+
+
+@app.command("baseline-item")
+def baseline_item(
+    baseline_id: str,
+    item_id: str,
+    collection: Annotated[ProgressCollection, typer.Option("--collection")] = ProgressCollection.tasks,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """按明确ID读取完整基线原项；缺失或超预算保持实际错误。"""
+    _query_output("delivery_baseline_item", baseline_id, item_id, collection=collection.value)
+
+
+@app.command("baseline-comparison")
+def baseline_comparison(
+    baseline_id: str,
+    query_generation: Annotated[int | None, typer.Option("--generation", min=1)] = None,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取全分类总数和完整性；changed与incomplete可能重叠。"""
+    _query_output("delivery_baseline_comparison", baseline_id, query_generation=query_generation)
+
+
+@app.command("baseline-comparison-items")
+def baseline_comparison_items(
+    baseline_id: str,
+    kind: Annotated[ProgressComparisonKind, typer.Option("--kind")],
+    query_generation: Annotated[int | None, typer.Option("--generation", min=1)] = None,
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取明确差异分类的一页；使用摘要的generation固定当前比较。"""
+    _query_output(
+        "delivery_baseline_comparison_items", baseline_id, kind=kind.value,
+        query_generation=query_generation, limit=limit, cursor=cursor,
+    )
+
+
+@app.command("baseline-comparison-item")
+def baseline_comparison_item(
+    baseline_id: str,
+    task_id: str,
+    kind: Annotated[ProgressComparisonKind, typer.Option("--kind")],
+    query_generation: Annotated[int | None, typer.Option("--generation", min=1)] = None,
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取指定差异原项及before/after，不自动采用新代次。"""
+    _query_output(
+        "delivery_baseline_comparison_item", baseline_id, task_id, kind=kind.value,
+        query_generation=query_generation,
+    )
+
+
+@app.command("progress-freeze-proof")
+def progress_freeze_proof(
+    scope: Annotated[ProgressScope, typer.Option("--scope")] = ProgressScope.project,
+    scope_id: Annotated[str, typer.Option("--scope-id")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """显式读取完整范围proof；不自动提交，unavailable时保留null原依据/IDs。"""
+    _query_output("delivery_progress_freeze_proof", scope=scope.value, scope_id=scope_id)
 
 
 @app.command("workspace")

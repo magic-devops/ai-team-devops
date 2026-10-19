@@ -283,18 +283,6 @@ class ProgressScope(BaseModel):
     label: str
 
 
-class ProgressScopeOption(BaseModel):
-    id: str
-    title: str
-    starts_on: str | None = None
-    ends_on: str | None = None
-
-
-class ProgressScopes(BaseModel):
-    milestones: list[ProgressScopeOption]
-    sprints: list[ProgressScopeOption]
-
-
 class ProgressTaskFact(BaseModel):
     id: str
     title: str
@@ -348,15 +336,6 @@ class ProgressMetrics(BaseModel):
     status_counts: ProgressStatusCounts
 
 
-class ProgressCurrent(BaseModel):
-    scope: ProgressScope
-    tasks: list[ProgressTaskFact]
-    requirements: list[ProgressRequirementFact]
-    task_ids: list[str]
-    basis: str
-    metrics: ProgressMetrics
-
-
 class ProgressRange(BaseModel):
     starts_on: str
     ends_on: str
@@ -379,83 +358,9 @@ class ProgressDay(BaseModel):
     baseline_remaining: int | None
 
 
-class ProgressBaselineSummary(BaseModel):
-    id: str
-    title: str
-    scope: ProgressScope
-    basis: str
-    starts_on: str | None
-    ends_on: str | None
-    created_at: str
-    created_by: str
-    source_version: int | None
-    note: str
-    task_ids: list[str]
-    metrics: ProgressMetrics
-
-
-class ProgressBaseline(ProgressBaselineSummary):
-    tasks: list[ProgressTaskFact]
-    requirements: list[ProgressRequirementFact]
-
-
-class ProgressTaskChange(BaseModel):
-    id: str
-    before: ProgressTaskFact
-    after: ProgressTaskFact
-    fields: list[str]
-
-
-class ProgressComparison(BaseModel):
-    added: list[ProgressTaskFact]
-    removed: list[ProgressTaskFact]
-    changed: list[ProgressTaskChange]
-    unchanged_count: int
-    incomplete_plan_fields: list[str] = Field(default_factory=list)
-    incomplete_task_ids: list[str] = Field(default_factory=list)
-
-
 class ProgressIdealPoint(BaseModel):
     date: str
     remaining: float
-
-
-class ProgressResponse(BaseModel):
-    project_id: str
-    version: int
-    as_of: str
-    timezone: Literal["UTC"]
-    scope: ProgressScope
-    range: ProgressRange
-    scopes: ProgressScopes
-    current: ProgressCurrent
-    coverage: ProgressCoverage
-    days: list[ProgressDay]
-    baselines: list[ProgressBaselineSummary]
-    baseline: ProgressBaseline | None
-    comparison: ProgressComparison | None
-    ideal: list[ProgressIdealPoint]
-
-
-class ProgressObservationResponse(BaseModel):
-    id: str
-    project_id: str
-    observed_at: str
-    observed_day: str
-    source: str
-    actor: str
-    source_version: int | None
-    scope: ProgressScope
-    current: ProgressCurrent
-
-
-class ProgressBaselineResponse(BaseModel):
-    project_id: str
-    version: int
-    as_of: str
-    baseline: ProgressBaseline
-    current: ProgressCurrent
-    comparison: ProgressComparison
 
 
 class MemberEdit(Input):

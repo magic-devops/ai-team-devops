@@ -1320,8 +1320,8 @@ paths:
     get:
       tags:
       - delivery
-      summary: Read actual UTC delivery progress with gaps and an optional frozen plan
-      operationId: delivery_progress_api_v1_delivery_progress_get
+      summary: Delivery Progress
+      operationId: deliveryProgress
       security:
       - bearerAuth: []
       parameters:
@@ -1370,14 +1370,20 @@ paths:
           maxLength: 64
           default: ''
           title: Baseline Id
-      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProgressResponse'
+                $ref: '#/components/schemas/ProgressSeriesResponse'
         '422':
           description: Validation Error
           content:
@@ -1392,17 +1398,19 @@ paths:
           $ref: '#/components/responses/BusinessForbidden'
         '404':
           $ref: '#/components/responses/BusinessNotFound'
-      description: 'Requires an explicitly selected authorized project. Pure read: no observations, defaults or business
-        state are written and no runtime/model is invoked. IDs from other projects are not accessible. Project scope
-        requires empty scope_id; milestone/sprint require a real scope ID. Progress ranges default to the last 30
-        UTC dates and are limited to 366 ordered dates. Deleted scopes remain readable through their historical observation
-        or baseline.'
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Small generation-consistent progress series with complete-scope metrics and actual UTC daily points; no complete
+        task arrays, scope catalogue, baseline catalogue or comparison bodies.
   /api/v1/delivery/progress/observations/{observation_id}:
     get:
       tags:
       - delivery
-      summary: Read one immutable historical progress observation
-      operationId: delivery_progress_observation_api_v1_delivery_progress_observations__observation_id__get
+      summary: Delivery Progress Observation
+      operationId: deliveryProgressObservation
       security:
       - bearerAuth: []
       parameters:
@@ -1431,14 +1439,20 @@ paths:
           maxLength: 100
           default: ''
           title: Scope Id
-      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProgressObservationResponse'
+                $ref: '#/components/schemas/ProgressObservationMetadataResponse'
         '422':
           description: Validation Error
           content:
@@ -1453,17 +1467,19 @@ paths:
           $ref: '#/components/responses/BusinessForbidden'
         '404':
           $ref: '#/components/responses/BusinessNotFound'
-      description: 'Requires an explicitly selected authorized project. Pure read: no observations, defaults or business
-        state are written and no runtime/model is invoked. IDs from other projects are not accessible. Project scope
-        requires empty scope_id; milestone/sprint require a real scope ID. Progress ranges default to the last 30
-        UTC dates and are limited to 366 ordered dates. Deleted scopes remain readable through their historical observation
-        or baseline.'
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Exact immutable observation metadata in its original scope. It remains independent of current task existence
+        and current query-index readiness.
   /api/v1/delivery/progress/baselines/{baseline_id}:
     get:
       tags:
       - delivery
-      summary: Read a frozen delivery baseline and current scope changes
-      operationId: delivery_progress_baseline_api_v1_delivery_progress_baselines__baseline_id__get
+      summary: Delivery Progress Baseline
+      operationId: deliveryProgressBaseline
       security:
       - bearerAuth: []
       parameters:
@@ -1473,14 +1489,20 @@ paths:
         schema:
           type: string
           title: Baseline Id
-      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProgressBaselineResponse'
+                $ref: '#/components/schemas/ProgressBaselineMetadataResponse'
         '422':
           description: Validation Error
           content:
@@ -1495,11 +1517,958 @@ paths:
           $ref: '#/components/responses/BusinessForbidden'
         '404':
           $ref: '#/components/responses/BusinessNotFound'
-      description: 'Requires an explicitly selected authorized project. Pure read: no observations, defaults or business
-        state are written and no runtime/model is invoked. IDs from other projects are not accessible. Project scope
-        requires empty scope_id; milestone/sprint require a real scope ID. Progress ranges default to the last 30
-        UTC dates and are limited to 366 ordered dates. Deleted scopes remain readable through their historical observation
-        or baseline.'
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Exact immutable baseline metadata. No implicit full current-project evaluation or full frozen arrays.
+  /api/v1/delivery/progress/freeze-proof:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Freeze Proof
+      operationId: deliveryProgressFreezeProof
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - milestone
+          - sprint
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Scope Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressFreezeProofResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Explicit complete current scope proof for baseline creation. Complete IDs and independent progress basis
+        are returned only within the stated 16MiB, 10000-task and 1MiB-item budgets. An unavailable proof never returns a partial
+        task set.
+  /api/v1/delivery/progress/baselines:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Baselines
+      operationId: deliveryProgressBaselines
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - milestone
+          - sprint
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Scope Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressBaselinesResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Fixed-window SQL catalogue of immutable baseline metadata, default20/max100. Reader, project, scope, limit
+        and initial watermark bind the cursor. No task ID arrays or frozen bodies.
+  /api/v1/delivery/progress/observations/{observation_id}/tasks:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Observation Tasks
+      operationId: deliveryProgressObservationsTasks
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: observation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Observation Id
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - milestone
+          - sprint
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Scope Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshotTaskPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Bounded SQL page of immutable canonical tasks summaries, default20/max100. Cursor binds exact source, reader,
+        scope, collection, limit and original basis. No whole source loaded before slicing.
+  /api/v1/delivery/progress/observations/{observation_id}/tasks/{task_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Observation Task
+      operationId: deliveryProgressObservationsTasksItem
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: observation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Observation Id
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - milestone
+          - sprint
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Scope Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshotTaskDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+        '413':
+          description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
+      description: Exact canonical frozen item in this source and scope, with a 1MiB item budget. No fallback to a current task,
+        another page or a different original.
+  /api/v1/delivery/progress/observations/{observation_id}/requirements:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Observation Requirements
+      operationId: deliveryProgressObservationsRequirements
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: observation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Observation Id
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - milestone
+          - sprint
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Scope Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshotRequirementPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Bounded SQL page of immutable canonical requirements summaries, default20/max100. Cursor binds exact source,
+        reader, scope, collection, limit and original basis. No whole source loaded before slicing.
+  /api/v1/delivery/progress/observations/{observation_id}/requirements/{requirement_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Observation Requirement
+      operationId: deliveryProgressObservationsRequirementsItem
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: observation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Observation Id
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - milestone
+          - sprint
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Scope Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshotRequirementDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+        '413':
+          description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
+      description: Exact canonical frozen item in this source and scope, with a 1MiB item budget. No fallback to a current task,
+        another page or a different original.
+  /api/v1/delivery/progress/baselines/{baseline_id}/tasks:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Baseline Tasks
+      operationId: deliveryProgressBaselinesTasks
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: baseline_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Baseline Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshotTaskPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Bounded SQL page of immutable canonical tasks summaries, default20/max100. Cursor binds exact source, reader,
+        scope, collection, limit and original basis. No whole source loaded before slicing.
+  /api/v1/delivery/progress/baselines/{baseline_id}/tasks/{task_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Baseline Task
+      operationId: deliveryProgressBaselinesTasksItem
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: baseline_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Baseline Id
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshotTaskDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+        '413':
+          description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
+      description: Exact canonical frozen item in this source and scope, with a 1MiB item budget. No fallback to a current task,
+        another page or a different original.
+  /api/v1/delivery/progress/baselines/{baseline_id}/requirements:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Baseline Requirements
+      operationId: deliveryProgressBaselinesRequirements
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: baseline_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Baseline Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshotRequirementPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Bounded SQL page of immutable canonical requirements summaries, default20/max100. Cursor binds exact source,
+        reader, scope, collection, limit and original basis. No whole source loaded before slicing.
+  /api/v1/delivery/progress/baselines/{baseline_id}/requirements/{requirement_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Baseline Requirement
+      operationId: deliveryProgressBaselinesRequirementsItem
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: baseline_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Baseline Id
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshotRequirementDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+        '413':
+          description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
+      description: Exact canonical frozen item in this source and scope, with a 1MiB item budget. No fallback to a current task,
+        another page or a different original.
+  /api/v1/delivery/progress/baselines/{baseline_id}/comparison:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Comparison
+      operationId: deliveryProgressBaselineComparison
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: baseline_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Baseline Id
+      - name: query_generation
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Query Generation
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressComparisonSummaryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Complete semantic comparison counts between the original baseline and current generation; unavailable or
+        incomplete inputs are explicit.
+  /api/v1/delivery/progress/baselines/{baseline_id}/comparison/items:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Comparison Items
+      operationId: deliveryProgressBaselineComparisonItems
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: baseline_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Baseline Id
+      - name: kind
+        in: query
+        required: false
+        schema:
+          enum:
+          - added
+          - removed
+          - changed
+          - incomplete
+          type: string
+          default: changed
+          title: Kind
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: query_generation
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Query Generation
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressComparisonPageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+      description: Independent added/removed/changed/incomplete category page. The categories may overlap; complete totals do
+        not depend on the displayed page. Cursor binds baseline, reader, kind, limit and current generation.
+  /api/v1/delivery/progress/baselines/{baseline_id}/comparison/items/{task_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Comparison Item
+      operationId: deliveryProgressBaselineComparisonItem
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: baseline_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Baseline Id
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: kind
+        in: query
+        required: false
+        schema:
+          enum:
+          - added
+          - removed
+          - changed
+          - incomplete
+          type: string
+          default: changed
+          title: Kind
+      - name: query_generation
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+          title: Query Generation
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressComparisonDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Explicit query rebuild, original verification or current generation is required; do not replace the original
+            or mix pages.
+        '503':
+          description: The storage dialect cannot yet verify this bounded read; no whole-source fallback is performed.
+        '413':
+          description: The exact original item exceeds its 1MiB budget; no truncated original is returned.
+      description: Exact original/current comparison item for the requested task and category. Preserves unknown historical
+        fields and validates the current generation.
   /api/v1/sprints/{sprint_id}/burndown:
     get:
       tags:
@@ -5943,8 +6912,8 @@ paths:
           description: Exact scoped record not found
         '409':
           description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
-      description: Explicit configure-authorized derived maintenance. Rebuilds current query facts and backfills only provable
-        successful typed Issue event origins; does not replay business events or change business versions.
+      description: Configure-authorized explicit derived maintenance for schema5 progress facts and proven Issue origins. Does
+        not replay business events, modify business versions or invent historical observations.
   /api/v1/delivery/requirements:
     get:
       tags:
@@ -6170,6 +7139,14 @@ paths:
           maxLength: 64
           default: ''
           title: Milestone Id
+      - name: sprint_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Sprint Id
       - name: sort
         in: query
         required: false
@@ -6231,8 +7208,8 @@ paths:
           description: Exact scoped record not found
         '409':
           description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
-      description: Filter and keyset-page narrow task summaries using the six effective delivery states. Recorded completion
-        is distinct from verified completion. No full workspace or task descriptions are loaded.
+      description: Bounded current task summaries with actual project, requirement, milestone and sprint filters; no client-side
+        first-page scope approximation.
   /api/v1/delivery/tasks/{task_id}:
     get:
       tags:
@@ -10862,199 +11839,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeliveryInboxItem'
-    ProgressBaseline:
-      properties:
-        id:
-          title: Id
-          type: string
-        title:
-          title: Title
-          type: string
-        scope:
-          $ref: '#/components/schemas/ProgressScope'
-        basis:
-          title: Basis
-          type: string
-        starts_on:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Starts On
-        ends_on:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Ends On
-        created_at:
-          title: Created At
-          type: string
-        created_by:
-          title: Created By
-          type: string
-        source_version:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Source Version
-        note:
-          title: Note
-          type: string
-        task_ids:
-          items:
-            type: string
-          title: Task Ids
-          type: array
-        metrics:
-          $ref: '#/components/schemas/ProgressMetrics'
-        tasks:
-          items:
-            $ref: '#/components/schemas/ProgressTaskFact'
-          title: Tasks
-          type: array
-        requirements:
-          items:
-            $ref: '#/components/schemas/ProgressRequirementFact'
-          title: Requirements
-          type: array
-      required:
-      - id
-      - title
-      - scope
-      - basis
-      - starts_on
-      - ends_on
-      - created_at
-      - created_by
-      - source_version
-      - note
-      - task_ids
-      - metrics
-      - tasks
-      - requirements
-      title: ProgressBaseline
-      type: object
-    ProgressBaselineResponse:
-      properties:
-        project_id:
-          title: Project Id
-          type: string
-        version:
-          title: Version
-          type: integer
-        as_of:
-          title: As Of
-          type: string
-        baseline:
-          $ref: '#/components/schemas/ProgressBaseline'
-        current:
-          $ref: '#/components/schemas/ProgressCurrent'
-        comparison:
-          $ref: '#/components/schemas/ProgressComparison'
-      required:
-      - project_id
-      - version
-      - as_of
-      - baseline
-      - current
-      - comparison
-      title: ProgressBaselineResponse
-      type: object
-    ProgressBaselineSummary:
-      properties:
-        id:
-          title: Id
-          type: string
-        title:
-          title: Title
-          type: string
-        scope:
-          $ref: '#/components/schemas/ProgressScope'
-        basis:
-          title: Basis
-          type: string
-        starts_on:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Starts On
-        ends_on:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Ends On
-        created_at:
-          title: Created At
-          type: string
-        created_by:
-          title: Created By
-          type: string
-        source_version:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Source Version
-        note:
-          title: Note
-          type: string
-        task_ids:
-          items:
-            type: string
-          title: Task Ids
-          type: array
-        metrics:
-          $ref: '#/components/schemas/ProgressMetrics'
-      required:
-      - id
-      - title
-      - scope
-      - basis
-      - starts_on
-      - ends_on
-      - created_at
-      - created_by
-      - source_version
-      - note
-      - task_ids
-      - metrics
-      title: ProgressBaselineSummary
-      type: object
-    ProgressComparison:
-      properties:
-        added:
-          items:
-            $ref: '#/components/schemas/ProgressTaskFact'
-          title: Added
-          type: array
-        removed:
-          items:
-            $ref: '#/components/schemas/ProgressTaskFact'
-          title: Removed
-          type: array
-        changed:
-          items:
-            $ref: '#/components/schemas/ProgressTaskChange'
-          title: Changed
-          type: array
-        unchanged_count:
-          title: Unchanged Count
-          type: integer
-        incomplete_plan_fields:
-          items:
-            type: string
-          title: Incomplete Plan Fields
-          type: array
-        incomplete_task_ids:
-          items:
-            type: string
-          title: Incomplete Task Ids
-          type: array
-      required:
-      - added
-      - removed
-      - changed
-      - unchanged_count
-      title: ProgressComparison
-      type: object
     ProgressCoverage:
       properties:
         first_observed_at:
@@ -11089,39 +11873,6 @@ components:
       - missing_days
       - future_days
       title: ProgressCoverage
-      type: object
-    ProgressCurrent:
-      properties:
-        scope:
-          $ref: '#/components/schemas/ProgressScope'
-        tasks:
-          items:
-            $ref: '#/components/schemas/ProgressTaskFact'
-          title: Tasks
-          type: array
-        requirements:
-          items:
-            $ref: '#/components/schemas/ProgressRequirementFact'
-          title: Requirements
-          type: array
-        task_ids:
-          items:
-            type: string
-          title: Task Ids
-          type: array
-        basis:
-          title: Basis
-          type: string
-        metrics:
-          $ref: '#/components/schemas/ProgressMetrics'
-      required:
-      - scope
-      - tasks
-      - requirements
-      - task_ids
-      - basis
-      - metrics
-      title: ProgressCurrent
       type: object
     ProgressDay:
       properties:
@@ -11214,47 +11965,6 @@ components:
       - status_counts
       title: ProgressMetrics
       type: object
-    ProgressObservationResponse:
-      properties:
-        id:
-          title: Id
-          type: string
-        project_id:
-          title: Project Id
-          type: string
-        observed_at:
-          title: Observed At
-          type: string
-        observed_day:
-          title: Observed Day
-          type: string
-        source:
-          title: Source
-          type: string
-        actor:
-          title: Actor
-          type: string
-        source_version:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Source Version
-        scope:
-          $ref: '#/components/schemas/ProgressScope'
-        current:
-          $ref: '#/components/schemas/ProgressCurrent'
-      required:
-      - id
-      - project_id
-      - observed_at
-      - observed_day
-      - source
-      - actor
-      - source_version
-      - scope
-      - current
-      title: ProgressObservationResponse
-      type: object
     ProgressRange:
       properties:
         starts_on:
@@ -11309,71 +12019,6 @@ components:
       - released
       title: ProgressRequirementFact
       type: object
-    ProgressResponse:
-      properties:
-        project_id:
-          title: Project Id
-          type: string
-        version:
-          title: Version
-          type: integer
-        as_of:
-          title: As Of
-          type: string
-        timezone:
-          const: UTC
-          title: Timezone
-          type: string
-        scope:
-          $ref: '#/components/schemas/ProgressScope'
-        range:
-          $ref: '#/components/schemas/ProgressRange'
-        scopes:
-          $ref: '#/components/schemas/ProgressScopes'
-        current:
-          $ref: '#/components/schemas/ProgressCurrent'
-        coverage:
-          $ref: '#/components/schemas/ProgressCoverage'
-        days:
-          items:
-            $ref: '#/components/schemas/ProgressDay'
-          title: Days
-          type: array
-        baselines:
-          items:
-            $ref: '#/components/schemas/ProgressBaselineSummary'
-          title: Baselines
-          type: array
-        baseline:
-          anyOf:
-          - $ref: '#/components/schemas/ProgressBaseline'
-          - type: 'null'
-        comparison:
-          anyOf:
-          - $ref: '#/components/schemas/ProgressComparison'
-          - type: 'null'
-        ideal:
-          items:
-            $ref: '#/components/schemas/ProgressIdealPoint'
-          title: Ideal
-          type: array
-      required:
-      - project_id
-      - version
-      - as_of
-      - timezone
-      - scope
-      - range
-      - scopes
-      - current
-      - coverage
-      - days
-      - baselines
-      - baseline
-      - comparison
-      - ideal
-      title: ProgressResponse
-      type: object
     ProgressScope:
       properties:
         kind:
@@ -11394,48 +12039,6 @@ components:
       - id
       - label
       title: ProgressScope
-      type: object
-    ProgressScopeOption:
-      properties:
-        id:
-          title: Id
-          type: string
-        title:
-          title: Title
-          type: string
-        starts_on:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          title: Starts On
-        ends_on:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          title: Ends On
-      required:
-      - id
-      - title
-      title: ProgressScopeOption
-      type: object
-    ProgressScopes:
-      properties:
-        milestones:
-          items:
-            $ref: '#/components/schemas/ProgressScopeOption'
-          title: Milestones
-          type: array
-        sprints:
-          items:
-            $ref: '#/components/schemas/ProgressScopeOption'
-          title: Sprints
-          type: array
-      required:
-      - milestones
-      - sprints
-      title: ProgressScopes
       type: object
     ProgressStatusCounts:
       properties:
@@ -11466,50 +12069,29 @@ components:
       - verified_completed
       title: ProgressStatusCounts
       type: object
-    ProgressTaskChange:
-      properties:
-        id:
-          title: Id
-          type: string
-        before:
-          $ref: '#/components/schemas/ProgressTaskFact'
-        after:
-          $ref: '#/components/schemas/ProgressTaskFact'
-        fields:
-          items:
-            type: string
-          title: Fields
-          type: array
-      required:
-      - id
-      - before
-      - after
-      - fields
-      title: ProgressTaskChange
-      type: object
     ProgressTaskFact:
       properties:
         id:
+          type: string
           title: Id
-          type: string
         title:
+          type: string
           title: Title
-          type: string
         req_id:
+          type: string
           title: Req Id
-          type: string
         sprint_id:
+          type: string
           title: Sprint Id
-          type: string
         milestone_id:
+          type: string
           title: Milestone Id
-          type: string
         owner_id:
+          type: string
           title: Owner Id
-          type: string
         assigned_to:
-          title: Assigned To
           type: string
+          title: Assigned To
         estimate:
           anyOf:
           - type: string
@@ -11526,9 +12108,10 @@ components:
           - type: 'null'
           title: Ends On
         basis:
-          title: Basis
           type: string
+          title: Basis
         status:
+          type: string
           enum:
           - pending
           - in_progress
@@ -11537,17 +12120,15 @@ components:
           - recorded_completed
           - verified_completed
           title: Status
-          type: string
         recorded_status:
-          title: Recorded Status
           type: string
+          title: Recorded Status
         allocations:
           anyOf:
           - items:
               $ref: '#/components/schemas/StoredAllocation'
             type: array
           - type: 'null'
-          default: null
           title: Allocations
         acceptance_criteria:
           anyOf:
@@ -11555,7 +12136,6 @@ components:
               type: string
             type: array
           - type: 'null'
-          default: null
           title: Acceptance Criteria
         requirement_criteria_indices:
           anyOf:
@@ -11563,13 +12143,12 @@ components:
               type: integer
             type: array
           - type: 'null'
-          default: null
           title: Requirement Criteria Indices
         acceptance:
           anyOf:
           - $ref: '#/components/schemas/TaskAcceptance'
           - type: 'null'
-          default: null
+      type: object
       required:
       - id
       - title
@@ -11585,7 +12164,6 @@ components:
       - status
       - recorded_status
       title: ProgressTaskFact
-      type: object
     HTTPValidationError:
       properties:
         detail:
@@ -23723,7 +24301,7 @@ components:
         schema_version:
           type: integer
           title: Schema Version
-          default: 4
+          default: 5
         computed_at:
           anyOf:
           - type: string
@@ -26893,3 +27471,949 @@ components:
       - as_of
       - origin
       title: IssueOriginDetail
+    ProgressSeriesResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        timezone:
+          type: string
+          const: UTC
+          title: Timezone
+          default: UTC
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        range:
+          $ref: '#/components/schemas/ProgressRange'
+        current:
+          $ref: '#/components/schemas/ProgressCurrentSummary'
+        coverage:
+          $ref: '#/components/schemas/ProgressCoverage'
+        days:
+          items:
+            $ref: '#/components/schemas/ProgressDay'
+          type: array
+          maxItems: 366
+          title: Days
+        baseline:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressBaselineMetadata'
+          - type: 'null'
+        ideal:
+          items:
+            $ref: '#/components/schemas/ProgressIdealPoint'
+          type: array
+          maxItems: 366
+          title: Ideal
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - scope
+      - range
+      - current
+      - coverage
+      - days
+      - baseline
+      - ideal
+      title: ProgressSeriesResponse
+    ProgressCurrentSummary:
+      properties:
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+      additionalProperties: false
+      type: object
+      required:
+      - scope
+      - metrics
+      title: ProgressCurrentSummary
+    ProgressBaselineMetadata:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        basis:
+          type: string
+          title: Basis
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends On
+        created_at:
+          type: string
+          title: Created At
+        created_by:
+          type: string
+          title: Created By
+        source_version:
+          type: integer
+          title: Source Version
+        note:
+          type: string
+          title: Note
+        task_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Task Count
+        requirement_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Requirement Count
+        metrics:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressMetrics'
+          - type: 'null'
+        available:
+          type: boolean
+          title: Available
+        reasons:
+          items:
+            $ref: '#/components/schemas/ProgressReadReason'
+          type: array
+          title: Reasons
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - scope
+      - basis
+      - starts_on
+      - ends_on
+      - created_at
+      - created_by
+      - source_version
+      - note
+      - task_count
+      - requirement_count
+      - metrics
+      - available
+      - reasons
+      title: ProgressBaselineMetadata
+    ProgressReadReason:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      title: ProgressReadReason
+    ProgressFreezeProofResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        available:
+          type: boolean
+          title: Available
+        complete:
+          type: boolean
+          title: Complete
+        basis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Basis
+        task_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            maxItems: 10000
+          - type: 'null'
+          title: Task Ids
+        metrics:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressMetrics'
+          - type: 'null'
+        budget:
+          $ref: '#/components/schemas/ProgressReadBudget'
+        reasons:
+          items:
+            $ref: '#/components/schemas/ProgressReadReason'
+          type: array
+          title: Reasons
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - scope
+      - available
+      - complete
+      - basis
+      - task_ids
+      - metrics
+      - budget
+      - reasons
+      title: ProgressFreezeProofResponse
+    ProgressReadBudget:
+      properties:
+        max_tasks:
+          type: integer
+          title: Max Tasks
+          default: 10000
+        max_closure_tasks:
+          type: integer
+          title: Max Closure Tasks
+          default: 10000
+        max_requirements:
+          type: integer
+          title: Max Requirements
+          default: 10000
+        max_bytes:
+          type: integer
+          title: Max Bytes
+          default: 16777216
+        max_item_bytes:
+          type: integer
+          title: Max Item Bytes
+          default: 1048576
+        max_dependency_depth:
+          type: integer
+          title: Max Dependency Depth
+          default: 64
+        task_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Task Count
+        closure_task_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Closure Task Count
+        requirement_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Requirement Count
+        bytes_used:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Bytes Used
+      additionalProperties: false
+      type: object
+      title: ProgressReadBudget
+    ProgressBaselinesResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        items:
+          items:
+            $ref: '#/components/schemas/ProgressBaselineMetadata'
+          type: array
+          maxItems: 100
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - scope
+      - items
+      - total
+      - limit
+      - next_cursor
+      title: ProgressBaselinesResponse
+    ProgressBaselineMetadataResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        baseline:
+          $ref: '#/components/schemas/ProgressBaselineMetadata'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - baseline
+      title: ProgressBaselineMetadataResponse
+    ProgressObservationMetadataResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        observation:
+          $ref: '#/components/schemas/ProgressObservationMetadata'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - observation
+      title: ProgressObservationMetadataResponse
+    ProgressObservationMetadata:
+      properties:
+        id:
+          type: string
+          title: Id
+        observed_at:
+          type: string
+          title: Observed At
+        observed_day:
+          type: string
+          title: Observed Day
+        source:
+          type: string
+          title: Source
+        actor:
+          type: string
+          title: Actor
+        source_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Version
+        snapshot_basis:
+          type: string
+          title: Snapshot Basis
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        metrics:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressMetrics'
+          - type: 'null'
+        task_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Task Count
+        requirement_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Requirement Count
+        available:
+          type: boolean
+          title: Available
+        reasons:
+          items:
+            $ref: '#/components/schemas/ProgressReadReason'
+          type: array
+          title: Reasons
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - observed_at
+      - observed_day
+      - source
+      - actor
+      - source_version
+      - snapshot_basis
+      - scope
+      - metrics
+      - task_count
+      - requirement_count
+      - available
+      - reasons
+      title: ProgressObservationMetadata
+    ProgressSnapshotTaskPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        source_kind:
+          type: string
+          enum:
+          - observation
+          - baseline
+          title: Source Kind
+        source_id:
+          type: string
+          title: Source Id
+        snapshot_basis:
+          type: string
+          title: Snapshot Basis
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        collection:
+          type: string
+          const: tasks
+          title: Collection
+          default: tasks
+        items:
+          items:
+            $ref: '#/components/schemas/ProgressTaskSummary'
+          type: array
+          maxItems: 100
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - source_kind
+      - source_id
+      - snapshot_basis
+      - scope
+      - items
+      - total
+      - limit
+      - next_cursor
+      title: ProgressSnapshotTaskPage
+    ProgressTaskSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        req_id:
+          type: string
+          title: Req Id
+        sprint_id:
+          type: string
+          title: Sprint Id
+        milestone_id:
+          type: string
+          title: Milestone Id
+        owner_id:
+          type: string
+          title: Owner Id
+        assigned_to:
+          type: string
+          title: Assigned To
+        estimate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Estimate
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends On
+        basis:
+          type: string
+          title: Basis
+        status:
+          type: string
+          title: Status
+        recorded_status:
+          type: string
+          title: Recorded Status
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - req_id
+      - sprint_id
+      - milestone_id
+      - owner_id
+      - assigned_to
+      - estimate
+      - starts_on
+      - ends_on
+      - basis
+      - status
+      - recorded_status
+      title: ProgressTaskSummary
+    ProgressSnapshotTaskDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        source_kind:
+          type: string
+          enum:
+          - observation
+          - baseline
+          title: Source Kind
+        source_id:
+          type: string
+          title: Source Id
+        snapshot_basis:
+          type: string
+          title: Snapshot Basis
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        collection:
+          type: string
+          const: tasks
+          title: Collection
+          default: tasks
+        item:
+          $ref: '#/components/schemas/ProgressTaskFact'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - source_kind
+      - source_id
+      - snapshot_basis
+      - scope
+      - item
+      title: ProgressSnapshotTaskDetail
+    ProgressSnapshotRequirementPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        source_kind:
+          type: string
+          enum:
+          - observation
+          - baseline
+          title: Source Kind
+        source_id:
+          type: string
+          title: Source Id
+        snapshot_basis:
+          type: string
+          title: Snapshot Basis
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        collection:
+          type: string
+          const: requirements
+          title: Collection
+          default: requirements
+        items:
+          items:
+            $ref: '#/components/schemas/ProgressRequirementFact'
+          type: array
+          maxItems: 100
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - source_kind
+      - source_id
+      - snapshot_basis
+      - scope
+      - items
+      - total
+      - limit
+      - next_cursor
+      title: ProgressSnapshotRequirementPage
+    ProgressSnapshotRequirementDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        source_kind:
+          type: string
+          enum:
+          - observation
+          - baseline
+          title: Source Kind
+        source_id:
+          type: string
+          title: Source Id
+        snapshot_basis:
+          type: string
+          title: Snapshot Basis
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        collection:
+          type: string
+          const: requirements
+          title: Collection
+          default: requirements
+        item:
+          $ref: '#/components/schemas/ProgressRequirementFact'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - source_kind
+      - source_id
+      - snapshot_basis
+      - scope
+      - item
+      title: ProgressSnapshotRequirementDetail
+    ProgressComparisonSummaryResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        baseline_id:
+          type: string
+          title: Baseline Id
+        baseline_basis:
+          type: string
+          title: Baseline Basis
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        current_scope_available:
+          type: boolean
+          title: Current Scope Available
+        available:
+          type: boolean
+          title: Available
+        complete:
+          type: boolean
+          title: Complete
+        counts:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressComparisonCounts'
+          - type: 'null'
+        incomplete_plan_fields:
+          items:
+            type: string
+          type: array
+          title: Incomplete Plan Fields
+        budget:
+          $ref: '#/components/schemas/ProgressReadBudget'
+        reasons:
+          items:
+            $ref: '#/components/schemas/ProgressReadReason'
+          type: array
+          title: Reasons
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - baseline_id
+      - baseline_basis
+      - scope
+      - current_scope_available
+      - available
+      - complete
+      - counts
+      - incomplete_plan_fields
+      - budget
+      - reasons
+      title: ProgressComparisonSummaryResponse
+    ProgressComparisonCounts:
+      properties:
+        added:
+          type: integer
+          title: Added
+        removed:
+          type: integer
+          title: Removed
+        changed:
+          type: integer
+          title: Changed
+        incomplete:
+          type: integer
+          title: Incomplete
+        unchanged:
+          type: integer
+          title: Unchanged
+      additionalProperties: false
+      type: object
+      required:
+      - added
+      - removed
+      - changed
+      - incomplete
+      - unchanged
+      title: ProgressComparisonCounts
+    ProgressComparisonPageResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        baseline_id:
+          type: string
+          title: Baseline Id
+        baseline_basis:
+          type: string
+          title: Baseline Basis
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        current_scope_available:
+          type: boolean
+          title: Current Scope Available
+        kind:
+          type: string
+          enum:
+          - added
+          - removed
+          - changed
+          - incomplete
+          title: Kind
+        items:
+          items:
+            $ref: '#/components/schemas/ProgressComparisonItemSummary'
+          type: array
+          maxItems: 100
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - baseline_id
+      - baseline_basis
+      - scope
+      - current_scope_available
+      - kind
+      - items
+      - total
+      - limit
+      - next_cursor
+      title: ProgressComparisonPageResponse
+    ProgressComparisonItemSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        before_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Before Title
+        after_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: After Title
+        fields:
+          items:
+            type: string
+          type: array
+          title: Fields
+        incomplete_fields:
+          items:
+            type: string
+          type: array
+          title: Incomplete Fields
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - before_title
+      - after_title
+      - fields
+      - incomplete_fields
+      title: ProgressComparisonItemSummary
+    ProgressComparisonDetailResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        baseline_id:
+          type: string
+          title: Baseline Id
+        baseline_basis:
+          type: string
+          title: Baseline Basis
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        current_scope_available:
+          type: boolean
+          title: Current Scope Available
+        kind:
+          type: string
+          enum:
+          - added
+          - removed
+          - changed
+          - incomplete
+          title: Kind
+        item:
+          $ref: '#/components/schemas/ProgressComparisonItemDetail'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - baseline_id
+      - baseline_basis
+      - scope
+      - current_scope_available
+      - kind
+      - item
+      title: ProgressComparisonDetailResponse
+    ProgressComparisonItemDetail:
+      properties:
+        id:
+          type: string
+          title: Id
+        fields:
+          items:
+            type: string
+          type: array
+          title: Fields
+        incomplete_fields:
+          items:
+            type: string
+          type: array
+          title: Incomplete Fields
+        before:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressTaskFact'
+          - type: 'null'
+        after:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressTaskFact'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - fields
+      - incomplete_fields
+      - before
+      - after
+      title: ProgressComparisonItemDetail

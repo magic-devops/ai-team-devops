@@ -1,34 +1,59 @@
-import { createElement, isValidElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DeliveryProgressHistory,
-  DeliveryProgressSnapshot,
+  CurrentTaskButton,
   DeliveryProgressComparison,
 } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProgressDetails";
 import { progressChartOptions } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProgressCharts";
 import { progressTranslations } from "../i18n/delivery-progress";
 import { schedulingTranslations } from "../i18n/delivery-scheduling";
 import type {
-  DeliveryProgress,
-  ProgressObservation,
+  ProgressSeries,
   ProgressMetrics,
   ProgressTask,
 } from "./deliveryProgress";
 import { fetchTaskDetail } from "./deliveryQuery";
 
-const navigationHooks = vi.hoisted(() => ({ values: [] as unknown[], next: 0 }));
+const navigationHooks = vi.hoisted(() => ({
+  values: [] as unknown[],
+  next: 0,
+}));
 vi.mock("react", async () => ({
-  ...await vi.importActual<typeof import("react")>("react"),
+  ...(await vi.importActual<typeof import("react")>("react")),
   useState: (initial: unknown) => {
     const index = navigationHooks.next++;
-    if (!(index in navigationHooks.values)) navigationHooks.values[index] = typeof initial === "function" ? initial() : initial;
-    return [navigationHooks.values[index], (value: any) => { navigationHooks.values[index] = typeof value === "function" ? value(navigationHooks.values[index]) : value; }];
+    if (!(index in navigationHooks.values))
+      navigationHooks.values[index] =
+        typeof initial === "function" ? initial() : initial;
+    return [
+      navigationHooks.values[index],
+      (value: any) => {
+        navigationHooks.values[index] =
+          typeof value === "function"
+            ? value(navigationHooks.values[index])
+            : value;
+      },
+    ];
   },
 }));
-vi.mock("./authStorage", async () => ({ ...await vi.importActual<typeof import("./authStorage")>("./authStorage"), getProjectId: () => "P" }));
-vi.mock("./deliveryQuery", async () => ({ ...await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery"), fetchTaskDetail: vi.fn() }));
-beforeEach(() => { navigationHooks.values = []; navigationHooks.next = 0; language = "en-US"; vi.mocked(fetchTaskDetail).mockReset(); });
+vi.mock("./authStorage", async () => ({
+  ...(await vi.importActual<typeof import("./authStorage")>("./authStorage")),
+  getProjectId: () => "P",
+}));
+vi.mock("./deliveryQuery", async () => ({
+  ...(await vi.importActual<typeof import("./deliveryQuery")>(
+    "./deliveryQuery",
+  )),
+  fetchTaskDetail: vi.fn(),
+}));
+beforeEach(() => {
+  navigationHooks.values = [];
+  navigationHooks.next = 0;
+  language = "en-US";
+  vi.mocked(fetchTaskDetail).mockReset();
+});
 
 let language: keyof typeof progressTranslations = "en-US";
 function translate(key: string, options?: Record<string, unknown>): string {
@@ -135,28 +160,72 @@ const progress = {
     { date: "2026-10-18", remaining: 0 },
   ],
   coverage: { future_days: ["2026-10-18"] },
-} as unknown as DeliveryProgress;
+} as unknown as ProgressSeries;
 
-function findCurrentControl(node: ReactNode, id: string): any {
-  if (Array.isArray(node)) return node.map((child) => findCurrentControl(child, id)).find(Boolean);
-  if (!isValidElement<any>(node)) return undefined;
-  if (typeof node.type === "function" && node.type.name === "CurrentTaskButton" && node.props.task.id === id) return node;
-  return findCurrentControl(node.props.children, id);
+function currentControl(
+  historical: ProgressTask,
+  onOpenTask: (target: any) => void,
+) {
+  return () => {
+    navigationHooks.next = 0;
+    return CurrentTaskButton({ task: historical, onOpenTask });
+  };
 }
-function currentControl(historical: ProgressTask, onOpenTask: (target: any) => void) {
-  const observation = { id: "O", scope: { kind: "project", id: "", label: "Project" }, current: { tasks: [historical], metrics } } as ProgressObservation;
-  const node = findCurrentControl(DeliveryProgressSnapshot({ observation, currentTasks: [], onOpenTask }), historical.id);
-  return () => { navigationHooks.next = 0; return node.type(node.props); };
+async function settleNavigation() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
-async function settleNavigation() { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); }
 
 describe("real progress presentation", () => {
   it("shows acceptance changes as readable criteria and sources rather than object serialization", () => {
     language = "en-US";
-    const html = renderToStaticMarkup(createElement(DeliveryProgressComparison, {
-      comparison: { added: [], removed: [], changed: [{ id: "present", before: { ...task, acceptance: { criteria: ["Original criterion"], sources: [{ source: "task", index: 0, text: "Original criterion" }], available: true, requirement_id: null, requirement_revision: null } }, after: { ...task, acceptance: { criteria: ["Updated criterion"], sources: [{ source: "task", index: 0, text: "Updated criterion" }], available: true, requirement_id: null, requirement_revision: null } }, fields: ["acceptance"] }], unchanged_count: 0, incomplete_plan_fields: [], incomplete_task_ids: [] }, currentTasks: [], onOpenTask: () => {},
-    }));
-    expect(html).toContain("Original criterion"); expect(html).toContain("Updated criterion"); expect(html).not.toContain("[object Object]");
+    const html = renderToStaticMarkup(
+      createElement(DeliveryProgressComparison, {
+        comparison: {
+          added: [],
+          removed: [],
+          changed: [
+            {
+              id: "present",
+              before: {
+                ...task,
+                acceptance: {
+                  criteria: ["Original criterion"],
+                  sources: [
+                    { source: "task", index: 0, text: "Original criterion" },
+                  ],
+                  available: true,
+                  requirement_id: null,
+                  requirement_revision: null,
+                },
+              },
+              after: {
+                ...task,
+                acceptance: {
+                  criteria: ["Updated criterion"],
+                  sources: [
+                    { source: "task", index: 0, text: "Updated criterion" },
+                  ],
+                  available: true,
+                  requirement_id: null,
+                  requirement_revision: null,
+                },
+              },
+              fields: ["acceptance"],
+            },
+          ],
+
+          incomplete_plan_fields: [],
+        },
+        currentTasks: [],
+        onOpenTask: () => {},
+      }),
+    );
+    expect(html).toContain("Original criterion");
+    expect(html).toContain("Updated criterion");
+    expect(html).not.toContain("[object Object]");
+    expect(html).not.toContain("0 unchanged");
   });
   it("renders frozen reservation changes with units and reports uncaptured baseline fields", () => {
     language = "en-US";
@@ -181,9 +250,8 @@ describe("real progress presentation", () => {
               fields: ["allocations"],
             },
           ],
-          unchanged_count: 0,
+
           incomplete_plan_fields: ["allocations"],
-          incomplete_task_ids: ["old-task"],
         } as unknown as Parameters<
           typeof DeliveryProgressComparison
         >[0]["comparison"],
@@ -243,38 +311,6 @@ describe("real progress presentation", () => {
       )?.data,
     ).toEqual([1, "-", 1, "-"]);
   });
-  it("renders historical facts read only and offers explicit exact lookups without claiming current existence", () => {
-    const observation = {
-      id: "O",
-      observed_at: "2026-10-15T20:00:00Z",
-      source: "manual",
-      actor: "Lead",
-      source_version: 3,
-      scope: { kind: "project", id: "", label: "Project" },
-      current: {
-        tasks: [
-          task,
-          { ...task, id: "deleted", title: "Removed historical task" },
-        ],
-        metrics,
-      },
-    } as ProgressObservation;
-    const html = renderToStaticMarkup(
-      createElement(DeliveryProgressSnapshot, {
-        observation,
-        currentTasks: [{ id: "present", req_id: "req" }],
-        onOpenTask: () => {},
-      }),
-    );
-    expect(html).toContain("Historical snapshot · Read only");
-    expect(html).toContain("Historical task title");
-    expect(html).toContain("Removed historical task");
-    expect(html.match(/Open current task/g)).toHaveLength(2);
-    expect(fetchTaskDetail).not.toHaveBeenCalled();
-    expect(html).not.toContain("Current task no longer exists");
-    expect(html).not.toContain("execution.review");
-    expect(html).not.toContain("stage.advance");
-  });
   it("preserves frozen and changed titles while deferring current navigation to an exact read", () => {
     const html = renderToStaticMarkup(
       createElement(DeliveryProgressComparison, {
@@ -289,9 +325,8 @@ describe("real progress presentation", () => {
               fields: ["title"],
             },
           ],
-          unchanged_count: 1,
+
           incomplete_plan_fields: [],
-          incomplete_task_ids: [],
         },
         currentTasks: [{ id: "present", req_id: "req" }],
         onOpenTask: () => {},
@@ -307,8 +342,13 @@ describe("real progress presentation", () => {
   });
   it("does not navigate a removed historical task when its explicit exact read returns 404", async () => {
     const onOpenTask = vi.fn();
-    const render = currentControl({ ...task, id: "deleted", title: "Removed historical task" }, onOpenTask);
-    vi.mocked(fetchTaskDetail).mockRejectedValue(new Error("HTTP 404: Current task no longer exists"));
+    const render = currentControl(
+      { ...task, id: "deleted", title: "Removed historical task" },
+      onOpenTask,
+    );
+    vi.mocked(fetchTaskDetail).mockRejectedValue(
+      new Error("HTTP 404: Current task no longer exists"),
+    );
     expect(fetchTaskDetail).not.toHaveBeenCalled();
     render().props.children[0].props.onClick();
     await settleNavigation();
@@ -320,13 +360,28 @@ describe("real progress presentation", () => {
   });
   it("opens the current exact task using its remote requirement after migration out of the historical scope", async () => {
     const onOpenTask = vi.fn();
-    const render = currentControl({ ...task, req_id: "REQ-historical" }, onOpenTask);
-    vi.mocked(fetchTaskDetail).mockResolvedValue({ project_id: "P", version: 9, query_generation: 4, planning_basis: "current-plan", task: { id: "present", req_id: "REQ-current" }, requirement: { id: "REQ-current", title: "Current requirement" } } as Awaited<ReturnType<typeof fetchTaskDetail>>);
+    const render = currentControl(
+      { ...task, req_id: "REQ-historical" },
+      onOpenTask,
+    );
+    vi.mocked(fetchTaskDetail).mockResolvedValue({
+      project_id: "P",
+      version: 9,
+      query_generation: 4,
+      planning_basis: "current-plan",
+      task: { id: "present", req_id: "REQ-current" },
+      requirement: { id: "REQ-current", title: "Current requirement" },
+    } as Awaited<ReturnType<typeof fetchTaskDetail>>);
     render().props.children[0].props.onClick();
     await settleNavigation();
     expect(fetchTaskDetail).toHaveBeenCalledWith("P", "present");
     expect(onOpenTask).toHaveBeenCalledOnce();
-    expect(onOpenTask).toHaveBeenCalledWith({ view: "progress", requirement_id: "REQ-current", task_id: "present", detail: "tasks" });
+    expect(onOpenTask).toHaveBeenCalledWith({
+      view: "progress",
+      requirement_id: "REQ-current",
+      task_id: "present",
+      detail: "tasks",
+    });
   });
   it("does not claim unchanged scope when original reservation facts were not collected", () => {
     const html = renderToStaticMarkup(
@@ -335,9 +390,8 @@ describe("real progress presentation", () => {
           added: [],
           removed: [],
           changed: [],
-          unchanged_count: 0,
+
           incomplete_plan_fields: ["allocations"],
-          incomplete_task_ids: [task.id],
         },
         currentTasks: [],
         onOpenTask: () => {},
@@ -406,9 +460,8 @@ describe("real progress presentation", () => {
               fields: ["estimate", "owner_id", "starts_on", "ends_on", "basis"],
             },
           ],
-          unchanged_count: 0,
+
           incomplete_plan_fields: [],
-          incomplete_task_ids: [],
         },
         currentTasks: [{ id: task.id, req_id: "req" }],
         onOpenTask: () => {},

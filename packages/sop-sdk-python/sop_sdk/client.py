@@ -66,15 +66,44 @@ def _delivery_query_params(*, limit: int, cursor: str, **filters: Any) -> dict[s
 
 
 def _progress_scope_params(scope: str, scope_id: str) -> dict[str, str]:
-    if scope not in {"project", "milestone", "sprint"}:
+    if not isinstance(scope, str) or scope not in {"project", "milestone", "sprint"}:
         raise ValueError("scope must be project, milestone or sprint")
+    if (
+        not isinstance(scope_id, str)
+        or len(scope_id) > 100
+        or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in scope_id)
+    ):
+        raise ValueError("scope_id must be a string of at most 100 characters without controls")
     if (scope == "project" and scope_id) or (scope != "project" and not scope_id):
         raise ValueError("scope_id is required only for milestone or sprint scope")
     params = {"scope": scope}
     if scope_id:
-        if len(scope_id) > 64 or any(ord(char) < 32 for char in scope_id):
-            raise ValueError("scope_id must be a valid resource ID of at most 64 characters")
         params["scope_id"] = scope_id
+    return params
+
+
+def _progress_page_params(*, limit: int, cursor: str, **filters: Any) -> dict[str, Any]:
+    if not isinstance(cursor, str) or any(127 <= ord(char) <= 159 for char in cursor):
+        raise ValueError("invalid opaque progress cursor")
+    return _delivery_query_params(limit=limit, cursor=cursor, **filters)
+
+
+def _progress_collection(collection: str) -> str:
+    if not isinstance(collection, str) or collection not in {"tasks", "requirements"}:
+        raise ValueError("collection must be tasks or requirements")
+    return collection
+
+
+def _progress_comparison_params(kind: str | None = None, query_generation: int | None = None) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    if kind is not None:
+        if not isinstance(kind, str) or kind not in {"added", "removed", "changed", "incomplete"}:
+            raise ValueError("comparison kind must be added, removed, changed or incomplete")
+        params["kind"] = kind
+    if query_generation is not None:
+        if type(query_generation) is not int or query_generation < 1:
+            raise ValueError("query_generation must be a positive integer")
+        params["query_generation"] = query_generation
     return params
 
 
@@ -327,6 +356,7 @@ class ManagerClient:
         priority: str = "",
         owner_id: str = "",
         milestone_id: str = "",
+        sprint_id: str = "",
         cursor: str = "",
         limit: int = 20,
         sort: str = "created_desc",
@@ -351,6 +381,7 @@ class ManagerClient:
             priority=priority,
             owner_id=owner_id,
             milestone_id=milestone_id,
+            sprint_id=sprint_id,
             sort=sort,
         )
         return self._request("GET", "/api/v1/delivery/tasks", params=params)
@@ -593,7 +624,7 @@ class ManagerClient:
         scope_id: str = "",
         baseline_id: str = "",
     ) -> dict[str, Any]:
-        """Read persisted observations and live scope; missing dates remain null."""
+        """Read small full-scope metrics and real daily points; missing dates stay null."""
         params = _progress_scope_params(scope, scope_id)
         start = _progress_date(starts_on) if starts_on is not None else None
         end = _progress_date(ends_on) if ends_on is not None else None
@@ -611,7 +642,7 @@ class ManagerClient:
     def delivery_progress_observation(
         self, observation_id: str, *, scope: str = "project", scope_id: str = ""
     ) -> dict[str, Any]:
-        """Read an original historical snapshot without treating it as current work."""
+        """Read exact frozen observation metadata; use explicit item reads for historical facts."""
         params = _progress_scope_params(scope, scope_id)
         resource = _resource_segment(observation_id)
         return self._request(
@@ -619,9 +650,100 @@ class ManagerClient:
         )
 
     def delivery_baseline(self, baseline_id: str) -> dict[str, Any]:
-        """Read an immutable plan and its actual current scope comparison."""
+        """Read exact immutable baseline metadata, independently of current comparison."""
         resource = _resource_segment(baseline_id)
         return self._request("GET", f"/api/v1/delivery/progress/baselines/{resource}")
+
+    def delivery_progress_baselines(
+        self, *, scope: str = "project", scope_id: str = "", limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one fixed-window baseline catalogue page without frozen task arrays."""
+        params = _progress_page_params(limit=limit, cursor=cursor, **_progress_scope_params(scope, scope_id))
+        return self._request("GET", "/api/v1/delivery/progress/baselines", params=params)
+
+    def delivery_progress_observation_items(
+        self, observation_id: str, *, collection: str = "tasks", scope: str = "project",
+        scope_id: str = "", limit: int = 20, cursor: str = "",
+    ) -> dict[str, Any]:
+        """Read a bounded page from the exact frozen observation and scope."""
+        resource = _resource_segment(observation_id)
+        collection = _progress_collection(collection)
+        params = _progress_page_params(limit=limit, cursor=cursor, **_progress_scope_params(scope, scope_id))
+        return self._request("GET", f"/api/v1/delivery/progress/observations/{resource}/{collection}", params=params)
+
+    def delivery_progress_observation_item(
+        self, observation_id: str, item_id: str, *, collection: str = "tasks",
+        scope: str = "project", scope_id: str = "",
+    ) -> dict[str, Any]:
+        """Read an exact frozen item; unavailable or oversized originals remain errors."""
+        resource, item = _resource_segment(observation_id), _resource_segment(item_id)
+        collection = _progress_collection(collection)
+        return self._request(
+            "GET", f"/api/v1/delivery/progress/observations/{resource}/{collection}/{item}",
+            params=_progress_scope_params(scope, scope_id),
+        )
+
+    def delivery_baseline_items(
+        self, baseline_id: str, *, collection: str = "tasks", limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one page from the baseline's own frozen scope."""
+        resource = _resource_segment(baseline_id)
+        collection = _progress_collection(collection)
+        return self._request(
+            "GET", f"/api/v1/delivery/progress/baselines/{resource}/{collection}",
+            params=_progress_page_params(limit=limit, cursor=cursor),
+        )
+
+    def delivery_baseline_item(
+        self, baseline_id: str, item_id: str, *, collection: str = "tasks"
+    ) -> dict[str, Any]:
+        """Read the exact original item without falling back to a current entity."""
+        resource, item = _resource_segment(baseline_id), _resource_segment(item_id)
+        collection = _progress_collection(collection)
+        return self._request("GET", f"/api/v1/delivery/progress/baselines/{resource}/{collection}/{item}")
+
+    def delivery_baseline_comparison(
+        self, baseline_id: str, *, query_generation: int | None = None
+    ) -> dict[str, Any]:
+        """Read full comparison counts separately from independently paged categories."""
+        resource = _resource_segment(baseline_id)
+        return self._request(
+            "GET", f"/api/v1/delivery/progress/baselines/{resource}/comparison",
+            params=_progress_comparison_params(query_generation=query_generation),
+        )
+
+    def delivery_baseline_comparison_items(
+        self, baseline_id: str, *, kind: str, limit: int = 20, cursor: str = "",
+        query_generation: int | None = None,
+    ) -> dict[str, Any]:
+        """Read one explicit comparison category, pinned to the reviewed generation."""
+        resource = _resource_segment(baseline_id)
+        if kind is None:
+            raise ValueError("comparison kind is required")
+        params = _progress_page_params(
+            limit=limit, cursor=cursor, **_progress_comparison_params(kind, query_generation)
+        )
+        return self._request("GET", f"/api/v1/delivery/progress/baselines/{resource}/comparison/items", params=params)
+
+    def delivery_baseline_comparison_item(
+        self, baseline_id: str, task_id: str, *, kind: str, query_generation: int | None = None
+    ) -> dict[str, Any]:
+        """Read the exact selected change and its fixed before/current after facts."""
+        resource, task = _resource_segment(baseline_id), _resource_segment(task_id)
+        if kind is None:
+            raise ValueError("comparison kind is required")
+        return self._request(
+            "GET", f"/api/v1/delivery/progress/baselines/{resource}/comparison/items/{task}",
+            params=_progress_comparison_params(kind, query_generation),
+        )
+
+    def delivery_progress_freeze_proof(
+        self, *, scope: str = "project", scope_id: str = ""
+    ) -> dict[str, Any]:
+        """Explicitly read a complete scope proof; unavailable IDs/basis remain null."""
+        return self._request(
+            "GET", "/api/v1/delivery/progress/freeze-proof", params=_progress_scope_params(scope, scope_id)
+        )
 
     def delivery_task_review_current(self, task_id: str) -> dict[str, Any]:
         """Read the current canonical proof separately from historical decisions."""

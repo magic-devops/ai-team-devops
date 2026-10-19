@@ -195,7 +195,7 @@ def remember_basis(db, project, data):
             flow["tested_work"] = _work_fingerprint(tasks[req.id], team, req.id)
 
 
-def materialize(db, project, data, user, *, verification=None):
+def materialize(db, project, data, user, *, verification=None, progress_only=False):
     from .delivery_deployment_facts import current_deployed_requirement_ids
     from .delivery_verification import VerificationContext
 
@@ -232,7 +232,8 @@ def materialize(db, project, data, user, *, verification=None):
             and task["status"] == "completed"
         ):
             task["status"] = "blocked"
-    issues = [serialize(i) for i in sorted(verification.issues, key=lambda row: row.created_at, reverse=True)]
+    issues = [({key: getattr(i, key) for key in ("id", "task_id", "title", "severity", "status")} if progress_only else serialize(i))
+              for i in sorted(verification.issues, key=lambda row: row.created_at, reverse=True)]
     task_groups, issue_groups = defaultdict(list), defaultdict(list)
     for task in tasks:
         task_groups[task["req_id"]].append(task)
@@ -243,7 +244,7 @@ def materialize(db, project, data, user, *, verification=None):
 
     from .sql_models import IssueEventOrigin
 
-    event_issue_ids = set(db.scalars(select(IssueEventOrigin.issue_id).where(
+    event_issue_ids = set() if progress_only else set(db.scalars(select(IssueEventOrigin.issue_id).where(
         IssueEventOrigin.tenant_id == project.tenant_id, IssueEventOrigin.project_id == project.id
     ).distinct()))
     for issue in issues:

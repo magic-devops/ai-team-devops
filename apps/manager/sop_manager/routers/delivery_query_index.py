@@ -9,7 +9,7 @@ from .delivery_progress_facts import metrics
 from .delivery_scheduling import planning_basis
 from .sql_models import DeliveryQueryFact, DeliveryQueryState, DeliveryWorkspace
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 FLOW_FIELDS = (
     "stage",
     "revision",
@@ -337,6 +337,10 @@ def replace_from_evaluation(db, project, evaluation):
     rows += _execution_facts(project, evaluation) + _reference_facts(project, evaluation)
     rows += _inbox_facts(project, evaluation)
     rows += _quality_release_facts(project, evaluation)
+    for kind, collection in (("progress_task", "tasks"), ("progress_requirement", "requirements")):
+        rows += [_fact(project, kind, item["id"], item, parent_id=item.get("req_id") or "",
+            milestone_id=item.get("milestone_id", ""), status=item.get("status", item.get("stage", "")),
+            label=item["title"][:256]) for item in evaluation.facts[collection]]
     linked_issues = {
         flow["source_issue_id"]: requirement_id
         for requirement_id, flow in evaluation.state.get("flows", {}).items()

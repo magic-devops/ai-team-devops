@@ -5,7 +5,6 @@ from copy import deepcopy
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from .delivery_progress_facts import capture_facts, select_scope
 from .delivery_service import identifier
 from .sql_models import DeliveryProgressBaseline, DeliveryWorkspace
 
@@ -20,40 +19,6 @@ def timestamp(value):
         if value.tzinfo is None
         else value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     )
-
-
-def baseline_view(row, *, summary=False):
-    frozen = deepcopy(row.data)
-    result = {
-        "id": row.id,
-        "title": row.title,
-        "scope": frozen["scope"],
-        "basis": row.basis,
-        "starts_on": row.starts_on,
-        "ends_on": row.ends_on,
-        "created_at": timestamp(row.created_at),
-        "created_by": row.created_by,
-        "source_version": row.source_version,
-        "note": row.note,
-        "task_ids": frozen["task_ids"],
-        "metrics": frozen["metrics"],
-    }
-    if not summary:
-        result.update(tasks=frozen["tasks"], requirements=frozen["requirements"])
-    return result
-
-
-def get_baseline(db, project, baseline_id):
-    row = db.scalar(
-        select(DeliveryProgressBaseline).where(
-            DeliveryProgressBaseline.id == baseline_id,
-            DeliveryProgressBaseline.project_id == project.id,
-            DeliveryProgressBaseline.tenant_id == project.tenant_id,
-        )
-    )
-    if row is None:
-        raise HTTPException(404, "Progress baseline not found in this project")
-    return row
 
 
 def compare_scope(baseline, current):
@@ -129,7 +94,7 @@ def _validate_associations(facts, current):
                 )
 
 
-def apply_progress(db, project, user, action, payload):
+def apply_progress(db, project, user, action, payload, *, proof=None):
     from .delivery_progress_capture import record_observation
 
     version = db.scalar(
@@ -143,8 +108,14 @@ def apply_progress(db, project, user, action, payload):
             db, project, source="manual", actor=user.username, source_version=version, force=True
         )
         return observation.id, None
-    facts = capture_facts(db, project)
-    current = select_scope(facts, payload.scope, payload.scope_id)
+    from .delivery_progress_current import freeze_proof
+
+    proof = proof or freeze_proof(db, project, scope=payload.scope, scope_id=payload.scope_id, internal=True)
+    if not proof[0]["available"] or not proof[0]["complete"]:
+        raise HTTPException(413, {"code": "progress_proof_unavailable", "message": "No partial scope may be frozen", "reasons": proof[0]["reasons"]})
+    # The command holds the Project lock throughout this canonical proof and
+    # CAS. Reuse this transaction's complete proof, never a caller's old GET.
+    facts, current = proof[3]
     if set(payload.task_ids) != set(current["task_ids"]) or payload.basis != current["basis"]:
         raise HTTPException(
             409, "Progress scope changed. Reload and review the current task scope before freezing."
@@ -165,8 +136,11 @@ def apply_progress(db, project, user, action, payload):
         data=deepcopy(current),
         note=payload.note,
     )
-    db.add(baseline)
-    db.flush()
+    from sop_manager.project_write_guard import progress_snapshot_write_scope
+
+    with progress_snapshot_write_scope(db, project.tenant_id, project.id, "baseline"):
+        db.add(baseline)
+        db.flush()
     record_observation(
         db, project, source="baseline", actor=user.username, source_version=version, force=True
     )
