@@ -15,6 +15,7 @@ import {
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { IssueDiagnosisPanel } from "./DeliveryIssueDiagnosis";
+import { IssueOriginDirectory } from "./DeliveryIssueOrigins";
 import { DeliveryCollaboration } from "./DeliveryDiscussionAdoption";
 import { IssueReviewPanel } from "./DeliveryIssueReview";
 import {
@@ -96,8 +97,22 @@ export function IssueDetailContent({
   const [selectedId, setSelectedId] = useState(
     () => initialDiagnosisId || routeDiagnosis(),
   );
-  const [mode, setMode] = useState<"facts" | "generate" | "proposal">(() =>
-    initialDiagnosisId || routeDiagnosis() ? "proposal" : "facts",
+  const routeOrigins = () => {
+    const params = new URLSearchParams(location.hash.split("?")[1]);
+    return (
+      params.get("issue") === issueId &&
+      params.get("project_id") === projectId &&
+      params.get("issue_origins") === "1"
+    );
+  };
+  const [mode, setMode] = useState<
+    "facts" | "generate" | "proposal" | "origins"
+  >(() =>
+    routeOrigins()
+      ? "origins"
+      : initialDiagnosisId || routeDiagnosis()
+        ? "proposal"
+        : "facts",
   );
   const [busy, setBusy] = useState(false),
     [unknown, setUnknown] = useState(false);
@@ -118,8 +133,14 @@ export function IssueDetailContent({
     retry: false,
     refetchOnWindowFocus: false,
   });
+  const deniedRead =
+    query.isError && [403, 404].includes(issueProblem(query.error).status);
+  const forbiddenRead =
+    query.isError && issueProblem(query.error).status === 403;
   const data =
-    query.data?.project_id === projectId && query.data.issue.id === issueId
+    !deniedRead &&
+    query.data?.project_id === projectId &&
+    query.data.issue.id === issueId
       ? query.data
       : undefined;
   const exactQuery = useQuery({
@@ -137,15 +158,22 @@ export function IssueDetailContent({
     retry: false,
     refetchOnWindowFocus: false,
   });
+  const exactDenied =
+    exactQuery.isError &&
+    [403, 404].includes(issueProblem(exactQuery.error).status);
   const exact =
-    exactQuery.data?.issue_id === issueId && exactQuery.data.id === selectedId
+    !forbiddenRead &&
+    !exactDenied &&
+    exactQuery.data?.issue_id === issueId &&
+    exactQuery.data.id === selectedId
       ? exactQuery.data
       : undefined;
   useEffect(() => {
     const sync = () => {
       const id = routeDiagnosis();
       setSelectedId(id);
-      if (id) setMode("proposal");
+      if (routeOrigins()) setMode("origins");
+      else if (id) setMode("proposal");
     };
     window.addEventListener("hashchange", sync);
     window.addEventListener("popstate", sync);
@@ -155,6 +183,17 @@ export function IssueDetailContent({
     };
   }, [projectId, issueId]);
   const blocked = busy || unknown;
+  const changeMode = (value: typeof mode) => {
+    if (blocked || origin.current !== projectSessionKey()) return;
+    setMode(value);
+    const params = new URLSearchParams(location.hash.split("?")[1]);
+    params.set("view", "issues");
+    params.set("issue", issueId);
+    params.set("project_id", projectId);
+    if (value === "origins") params.set("issue_origins", "1");
+    else params.delete("issue_origins");
+    history.replaceState(null, "", `#/dev-flow?${params}`);
+  };
   const setChildBusy = (value: boolean) => {
     setBusy(value);
     onBusyChange?.(value);
@@ -172,6 +211,7 @@ export function IssueDetailContent({
     params.set("issue", issueId);
     params.set("project_id", projectId);
     params.set("diagnosis_id", id);
+    params.delete("issue_origins");
     history.replaceState(null, "", `#/dev-flow?${params}`);
   };
   const proposalHistory = [
@@ -179,12 +219,13 @@ export function IssueDetailContent({
       [...(data?.diagnoses || []), ...older].map((item) => [item.id, item]),
     ).values(),
   ];
-  const selected = selectedId
-    ? exact ||
-      (received?.id === selectedId
-        ? received
-        : proposalHistory.find((item) => item.id === selectedId))
-    : undefined;
+  const selected =
+    selectedId && !forbiddenRead && !exactDenied
+      ? exact ||
+        (received?.id === selectedId
+          ? received
+          : proposalHistory.find((item) => item.id === selectedId))
+      : undefined;
   const cursor = nextCursor === undefined ? data?.next_cursor : nextCursor;
   async function loadHistory() {
     if (
@@ -255,6 +296,25 @@ export function IssueDetailContent({
         >
           {tr("refresh")}
         </Button>
+        <Button
+          data-issue-origins
+          disabled={blocked}
+          onClick={() => changeMode("origins")}
+        >
+          {tr("origins.title")}
+        </Button>
+        {mode === "origins" && (
+          <IssueOriginDirectory
+            key={`${projectId}:${sessionId}:${issueId}:origins`}
+            projectId={projectId}
+            issueId={issueId}
+            background={
+              typeof location === "undefined" ? background : location.hash
+            }
+            persistRoute
+            disabled={blocked}
+          />
+        )}
         <IssueProposalFacts diagnosis={exact} />
         {exact.snapshot && (
           <details className="issue-captured">
@@ -282,17 +342,36 @@ export function IssueDetailContent({
     );
   if (!data)
     return (
-      <Alert
-        type="warning"
-        showIcon
-        title={tr("issueMissing")}
-        description={query.isError ? tr("readFailed") : issueId}
-        action={
-          <Button disabled={blocked} onClick={refresh}>
-            {tr("refresh")}
-          </Button>
-        }
-      />
+      <section className="issue-detail">
+        <Alert
+          type="warning"
+          showIcon
+          title={tr("issueMissing")}
+          description={query.isError ? tr("readFailed") : issueId}
+          action={
+            <Button disabled={blocked} onClick={refresh}>
+              {tr("refresh")}
+            </Button>
+          }
+        />
+        <Button
+          data-issue-origins
+          disabled={blocked}
+          onClick={() => changeMode("origins")}
+        >
+          {tr("origins.title")}
+        </Button>
+        {mode === "origins" && (
+          <IssueOriginDirectory
+            key={`${projectId}:${sessionId}:${issueId}:origins`}
+            projectId={projectId}
+            issueId={issueId}
+            background={background}
+            persistRoute
+            disabled={blocked}
+          />
+        )}
+      </section>
     );
   const unavailable = readOnly || query.isError;
   const requirementId = data.requirement_id || selected?.review?.requirement_id;
@@ -342,6 +421,21 @@ export function IssueDetailContent({
         )}
       </div>
       <IssueReasons reasons={data.reasons} />
+      <div className="issue-origin-summary">
+        <Button
+          size="small"
+          data-issue-origins
+          disabled={blocked}
+          onClick={() => changeMode("origins")}
+        >
+          {t("deliveryIssue.origins.summary", {
+            count: data.origin_summary.total,
+          })}
+        </Button>
+        {data.origin_summary.projection === "rebuild_required" && (
+          <span className="issue-meta">{tr("origins.rebuildRequired")}</span>
+        )}
+      </div>
       <DeliveryCollaboration
         key={`${projectId}:${sessionId}:${issueId}`}
         projectId={projectId}
@@ -353,22 +447,36 @@ export function IssueDetailContent({
         onUnresolvedChange={setChildUnknown}
       />
       <nav className="issue-section-tabs" aria-label={tr("detailSections")}>
-        {(["facts", "generate", "proposal"] as const).map((value) => (
-          <Button
-            key={value}
-            type={mode === value ? "primary" : "default"}
-            aria-pressed={mode === value}
-            disabled={
-              blocked ||
-              (value === "generate" &&
-                (unavailable || !data.permissions.can_generate))
-            }
-            onClick={() => setMode(value)}
-          >
-            {tr(`${value}Tab`)}
-          </Button>
-        ))}
+        {(["facts", "generate", "proposal", "origins"] as const).map(
+          (value) => (
+            <Button
+              key={value}
+              type={mode === value ? "primary" : "default"}
+              aria-pressed={mode === value}
+              disabled={
+                blocked ||
+                (value === "generate" &&
+                  (unavailable || !data.permissions.can_generate))
+              }
+              onClick={() => changeMode(value)}
+            >
+              {tr(`${value}Tab`)}
+            </Button>
+          ),
+        )}
       </nav>
+      {mode === "origins" && (
+        <IssueOriginDirectory
+          key={`${projectId}:${sessionId}:${issueId}:origins`}
+          projectId={projectId}
+          issueId={issueId}
+          background={
+            typeof location === "undefined" ? background : location.hash
+          }
+          persistRoute
+          disabled={blocked}
+        />
+      )}
       <div hidden={mode !== "facts"}>
         <h3>{tr("observedFacts")}</h3>
         <p className="issue-description">

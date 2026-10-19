@@ -97,29 +97,43 @@ export function IssueEvidenceList({
                       })}
                     </dt>
                     <dd>
-                      {[
-                        "scope_current",
-                        "result_current",
-                        "is_test",
-                        "succeeded",
-                        "environment_current",
-                        "latest_physical",
-                        "observe_only",
-                        "healthy",
-                        "business_valid",
-                      ].includes(fact.label)
-                        ? t(`deliveryIssue.values.${fact.value}`, {
-                            defaultValue: fact.value,
-                          })
-                        : [
-                              "business_status",
-                              "runtime_status",
-                              "operation_status",
-                            ].includes(fact.label)
-                          ? t(`deliveryIssue.evidenceStates.${fact.value}`, {
-                              defaultValue: fact.value,
-                            })
-                          : fact.value}
+                      {fact.label === "operation" && item.kind === "event" ? (
+                        t(`deliveryIssue.origins.operations.${fact.value}`, {
+                          defaultValue: fact.value,
+                        })
+                      ) : fact.label === "effect_kind" &&
+                        item.kind === "event" ? (
+                        t(`deliveryIssue.effects.${fact.value}`, {
+                          defaultValue: fact.value,
+                        })
+                      ) : fact.label === "processed_at" &&
+                        item.kind === "event" ? (
+                        <IssueTime value={fact.value} />
+                      ) : [
+                          "scope_current",
+                          "result_current",
+                          "is_test",
+                          "succeeded",
+                          "environment_current",
+                          "latest_physical",
+                          "observe_only",
+                          "healthy",
+                          "business_valid",
+                        ].includes(fact.label) ? (
+                        t(`deliveryIssue.values.${fact.value}`, {
+                          defaultValue: fact.value,
+                        })
+                      ) : [
+                          "business_status",
+                          "runtime_status",
+                          "operation_status",
+                        ].includes(fact.label) ? (
+                        t(`deliveryIssue.evidenceStates.${fact.value}`, {
+                          defaultValue: fact.value,
+                        })
+                      ) : (
+                        fact.value
+                      )}
                     </dd>
                   </div>
                 ))}

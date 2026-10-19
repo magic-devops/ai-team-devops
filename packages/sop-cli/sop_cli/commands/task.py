@@ -1056,10 +1056,8 @@ def issue(
 ) -> None:
     """以同一冻结操作上报问题，未知送达结果保留原意图。"""
     from sop_sdk.event_envelope import FrozenEvent, integer
-    from sop_sdk.event_outbox import EventOutbox
 
-    from .._util import console
-    from .event import _flush, _outbox_path
+    from ..local_intents import submit_frozen
 
     try:
         integer(expected_version, "expected_version")
@@ -1076,10 +1074,10 @@ def issue(
             time=event_time,
             source="sop-cli",
         )
-        with EventOutbox(_outbox_path()) as box:
-            console.print_json(data=box.enqueue(frozen, get_config().project_id))
-        if not local:
-            console.print_json(data=_flush(20))
+        result = submit_frozen(get_config(), frozen, local=local)
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(2) from exc
+    console.print_json(data=result)
+    if not result["ok"]:
+        raise typer.Exit(2)

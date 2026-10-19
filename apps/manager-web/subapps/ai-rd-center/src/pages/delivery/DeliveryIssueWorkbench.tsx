@@ -153,10 +153,12 @@ export function DeliveryIssueWorkbench({
             setSource(value);
             filterChanged("issue_source", value);
           }}
-          options={["all", "execution", "deployment", "other"].map((value) => ({
-            value,
-            label: tr(`sources.${value}`),
-          }))}
+          options={["all", "execution", "deployment", "event", "other"].map(
+            (value) => ({
+              value,
+              label: tr(`sources.${value}`),
+            }),
+          )}
         />
       </div>
       <p className="issue-meta" role="status">

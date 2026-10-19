@@ -9,7 +9,7 @@ from .delivery_progress_facts import metrics
 from .delivery_scheduling import planning_basis
 from .sql_models import DeliveryQueryFact, DeliveryQueryState, DeliveryWorkspace
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 FLOW_FIELDS = (
     "stage",
     "revision",
@@ -408,6 +408,9 @@ def rebuild(db, project, user):
     check_project_access(actor, project.id, db)
     if not _role_permissions(db, actor, project)["configure"]:
         raise HTTPException(403, "Project configure permission required")
+    from .delivery_issue_origins import rebuild_origins
+
+    origin_rebuild = rebuild_origins(db, project)
     evaluation = evaluate_project(db, project)
     replace_from_evaluation(db, project, evaluation)
     db.commit()
@@ -416,4 +419,4 @@ def rebuild(db, project, user):
         .mappings()
         .one()
     )
-    return {**metadata(db, project, row), "query_state": query_state(row)}
+    return {**metadata(db, project, row), "query_state": query_state(row), "origin_rebuild": origin_rebuild}

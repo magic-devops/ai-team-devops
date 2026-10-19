@@ -4,6 +4,7 @@ import type { DeliveryCommandAck } from "./delivery";
 import { projectHeaders } from "./projectPortfolio";
 import { safeExecutionReturn } from "./executionCommands";
 import { safePortfolioReturn } from "./projectPortfolioRoute";
+import { safeIssueOriginReturn } from "./issueOriginRoute";
 
 export type IssueReason = { code: string; message: string };
 export type IssueActor = { id: string; name: string };
@@ -35,10 +36,19 @@ export type IssueEvidenceTarget = {
   attempt?: number | null;
   deployment_id?: string;
   issue_id?: string;
+  receipt_id?: string;
+  origin_id?: string;
 };
 export type IssueEvidence = {
   id: string;
-  kind: "issue" | "task" | "execution" | "deployment" | "node" | "probe";
+  kind:
+    | "issue"
+    | "task"
+    | "execution"
+    | "deployment"
+    | "node"
+    | "probe"
+    | "event";
   label: string;
   status: string | null;
   summary: string;
@@ -110,6 +120,7 @@ export type IssueDetail = {
   issue: IssueRecord;
   issue_basis: string;
   evidence: IssueEvidence[];
+  origin_summary: { total: number; projection: "current" | "rebuild_required" };
   requirement_id: string | null;
   diagnoses: DiagnosisView[];
   next_cursor: string | null;
@@ -119,6 +130,40 @@ export type IssueDetail = {
     can_dismiss: boolean;
   };
   reasons: IssueReason[];
+};
+export type IssueOrigin = {
+  id: string;
+  issue_id: string;
+  receipt_id: string;
+  attempt_id: string;
+  operation: "create" | "update" | "delete";
+  effect_kind: string;
+  digest: string;
+  basis: string;
+  event_id: string | null;
+  event_type: string | null;
+  source: string | null;
+  producer: IssueActor | null;
+  processed_at: string;
+  available: boolean;
+  unavailable_reason: string | null;
+  evidence: IssueEvidence;
+};
+export type IssueOriginPage = {
+  project_id: string;
+  issue_id: string;
+  issue_available: boolean;
+  as_of: string;
+  items: IssueOrigin[];
+  total: number;
+  limit: number;
+  next_cursor: string | null;
+};
+export type IssueOriginDetail = Omit<
+  IssueOriginPage,
+  "items" | "total" | "limit" | "next_cursor"
+> & {
+  origin: IssueOrigin;
 };
 export type DiagnosisHistory = {
   project_id: string;
@@ -175,6 +220,62 @@ export function fetchDeliveryIssue(
     `/api/v1/delivery/issues/${encodeURIComponent(identity(id))}`,
     { signal, headers: scoped(projectId) },
   );
+}
+function assertIssueOrigin(
+  projectId: string,
+  issueId: string,
+  origin: IssueOrigin,
+) {
+  if (
+    origin.issue_id !== issueId ||
+    origin.evidence.kind !== "event" ||
+    origin.evidence.id !== `event:${origin.id}` ||
+    origin.evidence.target.project_id !== projectId ||
+    origin.evidence.target.receipt_id !== origin.receipt_id ||
+    origin.evidence.target.origin_id !== origin.id
+  )
+    throw new Error("scopeChanged");
+}
+export async function fetchIssueOrigins(
+  projectId: string,
+  issueId: string,
+  query: { limit?: number; cursor?: string } = {},
+  signal?: AbortSignal,
+) {
+  const limit = query.limit ?? 20;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+    throw new Error("originsUnavailable");
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (query.cursor) params.set("cursor", query.cursor);
+  const value = await request<IssueOriginPage>(
+    `/api/v1/delivery/issues/${encodeURIComponent(identity(issueId))}/origins?${params}`,
+    { signal, headers: scoped(projectId) },
+  );
+  if (value.project_id !== projectId || value.issue_id !== issueId)
+    throw new Error("scopeChanged");
+  value.items.forEach((origin) =>
+    assertIssueOrigin(projectId, issueId, origin),
+  );
+  return value;
+}
+export async function fetchIssueOrigin(
+  projectId: string,
+  issueId: string,
+  originId: string,
+  signal?: AbortSignal,
+) {
+  const value = await request<IssueOriginDetail>(
+    `/api/v1/delivery/issues/${encodeURIComponent(identity(issueId))}/origins/${encodeURIComponent(identity(originId))}`,
+    { signal, headers: scoped(projectId) },
+  );
+  if (
+    value.project_id !== projectId ||
+    value.issue_id !== issueId ||
+    value.origin.id !== originId
+  )
+    throw new Error("scopeChanged");
+  assertIssueOrigin(projectId, issueId, value.origin);
+  return value;
 }
 export function fetchIssueDiagnosisHistory(
   projectId: string,
@@ -246,6 +347,7 @@ export function prepareDiagnosisGeneration(
   previous?: DiagnosisSubmission,
   regenerate = false,
   makeKey: () => string = () => crypto.randomUUID(),
+  originEvidence: IssueEvidence[] = [],
 ): DiagnosisSubmission {
   const selected = [...form.selected_evidence_ids].sort(),
     instructions = form.instructions.trim();
@@ -259,8 +361,17 @@ export function prepareDiagnosisGeneration(
     instructions.length > 4000
   )
     throw new Error("evidenceRequired");
-  const evidence = selected.map((id) =>
-    detail.evidence.find((item) => item.id === id),
+  const evidence = selected.map(
+    (id) =>
+      detail.evidence.find((item) => item.id === id) ||
+      originEvidence.find(
+        (item) =>
+          item.id === id &&
+          item.kind === "event" &&
+          item.id === `event:${item.target.origin_id}` &&
+          item.target.project_id === detail.project_id &&
+          Boolean(item.target.receipt_id),
+      ),
   );
   if (evidence.some((item) => !item || item.restricted || item.missing))
     throw new Error("evidenceRequired");
@@ -423,6 +534,7 @@ export function issueProblem(problem: unknown) {
     /* Keep local or network failure text. */
   }
   return {
+    status: Number(raw.match(/^HTTP (\d{3}):/)?.[1] || 0),
     message,
     code,
     conflict: /^HTTP 409:/.test(raw),
@@ -455,7 +567,12 @@ export function issueEvidenceHref(
   if (target.project_id !== projectId) return null;
   const params = new URLSearchParams({ project_id: projectId });
   let path = "#/dev-flow";
-  if (target.deployment_id) {
+  if (target.receipt_id && target.origin_id) {
+    params.set("event_receipt", target.receipt_id);
+    const back = safeIssueOriginReturn(background, projectId);
+    if (back) params.set("issue_return", back);
+    return `#/intelligence/events?${params}`;
+  } else if (target.deployment_id) {
     params.set("view", "releases");
     params.set("deployment_id", target.deployment_id);
   } else if (target.execution_id) {

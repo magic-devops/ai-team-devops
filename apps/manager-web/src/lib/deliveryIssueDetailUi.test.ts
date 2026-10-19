@@ -10,7 +10,11 @@ import { IssueProposalFacts } from "../../subapps/ai-rd-center/src/pages/deliver
 import { IssueReviewPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryIssueReview";
 import { fetchIssueDiagnosisHistory } from "./deliveryIssue";
 import { diagnosisFixture, issueDetailFixture } from "./deliveryIssueFixtures";
-import type { DeliveryCommandAck, DeliveryDisplayContext, DeliveryWorkspace } from "./delivery";
+import type {
+  DeliveryCommandAck,
+  DeliveryDisplayContext,
+  DeliveryWorkspace,
+} from "./delivery";
 const hooks = vi.hoisted(() => ({
   state: [] as any[],
   refs: [] as any[],
@@ -19,6 +23,7 @@ const hooks = vi.hoisted(() => ({
   data: null as any,
   exact: null as any,
   error: false,
+  errorValue: null as unknown,
   outgoing: "",
   scope: "original",
   invalidated: [] as unknown[],
@@ -56,12 +61,21 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: any) => ({
     data:
       options.queryKey[0] === "delivery-issues-page"
-        ? { items: hooks.issueRows.filter((row) => options.queryKey[6] === "all" || row.source_kinds?.includes(options.queryKey[6])), total: hooks.issueRows.length, next_cursor: null }
+        ? {
+            items: hooks.issueRows.filter(
+              (row) =>
+                options.queryKey[6] === "all" ||
+                row.source_kinds?.includes(options.queryKey[6]),
+            ),
+            total: hooks.issueRows.length,
+            next_cursor: null,
+          }
         : options.queryKey[0] === "delivery-issue-diagnosis"
-        ? hooks.exact
-        : hooks.data,
+          ? hooks.exact
+          : hooks.data,
     isPending: false,
     isError: hooks.error,
+    error: hooks.errorValue,
     isFetching: false,
     refetch: () => {
       if (options.queryKey[0] === "delivery-issue-diagnosis")
@@ -119,6 +133,7 @@ beforeEach(() => {
   hooks.refs = [];
   hooks.outgoing = "";
   hooks.error = false;
+  hooks.errorValue = null;
   hooks.exact = null;
   hooks.scope = "original";
   hooks.invalidated = [];
@@ -161,6 +176,34 @@ const content = (diagnosisId = "") => {
 };
 
 describe("exact issue detail and retained identity", () => {
+  it("clears cached issue and proposal metadata when the current read is forbidden", () => {
+    hooks.data.diagnoses = [diagnosisFixture];
+    hooks.exact = diagnosisFixture;
+    hooks.error = true;
+    hooks.errorValue = new Error("HTTP 403: project permission revoked");
+    expect(
+      find(content(diagnosisFixture.id), IssueProposalFacts),
+    ).toBeUndefined();
+    expect(
+      find(content(diagnosisFixture.id), IssueReviewPanel),
+    ).toBeUndefined();
+  });
+  it("keeps historical origins available from an exact orphan proposal", () => {
+    hooks.data = null;
+    hooks.exact = { ...diagnosisFixture, current: false };
+    const trigger = find(
+      content(diagnosisFixture.id),
+      Button,
+      (props) => props["data-issue-origins"] === true,
+    );
+    expect(trigger).toBeDefined();
+    trigger.onClick();
+    expect(history.replaceState).toHaveBeenCalledWith(
+      null,
+      "",
+      expect.stringContaining("issue_origins=1"),
+    );
+  });
   it("invalidates the exact orphan proposal after dismissal and refreshes its own record explicitly", () => {
     hooks.data = null;
     hooks.exact = {
@@ -273,26 +316,43 @@ describe("exact issue detail and retained identity", () => {
 });
 
 describe("actionable issue queue", () => {
+  it("offers a real tool-event filter and opens the separate origin directory from a compact summary", () => {
+    hooks.data.origin_summary = { total: 21, projection: "current" };
+    const trigger = find(
+      content(),
+      Button,
+      (props) => props["data-issue-origins"] === true,
+    );
+    expect(trigger).toBeDefined();
+    trigger.onClick();
+    expect(history.replaceState).toHaveBeenCalledWith(
+      null,
+      "",
+      expect.stringContaining("issue_origins=1"),
+    );
+  });
   it("filters real source kinds and opens the exact issue instead of a generic task list", () => {
     hooks.issueRows = [
-        {
-          id: "ISS-one",
-          title: "Deployment problem",
-          status: "open",
-          severity: "P1",
-          source_kinds: ["deployment"],
-          task_id: "",
-        },
-        {
-          id: "ISS-two",
-          title: "Execution problem",
-          status: "open",
-          severity: "P2",
-          source_kinds: ["execution"],
-          task_id: "T-two",
-        },
-      ] as DeliveryWorkspace["issues"];
-    const workspace = { project: { id: "P" } } as unknown as DeliveryDisplayContext;
+      {
+        id: "ISS-one",
+        title: "Deployment problem",
+        status: "open",
+        severity: "P1",
+        source_kinds: ["deployment"],
+        task_id: "",
+      },
+      {
+        id: "ISS-two",
+        title: "Execution problem",
+        status: "open",
+        severity: "P2",
+        source_kinds: ["execution"],
+        task_id: "T-two",
+      },
+    ] as DeliveryWorkspace["issues"];
+    const workspace = {
+      project: { id: "P" },
+    } as unknown as DeliveryDisplayContext;
     const render = () => {
       resetHooks();
       return DeliveryIssueWorkbench({

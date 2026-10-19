@@ -5207,7 +5207,7 @@ paths:
           title: X-Project-Id
       responses:
         '200':
-          description: Pure scoped read; restricted original evidence content is withheld
+          description: Successful Response
           content:
             application/json:
               schema:
@@ -5226,8 +5226,8 @@ paths:
           description: Project permission denied
         '404':
           description: Scoped project, Issue or exact proposal not found
-      description: Read the exact canonical Issue, sanitized current evidence, source links and proposal history. A missing
-        Issue returns 404; GET never generates a proposal or provisions state.
+      description: Current Issue and bounded default evidence. origin_summary reports the independent reverse provenance projection;
+        it does not load original event bodies.
   /api/v1/delivery/issues/{issue_id}/diagnoses:
     get:
       tags:
@@ -5943,8 +5943,8 @@ paths:
           description: Exact scoped record not found
         '409':
           description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
-      description: Explicit configure-authorized atomic replacement of disposable query facts. No request body. Never creates
-        progress, activity or definition observations. Ordinary reads never rebuild.
+      description: Explicit configure-authorized derived maintenance. Rebuilds current query facts and backfills only provable
+        successful typed Issue event origins; does not replay business events or change business versions.
   /api/v1/delivery/requirements:
     get:
       tags:
@@ -6337,6 +6337,7 @@ paths:
           - ''
           - execution
           - deployment
+          - event
           - other
           type: string
           default: ''
@@ -6388,8 +6389,8 @@ paths:
           description: Exact scoped record not found
         '409':
           description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
-      description: SQL-filter and page project issue summaries. Total covers the full matching scope; exact issue detail remains
-        separate.
+      description: Bounded current Issue catalogue. The event source filter represents proven successful typed tool effects,
+        never arbitrary event claims.
   /api/v1/delivery/executions/{execution_id}:
     get:
       tags:
@@ -8609,6 +8610,120 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       description: Read the exact original human decision, task snapshot and evidence in this project and task. No fallback
         to another record or derived current validity. Does not require current proof or query index freshness.
+  /api/v1/delivery/issues/{issue_id}/origins:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Issue Origins
+      operationId: deliveryIssueOrigins
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Issue Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssueOrigins'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+      description: Small fixed-window SQL page of proven successful event origins. Default 20, maximum 100. Signed cursor binds
+        tenant, project, reader, Issue and limit. Deleted Issues retain readable provenance. No event payload or complete acknowledgement.
+  /api/v1/delivery/issues/{issue_id}/origins/{origin_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Issue Origin
+      operationId: deliveryIssueOrigin
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Issue Id
+      - name: origin_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Origin Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssueOriginDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+      description: Exact original event provenance in this Issue and project. Current receipt, successful attempt, operation,
+        target and digest are rechecked. Missing or inconsistent originals are unavailable and cannot be selected as diagnostic
+        evidence.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -21653,59 +21768,57 @@ components:
       title: DiagnosisRequirement
       type: object
     DiagnosisReview:
-      additionalProperties: false
       properties:
         decision:
+          type: string
           enum:
           - adopted
           - rejected
           - cancelled
           title: Decision
-          type: string
         actor:
           $ref: '#/components/schemas/DiagnosisActor'
         comment:
+          type: string
           title: Comment
-          type: string
         at:
-          title: At
           type: string
+          title: At
         requirement_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Requirement Id
+      additionalProperties: false
+      type: object
       required:
       - decision
       - actor
       - comment
       - at
       title: DiagnosisReview
-      type: object
     DiagnosisSnapshot:
-      additionalProperties: false
       properties:
         issue:
           $ref: '#/components/schemas/IssueRecord'
         evidence:
           items:
             $ref: '#/components/schemas/EvidenceItem'
+          type: array
           maxItems: 32
           minItems: 1
           title: Evidence
-          type: array
         requirement_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Requirement Id
+      additionalProperties: false
+      type: object
       required:
       - issue
       - evidence
       title: DiagnosisSnapshot
-      type: object
     DiagnosisSuggestion:
       additionalProperties: false
       properties:
@@ -21857,14 +21970,14 @@ components:
       title: EvidenceFact
       type: object
     EvidenceItem:
-      additionalProperties: false
       properties:
         id:
+          type: string
           maxLength: 200
           minLength: 1
           title: Id
-          type: string
         kind:
+          type: string
           enum:
           - issue
           - task
@@ -21872,48 +21985,49 @@ components:
           - deployment
           - node
           - probe
+          - event
           title: Kind
-          type: string
         label:
-          title: Label
           type: string
+          title: Label
         status:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Status
         summary:
-          title: Summary
           type: string
+          title: Summary
         facts:
           items:
             $ref: '#/components/schemas/EvidenceFact'
-          title: Facts
           type: array
+          title: Facts
         excerpt:
-          default: ''
+          type: string
           maxLength: 4000
           title: Excerpt
-          type: string
+          default: ''
         truncated:
-          default: false
+          type: boolean
           title: Truncated
-          type: boolean
+          default: false
         missing:
-          default: false
+          type: boolean
           title: Missing
-          type: boolean
+          default: false
         restricted:
-          default: false
+          type: boolean
           title: Restricted
-          type: boolean
-        redacted:
           default: false
-          title: Redacted
+        redacted:
           type: boolean
+          title: Redacted
+          default: false
         target:
           $ref: '#/components/schemas/EvidenceTarget'
+      additionalProperties: false
+      type: object
       required:
       - id
       - kind
@@ -21921,58 +22035,64 @@ components:
       - summary
       - target
       title: EvidenceItem
-      type: object
     EvidenceTarget:
-      additionalProperties: false
       properties:
         project_id:
+          type: string
           maxLength: 200
           minLength: 1
           title: Project Id
-          type: string
         view:
+          type: string
           title: View
-          type: string
         detail:
+          type: string
           title: Detail
-          type: string
         requirement_id:
-          default: ''
+          type: string
           title: Requirement Id
-          type: string
+          default: ''
         task_id:
-          default: ''
+          type: string
           title: Task Id
-          type: string
+          default: ''
         execution_id:
-          default: ''
+          type: string
           title: Execution Id
-          type: string
-        node_id:
           default: ''
-          title: Node Id
+        node_id:
           type: string
+          title: Node Id
+          default: ''
         attempt:
           anyOf:
-          - minimum: 1
-            type: integer
+          - type: integer
+            minimum: 1.0
           - type: 'null'
-          default: null
           title: Attempt
         deployment_id:
-          default: ''
+          type: string
           title: Deployment Id
-          type: string
-        issue_id:
           default: ''
-          title: Issue Id
+        issue_id:
           type: string
+          title: Issue Id
+          default: ''
+        receipt_id:
+          type: string
+          title: Receipt Id
+          default: ''
+        origin_id:
+          type: string
+          title: Origin Id
+          default: ''
+      additionalProperties: false
+      type: object
       required:
       - project_id
       - view
       - detail
       title: EvidenceTarget
-      type: object
     IssuePermissions:
       additionalProperties: false
       properties:
@@ -21992,69 +22112,69 @@ components:
       title: IssuePermissions
       type: object
     IssueRecord:
-      additionalProperties: false
       properties:
         id:
+          type: string
           maxLength: 200
           minLength: 1
           title: Id
-          type: string
         tenant_id:
-          title: Tenant Id
           type: string
+          title: Tenant Id
         project_id:
+          type: string
           maxLength: 200
           minLength: 1
           title: Project Id
-          type: string
         sprint_id:
-          default: ''
+          type: string
           title: Sprint Id
-          type: string
+          default: ''
         task_id:
-          default: ''
+          type: string
           title: Task Id
-          type: string
+          default: ''
         title:
+          type: string
           title: Title
-          type: string
         description:
-          default: ''
+          type: string
           title: Description
-          type: string
+          default: ''
         type:
-          default: bug
+          type: string
           title: Type
-          type: string
+          default: bug
         severity:
-          default: P2
+          type: string
           title: Severity
-          type: string
+          default: P2
         status:
-          default: open
+          type: string
           title: Status
-          type: string
+          default: open
         reported_by:
-          default: ''
+          type: string
           title: Reported By
-          type: string
+          default: ''
         resolved_by:
-          default: ''
+          type: string
           title: Resolved By
-          type: string
-        resolution:
           default: ''
+        resolution:
+          type: string
           title: Resolution
-          type: string
+          default: ''
         created_at:
-          title: Created At
           type: string
+          title: Created At
         resolved_at:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Resolved At
+      additionalProperties: false
+      type: object
       required:
       - id
       - tenant_id
@@ -22062,33 +22182,31 @@ components:
       - title
       - created_at
       title: IssueRecord
-      type: object
     IssueDetail:
-      additionalProperties: false
       properties:
         project_id:
+          type: string
           maxLength: 200
           minLength: 1
           title: Project Id
-          type: string
         version:
-          title: Version
           type: integer
+          title: Version
         as_of:
-          title: As Of
           type: string
+          title: As Of
         issue:
           $ref: '#/components/schemas/IssueRecord'
         issue_basis:
+          type: string
           pattern: ^[0-9a-f]{64}$
           title: Issue Basis
-          type: string
         evidence:
           items:
             $ref: '#/components/schemas/EvidenceItem'
+          type: array
           maxItems: 32
           title: Evidence
-          type: array
         requirement_id:
           anyOf:
           - type: string
@@ -22097,9 +22215,9 @@ components:
         diagnoses:
           items:
             $ref: '#/components/schemas/DiagnosisView'
+          type: array
           maxItems: 20
           title: Diagnoses
-          type: array
         next_cursor:
           anyOf:
           - type: string
@@ -22110,8 +22228,12 @@ components:
         reasons:
           items:
             $ref: '#/components/schemas/DiagnosisReason'
-          title: Reasons
           type: array
+          title: Reasons
+        origin_summary:
+          $ref: '#/components/schemas/IssueOriginSummary'
+      additionalProperties: false
+      type: object
       required:
       - project_id
       - version
@@ -22124,8 +22246,8 @@ components:
       - next_cursor
       - permissions
       - reasons
+      - origin_summary
       title: IssueDetail
-      type: object
     DiagnosisHistory:
       additionalProperties: false
       properties:
@@ -23601,7 +23723,7 @@ components:
         schema_version:
           type: integer
           title: Schema Version
-          default: 3
+          default: 4
         computed_at:
           anyOf:
           - type: string
@@ -23759,14 +23881,13 @@ components:
       title: QueryPage
       type: object
     QueryRebuilt:
-      additionalProperties: false
       properties:
         project_id:
-          title: Project Id
           type: string
+          title: Project Id
         version:
-          title: Version
           type: integer
+          title: Version
         query_generation:
           anyOf:
           - type: integer
@@ -23774,13 +23895,20 @@ components:
           title: Query Generation
         query_state:
           $ref: '#/components/schemas/QueryState'
+        origin_rebuild:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Origin Rebuild
+      additionalProperties: false
+      type: object
       required:
       - project_id
       - version
       - query_generation
       - query_state
+      - origin_rebuild
       title: QueryRebuilt
-      type: object
     ReadModel:
       additionalProperties: false
       properties: {}
@@ -26572,3 +26700,196 @@ components:
       - as_of
       - review
       title: TaskReviewDetailResponse
+    IssueOriginSummary:
+      properties:
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+        projection:
+          type: string
+          enum:
+          - current
+          - rebuild_required
+          title: Projection
+      additionalProperties: false
+      type: object
+      required:
+      - total
+      - projection
+      title: IssueOriginSummary
+    IssueOrigins:
+      properties:
+        project_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Project Id
+        issue_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Issue Id
+        issue_available:
+          type: boolean
+          title: Issue Available
+        as_of:
+          type: string
+          title: As Of
+        items:
+          items:
+            $ref: '#/components/schemas/IssueOrigin'
+          type: array
+          maxItems: 100
+          title: Items
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+        limit:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - issue_id
+      - issue_available
+      - as_of
+      - items
+      - total
+      - limit
+      - next_cursor
+      title: IssueOrigins
+    IssueOrigin:
+      properties:
+        id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Id
+        issue_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Issue Id
+        receipt_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Receipt Id
+        attempt_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Attempt Id
+        operation:
+          type: string
+          enum:
+          - create
+          - update
+          - delete
+          title: Operation
+        effect_kind:
+          type: string
+          enum:
+          - issue_created
+          - record_upserted
+          - record_deleted
+          title: Effect Kind
+        digest:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Digest
+        basis:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Basis
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Id
+        event_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Type
+        source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source
+        producer:
+          anyOf:
+          - $ref: '#/components/schemas/DiagnosisActor'
+          - type: 'null'
+        processed_at:
+          type: string
+          title: Processed At
+        available:
+          type: boolean
+          title: Available
+        unavailable_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unavailable Reason
+        evidence:
+          $ref: '#/components/schemas/EvidenceItem'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - issue_id
+      - receipt_id
+      - attempt_id
+      - operation
+      - effect_kind
+      - digest
+      - basis
+      - event_id
+      - event_type
+      - source
+      - producer
+      - processed_at
+      - available
+      - unavailable_reason
+      - evidence
+      title: IssueOrigin
+    IssueOriginDetail:
+      properties:
+        project_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Project Id
+        issue_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Issue Id
+        issue_available:
+          type: boolean
+          title: Issue Available
+        as_of:
+          type: string
+          title: As Of
+        origin:
+          $ref: '#/components/schemas/IssueOrigin'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - issue_id
+      - issue_available
+      - as_of
+      - origin
+      title: IssueOriginDetail

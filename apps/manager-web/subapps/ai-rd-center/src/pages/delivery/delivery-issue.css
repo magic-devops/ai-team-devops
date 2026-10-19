@@ -332,6 +332,62 @@
 .issue-detail .ant-alert {
   overflow-wrap: anywhere;
 }
+.issue-origin-directory,
+.issue-origin-card {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+.issue-origin-directory {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 12px;
+}
+.issue-origin-heading,
+.issue-origin-summary,
+.issue-selected-origins li {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.issue-origin-list,
+.issue-selected-origins {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+.issue-origin-card + .issue-origin-card {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.issue-origin-card strong,
+.issue-selected-origins span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  font-size: 12px;
+}
+.issue-origin-directory .ant-checkbox-wrapper {
+  align-items: flex-start;
+  white-space: normal;
+}
+@media (max-width: 640px) {
+  .issue-origin-card .issue-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .issue-origin-directory {
+    padding: 10px;
+  }
+  .issue-origin-directory .issue-actions > .ant-btn {
+    flex: 1 1 auto;
+  }
+}
 .issue-detail .ant-btn,
 .issue-workbench .ant-btn {
   max-width: 100%;

@@ -239,11 +239,20 @@ def materialize(db, project, data, user, *, verification=None):
     requirement_by_task = {task["id"]: task["req_id"] for task in tasks}
     for issue in issues:
         issue_groups[requirement_by_task.get(issue["task_id"])].append(issue)
+    from sqlalchemy import select
+
+    from .sql_models import IssueEventOrigin
+
+    event_issue_ids = set(db.scalars(select(IssueEventOrigin.issue_id).where(
+        IssueEventOrigin.tenant_id == project.tenant_id, IssueEventOrigin.project_id == project.id
+    ).distinct()))
     for issue in issues:
         issue["source_kinds"] = [
             kind for kind, collection in (("execution", "executions"), ("deployment", "deployments"))
             if any(entry.get("issue_id") == issue["id"] for entry in data.get(collection, []))
         ]
+        if issue["id"] in event_issue_ids:
+            issue["source_kinds"].append("event")
     reqs = []
     deployed_requirements = current_deployed_requirement_ids(db, project, data, verification=verification)
     requirement_rows = sorted(verification.requirements.values(), key=lambda row: row.id)

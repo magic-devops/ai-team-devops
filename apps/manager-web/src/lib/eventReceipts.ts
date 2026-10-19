@@ -1,5 +1,6 @@
 import { request } from "./http";
 import { getSessionRevision, USER_KEY } from "./authStorage";
+import { safeIssueOriginReturn } from "./issueOriginRoute";
 export type EventState = "pending" | "processed" | "failed";
 export type EventProducer = { kind: "user"; id: string };
 export type EventFailure = {
@@ -302,6 +303,11 @@ export function eventHash(
 ) {
   const sourceParams = new URLSearchParams(source.split("?")[1]);
   const params = new URLSearchParams({ project_id: projectId });
+  const issueReturn = safeIssueOriginReturn(
+    sourceParams.get("issue_return") || "",
+    projectId,
+  );
+  if (issueReturn) params.set("issue_return", issueReturn);
   for (const key of Object.values(routeKeys)) {
     const value = sourceParams.get(key);
     if (value) params.set(key, value);
@@ -343,10 +349,15 @@ export function safeEventReturn(
     params.get("project_id") !== projectId
   )
     return null;
-  const allowed = new Set(["project_id", ...Object.values(routeKeys)]);
+  const allowed = new Set([
+    "project_id",
+    "issue_return",
+    ...Object.values(routeKeys),
+  ]);
   for (const [key, value] of params) {
     if (
       !allowed.has(key) ||
+      (key === "issue_return" && !safeIssueOriginReturn(value, projectId)) ||
       params.getAll(key).length !== 1 ||
       value.length > 4096 ||
       /[\u0000-\u001f\u007f\\]/.test(value)

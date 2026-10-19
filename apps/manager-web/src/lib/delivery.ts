@@ -299,7 +299,7 @@ export type DeliveryWorkspace = {
     reported_by?: string;
     type?: string;
     created_at?: string;
-    source_kinds?: ("execution" | "deployment")[];
+    source_kinds?: ("execution" | "deployment" | "event")[];
   }[];
   summary: {
     requirements: number;

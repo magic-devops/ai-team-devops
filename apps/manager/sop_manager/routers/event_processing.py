@@ -205,7 +205,10 @@ def process(db, project, user, receipt_id, request=None, *, retry=None):
             with context as staged:
                 if effect is None:
                     effect = _effect(body, staged["ack"])
-                _attempt(db, project, row, user, action, effect, None, retry)
+                entry = _attempt(db, project, row, user, action, effect, None, retry)
+                from .delivery_issue_origins import append_origin
+
+                append_origin(db, project, original, entry)
                 db.commit()
         return db.get(m.EventProcessing, receipt_id, populate_existing=True)
     except Exception as exc:

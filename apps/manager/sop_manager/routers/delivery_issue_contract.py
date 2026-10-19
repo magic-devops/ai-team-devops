@@ -69,6 +69,8 @@ class EvidenceTarget(IssueContract):
     attempt: int | None = Field(default=None, ge=1)
     deployment_id: str = ""
     issue_id: str = ""
+    receipt_id: str = ""
+    origin_id: str = ""
 
 
 class EvidenceFact(IssueContract):
@@ -78,7 +80,7 @@ class EvidenceFact(IssueContract):
 
 class EvidenceItem(IssueContract):
     id: Identity
-    kind: Literal["issue", "task", "execution", "deployment", "node", "probe"]
+    kind: Literal["issue", "task", "execution", "deployment", "node", "probe", "event"]
     label: str
     status: str | None = None
     summary: str
@@ -202,6 +204,11 @@ class IssuePermissions(IssueContract):
     can_dismiss: bool
 
 
+class IssueOriginSummary(IssueContract):
+    total: int = Field(ge=0)
+    projection: Literal["current", "rebuild_required"]
+
+
 class IssueDetail(IssueContract):
     project_id: Identity
     version: int
@@ -214,6 +221,7 @@ class IssueDetail(IssueContract):
     next_cursor: str | None
     permissions: IssuePermissions
     reasons: list[DiagnosisReason]
+    origin_summary: IssueOriginSummary
 
 
 class DiagnosisHistory(IssueContract):

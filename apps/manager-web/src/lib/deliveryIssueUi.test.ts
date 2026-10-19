@@ -3,7 +3,13 @@ import { Button, Checkbox, Input, Radio } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueDiagnosisPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryIssueDiagnosis";
 import { IssueReviewPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryIssueReview";
-import { diagnosisFixture, issueDetailFixture } from "./deliveryIssueFixtures";
+import { IssueOriginDirectory } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryIssueOrigins";
+import { IssueEvidenceList } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryIssueFacts";
+import {
+  diagnosisFixture,
+  issueDetailFixture,
+  issueOriginFixture,
+} from "./deliveryIssueFixtures";
 import {
   diagnosisHistoryRequest,
   fetchDeliveryIssue,
@@ -316,6 +322,156 @@ describe("issue diagnosis actual callbacks", () => {
     });
     expect(onGenerated).toHaveBeenCalledOnce();
   });
+  it("offers the independent origin directory and freezes a page-two selection through an unknown retry", async () => {
+    find(diagnosis(), Checkbox.Group).onChange(["issue:ISS-one"]);
+    const open = button(diagnosis, "origins.select");
+    expect(open).toBeDefined();
+    open.onClick();
+    const locateDirectory = (node: ReactNode): any => {
+      if (Array.isArray(node)) return node.map(locateDirectory).find(Boolean);
+      if (!isValidElement<any>(node)) return undefined;
+      if (
+        typeof node.type === "function" &&
+        node.type.name === "IssueOriginDirectory"
+      )
+        return node.props;
+      return locateDirectory(node.props.children);
+    };
+    const evidence = {
+      id: "event:origin-page-two",
+      kind: "event",
+      label: "Actual update",
+      status: "processed",
+      summary: "event_origin_record",
+      facts: [],
+      excerpt: "",
+      truncated: false,
+      missing: false,
+      restricted: false,
+      redacted: false,
+      target: {
+        project_id: "P",
+        view: "events",
+        detail: "details",
+        receipt_id: "receipt-page-two",
+        origin_id: "origin-page-two",
+      },
+    };
+    locateDirectory(diagnosis()).onSelection(
+      { id: "origin-page-two", available: true, evidence },
+      true,
+    );
+    const oldSelectionCallback = locateDirectory(diagnosis()).onSelection;
+    // Changing ordinary evidence must preserve the independently selected origin.
+    find(diagnosis(), Checkbox.Group).onChange([
+      "issue:ISS-one",
+      "probe:OP-one:1",
+    ]);
+    vi.mocked(generateIssueDiagnosis).mockRejectedValueOnce(
+      new Error("network interrupted"),
+    );
+    await button(diagnosis, "generate").onClick();
+    const original = vi.mocked(generateIssueDiagnosis).mock.calls[0][2];
+    expect(original.selected_evidence_ids).toEqual([
+      "event:origin-page-two",
+      "issue:ISS-one",
+      "probe:OP-one:1",
+    ]);
+    expect(locateDirectory(diagnosis()).disabled).toBe(true);
+    oldSelectionCallback(
+      {
+        id: "other",
+        available: true,
+        evidence: { ...evidence, id: "event:other" },
+      },
+      true,
+    );
+    expect(locateDirectory(diagnosis()).selectedIds).not.toContain(
+      "event:other",
+    );
+    await button(diagnosis, "retryOriginal").onClick();
+    expect(vi.mocked(generateIssueDiagnosis).mock.calls[1][2]).toEqual(
+      original,
+    );
+  });
+  it("retains selected IDs but removes denied origin metadata and prevents generation", () => {
+    const open = button(diagnosis, "origins.select");
+    expect(open).toBeDefined();
+    open.onClick();
+    const locate = (node: ReactNode): any => {
+      if (Array.isArray(node)) return node.map(locate).find(Boolean);
+      if (!isValidElement<any>(node)) return undefined;
+      if (
+        typeof node.type === "function" &&
+        node.type.name === "IssueOriginDirectory"
+      )
+        return node.props;
+      return locate(node.props.children);
+    };
+    find(diagnosis(), Checkbox.Group).onChange(["issue:ISS-one"]);
+    locate(diagnosis()).onSelection(
+      {
+        available: true,
+        evidence: {
+          id: "event:source",
+          kind: "event",
+          target: {
+            project_id: "P",
+            receipt_id: "receipt",
+            origin_id: "source",
+          },
+        },
+      },
+      true,
+    );
+    expect(button(diagnosis, "generate").disabled).toBe(false);
+    locate(diagnosis()).onUnavailable();
+    expect(button(diagnosis, "generate").disabled).toBe(true);
+  });
+  for (const status of [403, 404])
+    it(`clears origin preview after original-request recovery HTTP ${status} while preserving the unknown body and key`, async () => {
+      find(diagnosis(), Checkbox.Group).onChange(["issue:ISS-one"]);
+      button(diagnosis, "origins.select").onClick();
+      find(diagnosis(), IssueOriginDirectory).onSelection(
+        {
+          ...issueOriginFixture,
+          evidence: {
+            ...issueOriginFixture.evidence,
+            label: "PRIVATE ORIGINAL LABEL",
+          },
+        },
+        true,
+      );
+      vi.mocked(generateIssueDiagnosis).mockRejectedValueOnce(
+        new Error("network interrupted"),
+      );
+      await button(diagnosis, "generate").onClick();
+      const original = structuredClone(
+        vi.mocked(generateIssueDiagnosis).mock.calls[0][2],
+      );
+      vi.mocked(diagnosisHistoryRequest).mockRejectedValueOnce(
+        new Error(`HTTP ${status}: original access unavailable`),
+      );
+      await button(diagnosis, "recoverRequest").onClick();
+      expect(
+        find(diagnosis(), IssueEvidenceList).evidence.map(
+          (item: any) => item.id,
+        ),
+      ).not.toContain(issueOriginFixture.evidence.id);
+      expect(find(diagnosis(), IssueOriginDirectory).selectedIds).toContain(
+        issueOriginFixture.evidence.id,
+      );
+      expect(find(diagnosis(), Checkbox.Group).disabled).toBe(true);
+      expect(button(diagnosis, "regenerate").disabled).toBe(true);
+      expect(onUnresolvedChange).toHaveBeenLastCalledWith(true);
+      expect(vi.mocked(generateIssueDiagnosis).mock.calls[0][2]).toEqual(
+        original,
+      );
+      await button(diagnosis, "retryOriginal").onClick();
+      expect(vi.mocked(generateIssueDiagnosis).mock.calls[1][2]).toEqual(
+        original,
+      );
+    });
   it("locks unknown input and recovers by the original request key using only reads", async () => {
     find(diagnosis(), Checkbox.Group).onChange(["issue:ISS-one"]);
     vi.mocked(generateIssueDiagnosis).mockRejectedValueOnce(

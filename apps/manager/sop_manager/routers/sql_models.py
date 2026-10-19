@@ -340,6 +340,23 @@ class EventProcessingAttempt(Base):
     ack = Column(JSON, nullable=True)
     __table_args__ = (Index("ix_event_attempt_project_seq", "tenant_id", "project_id", "seq"),Index("ix_event_attempt_receipt_seq", "receipt_id", "seq"))
 
+class IssueEventOrigin(Base):
+    """Append-only projection; deliberately no Issue FK so deletion keeps history."""
+    __tablename__ = "issue_event_origins"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    issue_id = Column(String(64), nullable=False)
+    receipt_id = Column(String(64), nullable=False, unique=True)
+    attempt_id = Column(String(64), nullable=False)
+    operation = Column(String(16), nullable=False)
+    effect_kind = Column(String(32), nullable=False)
+    digest = Column(String(64), nullable=False)
+    processed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (Index("ix_issue_origin_scope_seq", "tenant_id", "project_id", "issue_id", "seq"),)
+
+
 class DeliveryDiscussionThread(Base):
     __tablename__ = "delivery_discussion_threads"
     created_seq = Column(Integer, primary_key=True, autoincrement=True)
@@ -681,7 +698,7 @@ def create_all():
 
 # Install once for every Manager Session, including the compatibility/CLI writers.
 # Imports are late because hook handlers lazily use the complete model registry.
-from .delivery_progress_hooks import install_progress_hooks
+from .delivery_progress_hooks import install_progress_hooks  # noqa: E402
 
 install_project_write_guard()
 install_task_sql_guard()

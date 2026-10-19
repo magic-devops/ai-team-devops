@@ -549,3 +549,17 @@ Web沿用现主题，当前/历史各自加载刷新，展开才读取原件，�
 真实HTTP使用原FastAPI/login/权限/中间件/会话，在1200个无关任务、600任务父需求及35份大历史背景下验证有界读取、完整范围失败、删除历史、账号/项目/任务游标隔离和数据库35表零写。实际Python命令幂等、SDK/CLI三个读取，以及编译真实TS控制器成功后丢ACK、重建控制器恢复同原件重放均通过；记录只新增一次且业务版本只加1。所有自有服务已停止，模型调用0。独立审查及失败夹具、RED/GREEN、源与证据散列在 `.sop-runtime/delivery-evidence/bounded-review/`，最终提交与精确临时目录清理以独立receipt为准。
 
 完整目标active。下一阶段优先补齐智能体实际创建问题的反向事件来源，再继续显式进度、基线和需求影响有界详情；generic/reflection真实处理仍待完善。真实390px中英日浏览器、其他数据库/生产接入和长期可靠性仍未验证；既有浏览器协议和12ui安装/上传审批限制不绕过。`.pnpm-store`保持忽略、零跟踪；本地提交、不push。
+
+## 真实工具问题来源与固定诊断选择（2026-10-19）
+
+阶段T-issue-origins，基线9526181。设计 `docs/ISSUE_EVENT_ORIGINS_DESIGN.md`，使用 `docs/ISSUE_EVENT_ORIGINS_GUIDE.md`。opened及结构化issues创建/更新/删除从真实规范业务效果建立追加来源，同一事务维护Issue、成功attempt、origin和查询标签。原件重放不重复Issue或版本，generic文本不构成关联；schema4显式重建只补可证明来源，报告新增/已有/跳过，GET不修复。
+
+来源目录默认20/最大100和精确读取独立；固定窗口绑定租户/项目/阅读者/Issue/页大小，删除问题仍可读授权来源历史。每条来源重新核原文摘要、规范命令、成功attempt和真实目标。诊断按精确所选ID重新解析页外证据，仍要求Issue本身且总量最多32；固定语义不受无关新增来源影响。人工采纳重验并唯一回流需求，Issue保持原状态，processed不等于测试或验收通过。
+
+Web提供紧凑来源摘要、创建/修改/删除和真实producer、跨页选择、精确回执返回及三语主题样式。独立审查实际复现并修复恢复403/404后来源缓存残留，以及历史upsert缺before键被猜创建的两项边界；保留原RED/GREEN与永久测试。受限内容清除后unknown原正文/键仍保留，缺失或坏形状的历史原操作明确跳过。
+
+最终Manager完整1668、Web完整817、SDKCLI完整732通过，前后331/510/128项源一致；TypeScript/Vite和21个Python变更文件Ruff通过。OpenAPI5相关路径/12schema与1230引用核验，189无关路径不变；SDK wheel12个Python和共享SQL字节一致。Go源未改，本阶段未重复Go。
+
+最终实际socket HTTP4使用生产登录/权限/中间件/会话，验证成功后丢ACK、SQLite原件重开重放且业务版本仅增1，opened和结构化事件真实Issue、25来源页外规则诊断、旧依据拒绝、人审唯一需求和Issue仍open。实际编译TS来源API/精确回执返回、固定窗口、删除历史和SDK/CLI读取覆盖36表零写；自有服务已退出，外部模型调用0。早期HTTP1字段夹具错、HTTP2并行源变化、HTTP3为最后before形状修复前版本，及两轮因最终修复中断的Manager全量均保留，未计作最终通过。Web初轮815通过，恢复权限修复后使用新完整复跑。
+
+证据 `.sop-runtime/delivery-evidence/issue-origins/`。重要源、唯一文件与产物先盘点/散列保全再清理精确任务临时目录；全部本地提交和clean核对以独立commit-receipt为准，不push，.pnpm-store保持忽略和零跟踪。完整目标active，production_integration_complete=false。显式进度/基线/需求影响有界详情、generic/reflection实际处理、当前390px中英日浏览器视觉、其他数据库/生产身份/模型/基础设施及长期规模仍待完善；既有浏览器协议和12ui安装/上传审批限制不绕过。

@@ -38,10 +38,19 @@ def _access(db, project, user, *, permission=None):
     return current, actor, permissions
 
 
-def _source(db, project, data, user, issue_id, store, execution):
+def _source(db, project, data, user, issue_id, store, execution, selected_ids=()):
     from .delivery_issue_evidence import issue_snapshot
 
-    return issue_snapshot(db, project, data, user, issue_id, store=store, execution=execution)
+    source = issue_snapshot(db, project, data, user, issue_id, store=store, execution=execution)
+    return _selected_source(db, project, user, issue_id, source, selected_ids)
+
+
+def _selected_source(db, project, user, issue_id, source, ids):
+    from .delivery_issue_origins import selected_origins
+
+    items, digests = selected_origins(db, project, user, issue_id, ids)
+    return {**source, "evidence": [*source["evidence"], *items],
+        "evidence_digests": {**source.get("evidence_digests", {}), **digests}}
 
 
 def _workspace(db, project):
@@ -78,7 +87,9 @@ def _reason(code, message):
     return {"code": code, "message": message}
 
 
-def _view(row, source, user, project, permissions, store):
+def _view(row, source, user, project, permissions, store, db=None):
+    if db is not None and not source.get("missing"):
+        source = _selected_source(db, project, user, row.issue_id, source, row.data["selected_evidence_digests"])
     readable = _readable(row, store, user, project)
     current = readable and _current(row, source)
     review = row.data.get("review")
@@ -178,11 +189,12 @@ def _history(db, project, source, user, permissions, issue_id, cursor, store):
             or_(IssueDiagnosis.created_at < at, and_(IssueDiagnosis.created_at == at, IssueDiagnosis.id < id))
         )
     rows = query.order_by(IssueDiagnosis.created_at.desc(), IssueDiagnosis.id.desc()).limit(21).all()
-    items = [_view(row, source, user, project, permissions, store) for row in rows[:20]]
+    items = [_view(row, source, user, project, permissions, store, db) for row in rows[:20]]
     return items, _encode_cursor(project, issue_id, rows[19]) if len(rows) > 20 else None
 
 
 def issue_detail(db, project, data, user, id, *, version, store=None, execution=None):
+    from .delivery_issue_origins import origin_summary
     project, user, permissions = _access(db, project, user)
     source = _source(db, project, data, user, id, store, execution)
     diagnoses, cursor = _history(db, project, source, user, permissions, id, "", store)
@@ -209,6 +221,7 @@ def issue_detail(db, project, data, user, id, *, version, store=None, execution=
                 "Project write permission is required to generate a proposal",
             )
         ],
+        "origin_summary": origin_summary(db, project, id),
     }
     return IssueDetail.model_validate(result).model_dump(mode="json")
 
@@ -239,7 +252,7 @@ def diagnosis_detail(db, project, user, issue_id, diagnosis_id, *, store=None, e
         source = _source(db, project, data, user, issue_id, store, execution)
     else:
         source = {"issue_basis": row.data["issue_basis"], "evidence_digests": {}, "missing": True}
-    return _view(row, source, user, project, permissions, store)
+    return _view(row, source, user, project, permissions, store, db)
 
 
 def _selected(source, ids, issue_id):
@@ -282,7 +295,7 @@ def generate_diagnosis(db, project, user, issue_id, body, request, *, store=None
     key = _fingerprint(["issue-diagnosis", project.tenant_id, project.id, user.id, body.idempotency_key])
     row = db.get(IssueDiagnosis, key, populate_existing=True)
     version, data = _workspace(db, project)
-    source = _source(db, project, data, user, issue_id, store, execution)
+    source = _source(db, project, data, user, issue_id, store, execution, body.selected_evidence_ids)
     if row:
         if row.request_hash != fingerprint:
             fail(
@@ -291,7 +304,7 @@ def generate_diagnosis(db, project, user, issue_id, body, request, *, store=None
                 "Request key was already used with different input",
             )
         # Pure replay: no provider, no source replacement, no workspace write.
-        return _view(row, source, user, project, permissions, store)
+        return _view(row, source, user, project, permissions, store, db)
     if version != body.expected_version:
         fail(
             409,
@@ -339,6 +352,7 @@ def generate_diagnosis(db, project, user, issue_id, body, request, *, store=None
                 project,
                 permissions,
                 store,
+                db,
             )
         fail(409, "issue_diagnosis_concurrent", "Another request was recorded; retry the original request")
     # Do not retain an ORM instance across rollback/commit and a provider call.
@@ -362,7 +376,7 @@ def generate_diagnosis(db, project, user, issue_id, body, request, *, store=None
     _, current = _workspace(db, project)
     source = _source(db, project, current, user, issue_id, store, execution)
     return _view(
-        db.get(IssueDiagnosis, key, populate_existing=True), source, user, project, permissions, store
+        db.get(IssueDiagnosis, key, populate_existing=True), source, user, project, permissions, store, db
     )
 
 
@@ -412,7 +426,7 @@ def apply_issue_diagnosis(db, project, user, data, action, body, *, store=None, 
         fail(
             403, "issue_diagnosis_evidence_restricted", "Original selected evidence is not currently readable"
         )
-    source = _source(db, project, data, user, body.issue_id, store, execution)
+    source = _source(db, project, data, user, body.issue_id, store, execution, row.data["selected_evidence_digests"])
     if not _current(row, source):
         fail(
             409,

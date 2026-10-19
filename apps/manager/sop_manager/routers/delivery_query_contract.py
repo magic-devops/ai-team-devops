@@ -17,7 +17,7 @@ class ReadModel(BaseModel):
 
 class QueryState(ReadModel):
     status: Literal["ready", "rebuild_required"]
-    schema_version: int = 3
+    schema_version: int = 4
     computed_at: str | None = None
 
 
@@ -38,6 +38,7 @@ class DeliveryContext(QueryEnvelope):
 
 class QueryRebuilt(QueryEnvelope):
     query_state: QueryState
+    origin_rebuild: dict[str, int]
 
 
 class QueryPage(QueryEnvelope):

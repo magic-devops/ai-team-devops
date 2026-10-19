@@ -11,7 +11,7 @@ from .._util import console, get_client, warn
 from . import delivery_discussion
 
 app = typer.Typer(
-    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
 
 app.add_typer(delivery_discussion.app, name="discussion")
@@ -328,6 +328,29 @@ def issue_diagnoses(
         with get_client() as client:
             result = client.delivery_issue_diagnosis(issue_id, diagnosis_id) if diagnosis_id else client.delivery_issue_diagnoses(issue_id, cursor=cursor)
             console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("issue-origins")
+def issue_origins(
+    issue_id: Annotated[str, typer.Argument(help="明确问题ID")],
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    origin_id: Annotated[str, typer.Option("--id")] = "",
+    json_output: Annotated[bool, typer.Option("--json", help="输出完整JSON响应")] = False,
+):
+    """分页读取真实问题来源，或按精确来源ID读取原件；不自动翻页。"""
+    try:
+        if cursor and origin_id:
+            raise ValueError("Choose an origin cursor or an exact origin ID")
+        with get_client() as client:
+            result = (
+                client.delivery_issue_origin(issue_id, origin_id)
+                if origin_id else client.delivery_issue_origins(issue_id, limit=limit, cursor=cursor)
+            )
+        console.print_json(data=result)
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc

@@ -156,6 +156,11 @@ def event_write_scope(db, tenant_id, project_id):
     return _scope(db, tenant_id, project_id, "event")
 
 
+def issue_origin_rebuild_scope(db, tenant_id, project_id):
+    """Derived-only origin maintenance, also permitted on archived projects."""
+    return _scope(db, tenant_id, project_id, "issue_origin_rebuild")
+
+
 def in_lifecycle_scope(db, tenant_id, project_id):
     return _permission(db, (str(tenant_id), str(project_id)), "lifecycle") is not None
 
@@ -376,6 +381,9 @@ def _flow_invalidation(original, changed):
 
 
 def _restricted_write(db, table, scope, operation, old, values):
+    if (table.name == "issue_event_origins" and operation == "insert"
+            and _permission(db, scope, "issue_origin_rebuild")):
+        return True
     lifecycle = _permission(db, scope, "lifecycle")
     identity = _permission(db, scope, "identity")
     if lifecycle:
@@ -433,6 +441,11 @@ def _check_discussion_write(db, table, scope, operation, old, values):
 
 
 def _check_event_write(db, table, scope, operation, old, values):
+    if table.name == "issue_event_origins":
+        if operation != "insert":
+            _deny("event_origin_immutable", "Issue event origins are append-only")
+        if not (_permission(db, scope, "event") or _permission(db, scope, "issue_origin_rebuild")):
+            _deny("event_origin_command_required", "Only successful event processing can create origins")
     if table.name in {"event_inbox", "event_processing_attempts"} and operation != "insert":
         _deny("event_immutable", "Event receipts and attempts are append-only")
     if table.name != "event_processing" or operation == "insert":

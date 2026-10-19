@@ -810,6 +810,18 @@ const reasonRows = [
   ],
 ];
 const stateRows = [
+  [
+    "processed",
+    "Business operation processed",
+    "业务操作已处理",
+    "業務操作を処理済み",
+  ],
+  [
+    "unavailable",
+    "Original unavailable",
+    "原件不可用",
+    "元の記録を参照できません",
+  ],
   ["unknown", "Unknown", "未知", "不明"],
   ["running", "Running", "执行中", "実行中"],
   ["queued", "Queued", "已排队", "待機中"],
@@ -832,16 +844,233 @@ const stateRows = [
   ["resolved", "Resolved", "已解决", "解決済み"],
   ["closed", "Closed", "已关闭", "終了"],
 ];
+const originRows = [
+  ["title", "Tool event origins", "工具事件来源", "ツールイベントの出所"],
+  [
+    "summary",
+    "Tool event origins · {{count}}",
+    "工具事件来源 · {{count}}",
+    "ツールイベントの出所 · {{count}}",
+  ],
+  [
+    "hint",
+    "These successful historical operations explain this problem's origin. Processing does not mean acceptance or that the problem is closed. Event bodies load only in the exact receipt.",
+    "这些历史成功操作说明问题的真实来源。已处理不等于已验收或问题已关闭。事件正文仅在指定回执中按需展开。",
+    "過去に成功した業務操作から問題の出所を確認できます。処理済みでも検収や問題の終了を意味しません。本文は指定の受領記録で必要に応じて開きます。",
+  ],
+  [
+    "select",
+    "Select tool event evidence",
+    "选择工具事件证据",
+    "ツールイベントの証拠を選択",
+  ],
+  ["hide", "Hide origin directory", "收起来源目录", "出所一覧を閉じる"],
+  [
+    "selectedCount",
+    "Selected {{count}} / {{limit}} · includes this problem; selections remain across pages",
+    "已选 {{count}} / {{limit}} · 包含问题本身，翻页保留选择",
+    "選択済み {{count}} / {{limit}} · 問題自体を含み、ページを移動しても保持します",
+  ],
+  [
+    "pageCount",
+    "Page {{page}} · {{count}} of {{total}} origins",
+    "第 {{page}} 页 · 本页 {{count}} / 共 {{total}} 条来源",
+    "{{page}} ページ · {{total}} 件中 {{count}} 件を表示",
+  ],
+  ["refresh", "Refresh origins", "刷新来源", "出所を再読み込み"],
+  [
+    "readFailed",
+    "Origins could not be read",
+    "无法读取来源",
+    "出所を読み取れません",
+  ],
+  [
+    "readFailedHint",
+    "Check current access or reload the first page. Problem and diagnosis records remain separate.",
+    "请检查当前权限或重新读取首页。问题正文和诊断记录独立加载。",
+    "現在の権限を確認するか最初のページを再読み込みしてください。問題と診断は別々に読み込みます。",
+  ],
+  [
+    "empty",
+    "No verified event origins are recorded.",
+    "暂无已核验的事件来源。",
+    "検証済みのイベント出所はありません。",
+  ],
+  [
+    "issueDeleted",
+    "This problem was deleted. These are historical operations.",
+    "问题已删除，以下为历史操作来源。",
+    "この問題は削除済みです。過去の操作を表示します。",
+  ],
+  [
+    "rebuildRequired",
+    "Origin projection needs an authorized query rebuild.",
+    "来源投影需由有配置权限的人员显式重建。",
+    "権限のある担当者による出所投影の再構築が必要です。",
+  ],
+  ["producer", "Actual producer", "真实提交人", "実際の送信者"],
+  [
+    "processedAt",
+    "Operation processed at",
+    "业务处理时间",
+    "業務操作の処理時刻",
+  ],
+  ["source", "Recorded source", "原记录来源", "記録された出所"],
+  ["receipt", "Receipt ID", "回执标识", "受領記録 ID"],
+  ["available", "Original verified", "原件已核验", "元の記録を検証済み"],
+  [
+    "unavailable",
+    "Original unavailable",
+    "原件不可用",
+    "元の記録を参照できません",
+  ],
+  [
+    "originalUnavailable",
+    "Original metadata unavailable",
+    "原件信息不可用",
+    "元の情報を参照できません",
+  ],
+  [
+    "unavailableHint",
+    "This original cannot be used as diagnosis evidence.",
+    "此来源原件不能作为诊断证据。",
+    "この記録は診断の証拠に使えません。",
+  ],
+  ["openReceipt", "Open exact receipt", "打开指定回执", "指定の受領記録を開く"],
+  ["selectEvidence", "Include this origin", "纳入此来源", "この出所を含める"],
+  ["remove", "Remove selection", "移除选择", "選択を解除"],
+  ["back", "Back to problem origins", "返回问题来源", "問題の出所へ戻る"],
+  ["pagination", "Origin pages", "来源分页", "出所のページ"],
+  ["first", "First page", "首页", "最初のページ"],
+  ["next", "Next page", "下一页", "次のページ"],
+  [
+    "cursorInvalid",
+    "The origin window cannot continue. Reload the first page.",
+    "无法继续此来源窗口，请重新读取首页。",
+    "この出所の一覧を続けられません。最初のページを読み直してください。",
+  ],
+  ["recordDetails", "Origin record details", "来源记录详情", "出所の記録詳細"],
+  ["originId", "Origin ID", "来源标识", "出所 ID"],
+  ["eventId", "Original event ID", "原事件标识", "元のイベント ID"],
+  [
+    "attemptId",
+    "Successful attempt ID",
+    "成功处理记录标识",
+    "成功した処理記録 ID",
+  ],
+  ["digest", "Original digest", "原件摘要", "元のダイジェスト"],
+  ["basis", "Stable evidence basis", "固定证据依据", "固定の証拠基準"],
+];
+const originReasons = [
+  [
+    "event_origin_original_missing",
+    "The original receipt is missing.",
+    "来源原回执已缺失。",
+    "元の受領記録がありません。",
+  ],
+  [
+    "event_origin_original_changed",
+    "The original receipt no longer matches its digest.",
+    "来源原回执与固定摘要不再一致。",
+    "元の受領記録が固定のダイジェストと一致しません。",
+  ],
+  [
+    "event_origin_attempt_missing",
+    "The successful processing attempt is missing.",
+    "来源成功处理记录已缺失。",
+    "成功した処理記録がありません。",
+  ],
+  [
+    "event_origin_effect_mismatch",
+    "The recorded operation does not match this problem.",
+    "来源实际业务操作与此问题不一致。",
+    "記録された業務操作がこの問題と一致しません。",
+  ],
+  [
+    "event_origin_producer_missing",
+    "The actual producer identity is unavailable.",
+    "来源真实提交人身份不可用。",
+    "実際の送信者の身元を確認できません。",
+  ],
+];
 function withDetails(base: typeof en, language: 0 | 1 | 2) {
   return {
     ...base,
+    originsTab: ["Event origins", "事件来源", "イベントの出所"][language],
+    originsUnavailable: [
+      "The origin page is unavailable.",
+      "来源页面不可用。",
+      "出所のページを参照できません。",
+    ][language],
+    kinds: {
+      ...base.kinds,
+      event: ["Tool event", "工具事件", "ツールイベント"][language],
+    },
+    sources: {
+      ...base.sources,
+      event: ["Tool events", "工具事件", "ツールイベント"][language],
+    },
+    origins: {
+      ...Object.fromEntries(
+        originRows.map((row) => [row[0], row[language + 1]]),
+      ),
+      operations: {
+        create: ["Created problem", "创建问题", "問題を作成"][language],
+        update: ["Updated problem", "更新问题", "問題を更新"][language],
+        delete: ["Deleted problem", "删除问题", "問題を削除"][language],
+      },
+    },
+    summaries: {
+      ...base.summaries,
+      event_business_effect: [
+        "Verified historical business operation. Processing does not mean acceptance or problem closure.",
+        "已核验的历史业务操作，已处理不等于验收或问题关闭。",
+        "検証済みの過去の業務操作です。処理済みでも検収や問題の終了を意味しません。",
+      ][language],
+    },
     facts: {
       ...base.facts,
+      ...Object.fromEntries(
+        [
+          ["operation", "Actual operation", "实际操作", "実際の操作"],
+          [
+            "effect_kind",
+            "Recorded effect",
+            "实际业务效果",
+            "記録された業務効果",
+          ],
+          ["receipt_id", "Receipt ID", "回执标识", "受領記録 ID"],
+          [
+            "attempt_id",
+            "Successful attempt ID",
+            "成功处理记录标识",
+            "成功した処理記録 ID",
+          ],
+          ["digest", "Original digest", "原件摘要", "元のダイジェスト"],
+          [
+            "processed_at",
+            "Operation processed at",
+            "业务处理时间",
+            "業務操作の処理時刻",
+          ],
+          [
+            "producer_id",
+            "Actual producer ID",
+            "真实提交人标识",
+            "実際の送信者 ID",
+          ],
+        ].map((row) => [row[0], row[language + 1]]),
+      ),
       business_valid: [
         "Current business evidence valid",
         "当前业务证据有效",
         "現在の業務上の証拠が有効",
       ][language],
+    },
+    effects: {
+      issue_created: ["Problem created", "已创建问题", "問題を作成"][language],
+      record_upserted: ["Record saved", "已保存记录", "記録を保存"][language],
+      record_deleted: ["Record deleted", "已删除记录", "記録を削除"][language],
     },
     evidenceStates: Object.fromEntries(
       stateRows.map((row) => [row[0], row[language + 1]]),
@@ -853,6 +1082,9 @@ function withDetails(base: typeof en, language: 0 | 1 | 2) {
     },
     reasons: {
       ...base.reasons,
+      ...Object.fromEntries(
+        originReasons.map((row) => [row[0], row[language + 1]]),
+      ),
       ...Object.fromEntries(
         reasonRows.map((row) => [
           `issue_diagnosis_${row[0]}`,

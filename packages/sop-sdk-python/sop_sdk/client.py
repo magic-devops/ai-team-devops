@@ -370,7 +370,7 @@ class ManagerClient:
         cursor: str = "",
         limit: int = 20,
     ) -> dict[str, Any]:
-        if source not in {"", "execution", "deployment", "other"}:
+        if source not in {"", "execution", "deployment", "event", "other"}:
             raise ValueError("invalid issue source")
         params = _delivery_query_params(
             limit=limit,
@@ -461,6 +461,26 @@ class ManagerClient:
     def delivery_issue(self, issue_id: str) -> dict[str, Any]:
         """Read the exact project issue, fixed evidence and diagnosis history."""
         return self._request("GET", f"/api/v1/delivery/issues/{_resource_segment(issue_id)}")
+
+    def delivery_issue_origins(
+        self, issue_id: str, *, limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one fixed-window origin page without following its next cursor."""
+        resource = _resource_segment(issue_id)
+        if (
+            not isinstance(cursor, str)
+            or len(cursor) > 4000
+            or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in cursor)
+        ):
+            raise ValueError("origin cursor must be an opaque cursor of at most 4000 characters without controls")
+        params = _delivery_query_params(limit=limit, cursor=cursor)
+        return self._request("GET", f"/api/v1/delivery/issues/{resource}/origins", params=params)
+
+    def delivery_issue_origin(self, issue_id: str, origin_id: str) -> dict[str, Any]:
+        """Read the exact original source, including the history of a deleted issue."""
+        issue = _resource_segment(issue_id)
+        origin = _resource_segment(origin_id)
+        return self._request("GET", f"/api/v1/delivery/issues/{issue}/origins/{origin}")
 
     def delivery_issue_diagnoses(self, issue_id: str, *, cursor: str = "") -> dict[str, Any]:
         return self._request(

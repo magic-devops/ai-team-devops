@@ -252,6 +252,7 @@ export function IssueReviewPanel({
       assertCurrent();
       if (!found || found.id !== proposal.id || !found.review) {
         setProblem({
+          status: 0,
           message: tr("reviewNotFound"),
           code: "review_not_found",
           conflict: false,

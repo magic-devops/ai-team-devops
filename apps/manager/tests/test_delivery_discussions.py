@@ -603,7 +603,7 @@ def test_runtime_reference_redacts_current_acl_and_original_replay_requires_orig
             insert(m.DeliveryQueryState).values(
                 tenant_id="tenant",
                 project_id="project",
-                schema_version=3,
+                schema_version=4,
                 generation=1,
                 source_version=0,
                 computed_at=datetime.utcnow(),

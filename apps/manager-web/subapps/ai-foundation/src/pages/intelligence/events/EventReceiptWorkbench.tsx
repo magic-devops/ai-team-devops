@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useExecutionExitGuard } from "@/lib/executionExitGuard";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { projectSessionKey } from "@/lib/projectPortfolio";
+import { safeIssueOriginReturn } from "@/lib/issueOriginRoute";
 import {
   currentEventHash,
   eventHash,
@@ -102,6 +103,11 @@ export function EventReceiptWorkbench({ projectId }: { projectId: string }) {
       />
     );
   const background = eventHash(projectId, {}, currentEventHash());
+  const issueReturn = safeIssueOriginReturn(
+    new URLSearchParams(currentEventHash().split("?")[1]).get("issue_return") ||
+      "",
+    projectId,
+  );
   const navigate = (href: string) => {
     if (exit.canNavigate()) location.hash = href;
   };
@@ -118,6 +124,11 @@ export function EventReceiptWorkbench({ projectId }: { projectId: string }) {
         </Button>
       </header>
       <p className="event-receipt-note">{tr("hint")}</p>
+      {issueReturn && (
+        <Button disabled={exit.pending} onClick={() => navigate(issueReturn)}>
+          {t("deliveryIssue.origins.back")}
+        </Button>
+      )}
       <div className="event-receipt-actions" aria-label={tr("processing")}>
         {(["all", "pending", "processed", "failed"] as const).map((state) => (
           <Button

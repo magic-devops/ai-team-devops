@@ -53,6 +53,7 @@ from .delivery_execution_runtime_contract import (
     ExecutionRuntimeResponse,
 )
 from .delivery_issue_contract import DiagnosisHistory, DiagnosisView, IssueDetail, IssueDiagnosisGenerate
+from .delivery_issue_origin_contract import IssueOriginDetail, IssueOrigins
 from .delivery_query_contract import (
     CommandAck,
     DeliveryContext,
@@ -267,7 +268,7 @@ def delivery_issue_page(
     user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
     requirement_id: str = Query("", max_length=64), task_id: str = Query("", max_length=64),
     q: str = Query("", max_length=200), status: str = Query("", max_length=32),
-    severity: str = Query("", max_length=8), source: Literal["", "execution", "deployment", "other"] = "",
+    severity: str = Query("", max_length=8), source: Literal["", "execution", "deployment", "event", "other"] = "",
     cursor: str = Query("", max_length=4000),
     limit: int = Query(20, ge=1, le=100), project_id: str = Header(default="", alias="X-Project-Id"),
 ):
@@ -438,6 +439,33 @@ def delivery_issue_detail(
         store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None),
     )
+
+
+@router.get("/issues/{issue_id}/origins", response_model=IssueOrigins)
+def delivery_issue_origins(
+    issue_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str = Query(default="", max_length=4000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_issue_origins import issue_origins
+
+    return issue_origins(db, _project(db, user, project_id), user, issue_id, limit=limit, cursor=cursor)
+
+
+@router.get("/issues/{issue_id}/origins/{origin_id}", response_model=IssueOriginDetail)
+def delivery_issue_origin(
+    issue_id: str,
+    origin_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_issue_origins import issue_origin_detail
+
+    return issue_origin_detail(db, _project(db, user, project_id), user, issue_id, origin_id)
 
 
 @router.get("/issues/{issue_id}/diagnoses", response_model=DiagnosisHistory)

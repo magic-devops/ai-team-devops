@@ -12,8 +12,10 @@ import {
   type DiagnosisSubmission,
   type DiagnosisView,
   type IssueDetail,
+  type IssueEvidence,
 } from "@/lib/deliveryIssue";
 import { IssueEvidenceList, IssueProposalFacts } from "./DeliveryIssueFacts";
+import { IssueOriginDirectory } from "./DeliveryIssueOrigins";
 
 export type IssueDiagnosisPanelProps = {
   projectId: string;
@@ -34,6 +36,8 @@ export function IssueDiagnosisPanel({
   const { t } = useTranslation(),
     tr = (key: string) => t(`deliveryIssue.${key}`);
   const [base, setBase] = useState(() => structuredClone(detail));
+  const [originOpen, setOriginOpen] = useState(false),
+    [originEvidence, setOriginEvidence] = useState<IssueEvidence[]>([]);
   const [form, setForm] = useState<DiagnosisForm>({
     generator: "ai",
     selected_evidence_ids: [],
@@ -48,6 +52,7 @@ export function IssueDiagnosisPanel({
     [result, setResult] = useState<DiagnosisView | null>(null);
   const origin = useRef(projectSessionKey()),
     inFlight = useRef(false),
+    controlsLocked = useRef(false),
     submission = useRef<DiagnosisSubmission>();
   const current = () =>
     origin.current === projectSessionKey() &&
@@ -57,14 +62,16 @@ export function IssueDiagnosisPanel({
     if (!current()) throw new Error("scopeChanged");
   };
   const locked = busy || unknown || readOnly || !base.permissions.can_generate;
+  controlsLocked.current = locked;
   const patch = (change: Partial<DiagnosisForm>) => {
-    if (!locked && current()) {
+    if (!controlsLocked.current && !inFlight.current && current()) {
       setForm({ ...form, ...change });
       setProblem(null);
     }
   };
   const begin = (clear = true) => {
     inFlight.current = true;
+    controlsLocked.current = true;
     setBusy(true);
     if (clear) setProblem(null);
     onBusyChange?.(true);
@@ -88,6 +95,14 @@ export function IssueDiagnosisPanel({
     if (!current()) return;
     const info = issueProblem(cause),
       unresolved = unknown || (submitted && info.unknown);
+    if (
+      /^HTTP (403|404):/.test(
+        cause instanceof Error ? cause.message : String(cause),
+      )
+    )
+      setOriginEvidence([]);
+    controlsLocked.current =
+      unresolved || readOnly || !base.permissions.can_generate;
     setProblem(info);
     setUnknown(unresolved);
     onUnresolvedChange?.(unresolved);
@@ -110,6 +125,8 @@ export function IssueDiagnosisPanel({
               form,
               submission.current,
               regenerate,
+              undefined,
+              originEvidence,
             );
     } catch (cause) {
       fail(cause, false);
@@ -144,6 +161,7 @@ export function IssueDiagnosisPanel({
       if (value) receive(value);
       else
         setProblem({
+          status: 0,
           message: tr("requestNotFound"),
           code: "request_not_found",
           conflict: false,
@@ -151,7 +169,7 @@ export function IssueDiagnosisPanel({
           unknown: true,
         });
     } catch (cause) {
-      if (current()) setProblem(issueProblem(cause));
+      fail(cause, false);
     } finally {
       finish();
     }
@@ -171,12 +189,13 @@ export function IssueDiagnosisPanel({
       finish();
     }
   }
-  const selected = base.evidence.filter((item) =>
+  const selected = [...base.evidence, ...originEvidence].filter((item) =>
     form.selected_evidence_ids.includes(item.id),
   );
   const mayGenerate =
     !locked &&
     !problem?.conflict &&
+    form.selected_evidence_ids.length <= 32 &&
     form.selected_evidence_ids.includes(`issue:${base.issue.id}`) &&
     selected.length === form.selected_evidence_ids.length &&
     selected.every((item) => !item.restricted && !item.missing);
@@ -205,9 +224,18 @@ export function IssueDiagnosisPanel({
         <p className="issue-meta">{tr("evidenceSelectionHint")}</p>
         <Checkbox.Group
           disabled={locked}
-          value={form.selected_evidence_ids}
+          value={form.selected_evidence_ids.filter(
+            (id) => !id.startsWith("event:"),
+          )}
           onChange={(values) =>
-            patch({ selected_evidence_ids: values.map(String) })
+            patch({
+              selected_evidence_ids: [
+                ...form.selected_evidence_ids.filter((id) =>
+                  id.startsWith("event:"),
+                ),
+                ...values.map(String),
+              ],
+            })
           }
           options={base.evidence.map((item) => ({
             value: item.id,
@@ -221,9 +249,102 @@ export function IssueDiagnosisPanel({
                     : ""}
               </span>
             ),
-            disabled: item.restricted || item.missing,
+            disabled:
+              item.restricted ||
+              item.missing ||
+              (!form.selected_evidence_ids.includes(item.id) &&
+                form.selected_evidence_ids.length >= 32),
           }))}
         />
+        <p className="issue-meta" role="status">
+          {t("deliveryIssue.origins.selectedCount", {
+            count: form.selected_evidence_ids.length,
+            limit: 32,
+          })}
+        </p>
+        <Button
+          disabled={busy || unknown}
+          onClick={() => setOriginOpen(!originOpen)}
+        >
+          {tr(originOpen ? "origins.hide" : "origins.select")}
+        </Button>
+        {originOpen && (
+          <IssueOriginDirectory
+            projectId={projectId}
+            issueId={base.issue.id}
+            background={typeof location === "undefined" ? "" : location.hash}
+            disabled={locked}
+            selectedIds={form.selected_evidence_ids}
+            selectionCount={form.selected_evidence_ids.length}
+            onUnavailable={() => {
+              if (current()) setOriginEvidence([]);
+            }}
+            onSelection={(origin, checked) => {
+              if (
+                controlsLocked.current ||
+                inFlight.current ||
+                !current() ||
+                !origin.available ||
+                origin.evidence.restricted ||
+                origin.evidence.missing ||
+                origin.evidence.target.project_id !== projectId
+              )
+                return;
+              const id = origin.evidence.id;
+              if (
+                checked &&
+                !form.selected_evidence_ids.includes(id) &&
+                form.selected_evidence_ids.length >= 32
+              )
+                return;
+              setOriginEvidence((items) =>
+                checked
+                  ? [
+                      ...items.filter((item) => item.id !== id),
+                      structuredClone(origin.evidence),
+                    ]
+                  : items.filter((item) => item.id !== id),
+              );
+              patch({
+                selected_evidence_ids: checked
+                  ? [...new Set([...form.selected_evidence_ids, id])]
+                  : form.selected_evidence_ids.filter((value) => value !== id),
+              });
+            }}
+          />
+        )}
+        {form.selected_evidence_ids.some((id) => id.startsWith("event:")) && (
+          <ul className="issue-selected-origins">
+            {form.selected_evidence_ids
+              .filter((id) => id.startsWith("event:"))
+              .map((id) => (
+                <li key={id}>
+                  <span>
+                    {originEvidence.find((item) => item.id === id)?.label || id}
+                  </span>
+                  <Button
+                    size="small"
+                    disabled={locked}
+                    aria-label={`${tr("origins.remove")} ${id}`}
+                    onClick={() => {
+                      if (locked || !current()) return;
+                      setOriginEvidence((items) =>
+                        items.filter((item) => item.id !== id),
+                      );
+                      patch({
+                        selected_evidence_ids:
+                          form.selected_evidence_ids.filter(
+                            (value) => value !== id,
+                          ),
+                      });
+                    }}
+                  >
+                    {tr("origins.remove")}
+                  </Button>
+                </li>
+              ))}
+          </ul>
+        )}
       </fieldset>
       <label className="issue-field">
         <span>{tr("instructions")}</span>
@@ -309,8 +430,10 @@ export function IssueDiagnosisPanel({
               disabled={busy || !latest.permissions.can_generate}
               onClick={() => {
                 if (!current()) return;
-                if (latest.issue_basis !== base.issue_basis)
+                if (latest.issue_basis !== base.issue_basis) {
                   setForm({ ...form, selected_evidence_ids: [] });
+                  setOriginEvidence([]);
+                }
                 setBase(latest);
                 submission.current = undefined;
                 setLatest(null);

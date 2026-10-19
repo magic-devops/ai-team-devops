@@ -148,4 +148,29 @@ describe("bounded durable event receipts", () => {
     ])
       expect(safeEventReturn(value, "P")).toBeNull();
   });
+  it("retains only a validated same-project problem-origin return through receipt pagination", () => {
+    const back =
+      "#/dev-flow?view=issues&project_id=P&issue=ISS-one&issue_origins=1&issue_origin_cursor=fixed-window";
+    const origin =
+      "#/intelligence/events?project_id=P&event_receipt=R&issue_return=" +
+      encodeURIComponent(back);
+    const href = eventHash("P", { cursor: "next", page: 2 }, origin);
+    expect(new URLSearchParams(href.split("?")[1]).get("issue_return")).toBe(
+      back,
+    );
+    expect(safeEventReturn(href, "P")).toBe(href);
+    for (const unsafe of [
+      "https://evil.example",
+      back.replace("project_id=P", "project_id=other"),
+      back + "&project_id=P",
+      back.replace("view=issues", "view=releases"),
+    ]) {
+      const bad = origin.replace(
+        encodeURIComponent(back),
+        encodeURIComponent(unsafe),
+      );
+      expect(safeEventReturn(bad, "P")).toBeNull();
+      expect(eventHash("P", {}, bad)).not.toContain("issue_return");
+    }
+  });
 });
