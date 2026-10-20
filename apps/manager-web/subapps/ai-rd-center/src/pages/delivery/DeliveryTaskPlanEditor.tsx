@@ -30,7 +30,8 @@ import {
 import { Plus, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getToken, getWorkspaceScope } from "@/lib/authStorage";
+import { projectSessionKey } from "@/lib/projectPortfolio";
+import { validDeliveryCommandAck } from "@/lib/deliveryCommandController";
 import {
   prepareDeliveryIntent,
   saveDelivery,
@@ -62,7 +63,6 @@ type Draft = {
   baseline: Baseline;
   preview: TaskPlanPreview | null;
 };
-const scope = () => JSON.stringify([getToken(), getWorkspaceScope()]);
 
 export function DeliveryTaskPlanEditor({
   data,
@@ -85,7 +85,7 @@ export function DeliveryTaskPlanEditor({
   const tr = (key: string, values?: Record<string, unknown>) =>
     t(`delivery.taskPlan.${key}`, values);
   const common = (key: string) => t(`delivery.${key}`);
-  const origin = useRef(scope());
+  const origin = useRef(projectSessionKey());
   const source = useDiscussionAdoptionSource(initialSource);
   const projectId = data.project.id;
   const [baseline, setBaseline] = useState<Baseline>(() => ({
@@ -149,7 +149,9 @@ export function DeliveryTaskPlanEditor({
   const controller = useRef<AbortController>();
   useEffect(() => () => controller.current?.abort(), []);
   const [unknown, setUnknown] = useState(false);
+  const unknownRef = useRef(false);
   const pending = useRef<{
+    projectId: string;
     payload: Record<string, unknown>;
     intent: DeliveryIntent;
     source: DiscussionAdoption["reference"] | undefined;
@@ -167,13 +169,22 @@ export function DeliveryTaskPlanEditor({
   const coverage = new Set(
     items.flatMap((item) => item.requirement_criteria_indices),
   );
+  const locked = () => busyRef.current || unknownRef.current;
+  const edit = (action: () => void) => {
+    if (!locked()) action();
+  };
+  const close = () => {
+    if (!locked()) onClose();
+  };
   const update = (key: string, value: Partial<TaskPlanRow>) =>
-    setRows((current) =>
-      current.map((row) => (row.key === key ? { ...row, ...value } : row)),
+    edit(() =>
+      setRows((current) =>
+        current.map((row) => (row.key === key ? { ...row, ...value } : row)),
+      ),
     );
-  const guarded = async (action: () => Promise<void>) => {
-    if (busyRef.current) return;
-    if (origin.current !== scope()) {
+  const guarded = async (action: () => Promise<void>, retryOriginal = false) => {
+    if (busyRef.current || (unknownRef.current && !retryOriginal)) return;
+    if (origin.current !== projectSessionKey()) {
       setError(common("scopeChanged"));
       return;
     }
@@ -211,7 +222,7 @@ export function DeliveryTaskPlanEditor({
         previewRequest.current,
         controller.current.signal,
       );
-      if (origin.current !== scope()) return;
+      if (origin.current !== projectSessionKey()) return;
       setPrevious({ rows, baseline, preview });
       setRows(
         result.items.map((item) => ({
@@ -235,17 +246,18 @@ export function DeliveryTaskPlanEditor({
       setGenerationFailed(false);
       setNotice("");
     });
-  const save = (retry = false) =>
+  const save = (retry = false) => {
+    if (retry && (!unknownRef.current || !pending.current)) return;
     void guarded(async () => {
-      if (!retry && (problems.length || conflict || unknown)) return;
-      const payload = {
-        requirement_id: requirement.id,
-        requirement_revision: baseline.revision,
-        ...(baseline.basis ? { requirement_basis: baseline.basis } : {}),
-        ...(preview ? { preview_id: preview.id } : {}),
-        items,
-      };
+      if (!retry && (problems.length || conflict)) return;
       if (!retry) {
+        const payload = {
+          requirement_id: requirement.id,
+          requirement_revision: baseline.revision,
+          ...(baseline.basis ? { requirement_basis: baseline.basis } : {}),
+          ...(preview ? { preview_id: preview.id } : {}),
+          items,
+        };
         submitIntent.current = prepareDeliveryIntent(
           submitIntent.current,
           "tasks.plan",
@@ -253,6 +265,7 @@ export function DeliveryTaskPlanEditor({
           source.current.current?.reference,
         );
         pending.current = {
+          projectId,
           payload: structuredClone(payload),
           intent: structuredClone(submitIntent.current),
           source: source.current.current
@@ -263,25 +276,37 @@ export function DeliveryTaskPlanEditor({
       const command = pending.current;
       if (!command) return;
       onUnresolvedChange?.(true);
+      let result: DeliveryCommandAck;
       try {
-        const result = await saveDelivery(
-          projectId,
+        result = await saveDelivery(
+          command.projectId,
           "tasks.plan",
           command.payload,
           command.intent.version,
           command.intent.key,
           command.source,
         );
-        if (origin.current === scope()) {
-          setUnknown(false);
-          onUnresolvedChange?.(false);
-          onSaved(result);
+        const original = { action: "tasks.plan", payload: command.payload, intent: command.intent };
+        if (!validDeliveryCommandAck(command.projectId, original, result, "task")) {
+          throw new Error(t("deliveryRelease.ackMismatch"));
+        }
+        const ids = result.result?.task_ids;
+        const drafts = command.payload.items;
+        if (!Array.isArray(ids) || !Array.isArray(drafts) || ids.length !== drafts.length || !ids.length
+          || ids.some((id) => typeof id !== "string" || !id.trim()) || new Set(ids).size !== ids.length
+          || result.resource.id !== ids[ids.length - 1]
+          || ids.some((id) => !result.affected_refs.some((ref) => ref.kind === "task" && ref.id === id))) {
+          throw new Error(t("deliveryRelease.ackMismatch"));
         }
       } catch (error) {
         const problem = discussionFailure(error);
-        const unresolved = Boolean(initialSource) && problem.unknown;
+        const unresolved = problem.unknown;
+        unknownRef.current = unresolved;
         setUnknown(unresolved);
-        if (!unresolved) onUnresolvedChange?.(false);
+        if (!unresolved) {
+          pending.current = undefined;
+          onUnresolvedChange?.(false);
+        }
         if (initialSource && problem.conflict) {
           setConflict(true);
           setLatest(null);
@@ -290,12 +315,19 @@ export function DeliveryTaskPlanEditor({
         }
         throw error;
       }
-    });
+      pending.current = undefined;
+      unknownRef.current = false;
+      setUnknown(false);
+      onUnresolvedChange?.(false);
+      if (origin.current === projectSessionKey()) onSaved(result);
+    }, retry);
+  };
   const loadLatest = () =>
     void guarded(async () => {
       setLatest(await fetchEditableRequirement(projectId, requirement.id));
     });
   const adopt = () => {
+    if (locked()) return;
     const req = latest?.requirement;
     if (!req || !latest) return;
     const changed =
@@ -347,13 +379,13 @@ export function DeliveryTaskPlanEditor({
       title={tr("title")}
       width={960}
       className="delivery-task-plan-editor"
-      onCancel={() => !unknown && !busy && onClose()}
+      onCancel={close}
       closable={!busy && !unknown}
       maskClosable={false}
       keyboard={!busy && !unknown}
       footer={
         <Space wrap>
-          <Button onClick={onClose} disabled={busy || unknown}>
+          <Button onClick={close} disabled={busy || unknown}>
             {common("cancel")}
           </Button>
           <Button
@@ -369,7 +401,14 @@ export function DeliveryTaskPlanEditor({
     >
       <DiscussionAdoptionSource
         projectId={projectId}
-        source={source}
+        source={{
+          ...source,
+          load: async (id) => {
+            if (!locked()) await source.load(id);
+          },
+          adopt: () => edit(source.adopt),
+          remove: () => edit(source.remove),
+        }}
         disabled={busy || unknown}
       />
       {unknown && (
@@ -441,7 +480,7 @@ export function DeliveryTaskPlanEditor({
         <Select
           aria-label={tr("source")}
           value={generator}
-          onChange={setGenerator}
+          onChange={(value) => edit(() => setGenerator(value))}
           disabled={busy || unknown}
           options={["manual", "template", "ai"].map((value) => ({
             value,
@@ -453,7 +492,7 @@ export function DeliveryTaskPlanEditor({
             <Select
               aria-label={tr("mode")}
               value={mode}
-              onChange={setMode}
+              onChange={(value) => edit(() => setMode(value))}
               disabled={busy || unknown}
               options={["fullstack", "frontend", "backend", "testing"].map(
                 (value) => ({ value, label: tr(value) }),
@@ -464,7 +503,7 @@ export function DeliveryTaskPlanEditor({
               value={maxItems}
               min={1}
               max={40}
-              onChange={(value) => setMaxItems(value || 1)}
+              onChange={(value) => edit(() => setMaxItems(value || 1))}
               disabled={busy || unknown}
             />
             <Button
@@ -490,6 +529,7 @@ export function DeliveryTaskPlanEditor({
             icon={<RotateCcw size={14} />}
             disabled={busy || unknown}
             onClick={() => {
+              if (locked()) return;
               const current = { rows, baseline, preview };
               setRows(previous.rows);
               setBaseline(previous.baseline);
@@ -598,8 +638,10 @@ export function DeliveryTaskPlanEditor({
                   icon={<Trash2 size={14} />}
                   aria-label={label(tr("remove"))}
                   onClick={() =>
-                    setRows((current) =>
-                      current.filter((item) => item.key !== row.key),
+                    edit(() =>
+                      setRows((current) =>
+                        current.filter((item) => item.key !== row.key),
+                      ),
                     )
                   }
                   disabled={busy || unknown}
@@ -754,7 +796,9 @@ export function DeliveryTaskPlanEditor({
       <Button
         icon={<Plus size={14} />}
         disabled={busy || unknown || rows.length >= 40}
-        onClick={() => setRows((current) => [...current, newRow()])}
+        onClick={() =>
+          edit(() => setRows((current) => [...current, newRow()]))
+        }
       >
         {tr("add")}
       </Button>

@@ -5,11 +5,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from sop_manager.project_write_guard import project_file_write_scope
-
+from sop_manager.memory_store import get_memory_store
 from sop_manager.path_config import (
     resolved_ai_memory_root,
     resolved_business_code,
@@ -18,6 +17,8 @@ from sop_manager.path_config import (
     resolved_tenant_code,
     sop_dir,
 )
+from sop_manager.project_write_guard import project_file_write_scope
+from sop_manager.routers.business_access import read_business_access, require_business_access
 from sop_manager.routers.db_sql_compat import rows
 from sop_manager.routers.knowledge_graph_core import (
     DEFAULT_ENTITY_TYPES,
@@ -26,7 +27,6 @@ from sop_manager.routers.knowledge_graph_core import (
     now_iso,
     query_graph,
 )
-from sop_manager.memory_store import get_memory_store
 
 router = APIRouter(prefix="/api/v1/knowledge-graph", tags=["knowledge-graph"])
 
@@ -107,23 +107,32 @@ def _jsonl_rows(path: Path, limit: int = 80) -> list[dict[str, Any]]:
 
 
 def _load_lance_knowledge(limit: int = 80) -> list[dict[str, Any]]:
-    try:
-        from sop_manager.routers.db import rows as lance_rows
-
-        return [
-            {
-                "id": item.get("id") or item.get("path"),
-                "type": "knowledge",
-                "title": item.get("title") or item.get("path") or item.get("id"),
-                "content": item.get("content") or item.get("description") or "",
-                "category": item.get("category") or "knowledge",
-                "path": item.get("path") or "",
-                "source": "workspace.knowledge",
-            }
-            for item in lance_rows("knowledge", limit=limit)
-        ]
-    except Exception:
+    # An absent optional source is empty. Connecting an absent LanceDB would
+    # create its directory during a GET, so only open an existing knowledge table.
+    db_dir = resolved_ai_memory_root() / "lancedb"
+    if not (db_dir / "knowledge.lance").exists():
         return []
+    try:
+        import lancedb
+    except ImportError as exc:
+        raise HTTPException(503, "已配置的项目知识源暂不可用，请检查 LanceDB 依赖") from exc
+
+    # Do not use db.rows here: its catch-all fallback would hide failures of a
+    # configured source as a successful empty knowledge graph.
+    source = lancedb.connect(str(db_dir)).open_table("knowledge")
+    items = source.to_pandas().head(limit).to_dict("records")
+    return [
+        {
+            "id": item.get("id") or item.get("path"),
+            "type": "knowledge",
+            "title": item.get("title") or item.get("path") or item.get("id"),
+            "content": item.get("content") or item.get("description") or "",
+            "category": item.get("category") or "knowledge",
+            "path": item.get("path") or "",
+            "source": "workspace.knowledge",
+        }
+        for item in items
+    ]
 
 
 def _load_file_documents() -> list[dict[str, Any]]:
@@ -378,7 +387,7 @@ def _response(kg: dict[str, Any], **extra: Any) -> dict[str, Any]:
     }
 
 
-@router.get("/summary")
+@router.get("/summary", dependencies=[Depends(read_business_access)])
 def summary() -> dict[str, Any]:
     graph = _load_graph()
     return _response(
@@ -389,7 +398,7 @@ def summary() -> dict[str, Any]:
     )
 
 
-@router.post("/build")
+@router.post("/build", dependencies=[Depends(require_business_access)])
 def build(body: BuildIn) -> dict[str, Any]:
     docs = load_source_documents(body.documents)
     docs, permission = _filter_documents(docs, body)
@@ -409,28 +418,26 @@ def build(body: BuildIn) -> dict[str, Any]:
     return _response(graph, graph=graph, permission=permission)
 
 
-@router.post("/query")
+@router.post("/query", dependencies=[Depends(read_business_access)])
 def query(body: QueryIn) -> dict[str, Any]:
     graph = _load_graph()
     if not graph.get("built_at"):
-        docs = load_source_documents()
-        graph = build_graph_from_documents(docs, entity_types=DEFAULT_ENTITY_TYPES) if docs else _empty_graph()
-        if docs:
-            graph["scope"] = _scope()
-            graph["updated_at"] = now_iso()
-            _save_graph(graph)
+        raise HTTPException(409, {
+            "code": "knowledge_graph_not_built",
+            "message": "项目知识图谱尚未构建，请由有项目写权限的成员先执行构建",
+        })
     out = _decorate_query_results(query_graph(graph, body.query, top_k=body.top_k))
     return _response(graph, **out)
 
 
-@router.post("/lineage")
+@router.post("/lineage", dependencies=[Depends(read_business_access)])
 def lineage(body: LineageIn) -> dict[str, Any]:
     graph = _load_graph()
     out = lineage_for_entity(graph, body.entity_id, depth=body.depth)
     return _response(graph, **out)
 
 
-@router.get("/entities")
+@router.get("/entities", dependencies=[Depends(read_business_access)])
 def entities(limit: int = 200, entity_type: str = "") -> dict[str, Any]:
     graph = _load_graph()
     items = graph.get("entities") or []
@@ -439,7 +446,7 @@ def entities(limit: int = 200, entity_type: str = "") -> dict[str, Any]:
     return _response(graph, items=items[: max(1, min(limit, 1000))], total=len(items))
 
 
-@router.get("/edges")
+@router.get("/edges", dependencies=[Depends(read_business_access)])
 def edges(limit: int = 300, edge_type: str = "") -> dict[str, Any]:
     graph = _load_graph()
     items = graph.get("edges") or []
@@ -448,7 +455,7 @@ def edges(limit: int = 300, edge_type: str = "") -> dict[str, Any]:
     return _response(graph, items=items[: max(1, min(limit, 1000))], total=len(items))
 
 
-@router.post("/entity-profiles/merge")
+@router.post("/entity-profiles/merge", dependencies=[Depends(require_business_access)])
 def merge_entity_profile(body: EntityProfileMergeIn) -> dict[str, Any]:
     graph = _load_graph()
     entity_map = {str(item.get("id")): item for item in graph.get("entities") or []}
@@ -460,20 +467,17 @@ def merge_entity_profile(body: EntityProfileMergeIn) -> dict[str, Any]:
     neighbors = [item for item in (lineage.get("nodes") or []) if item.get("id") != body.entity_id]
     memory_query = body.memory_query.strip() or str(entity.get("label") or entity.get("id") or "")
     memory_items: list[dict[str, Any]] = []
-    try:
-        store = get_memory_store()
-        candidates = store.search(memory_query, limit=min(body.memory_limit * 4, 100))
-        for item in candidates:
-            md = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-            state = str(md.get("lifecycle_state") or "active")
-            if state not in ("active", "pinned"):
-                continue
-            if md.get("entity_id") == body.entity_id or memory_query.lower() in str(item.get("content") or "").lower():
-                memory_items.append(item)
-            if len(memory_items) >= body.memory_limit:
-                break
-    except Exception:
-        memory_items = []
+    store = get_memory_store()
+    candidates = store.search(memory_query, limit=min(body.memory_limit * 4, 100))
+    for item in candidates:
+        md = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        state = str(md.get("lifecycle_state") or "active")
+        if state not in ("active", "pinned"):
+            continue
+        if md.get("entity_id") == body.entity_id or memory_query.lower() in str(item.get("content") or "").lower():
+            memory_items.append(item)
+        if len(memory_items) >= body.memory_limit:
+            break
 
     evidence_links = _entity_evidence(entity)
     evidence_links.extend(_edge_evidence(edge) for edge in (lineage.get("edges") or [])[:12])

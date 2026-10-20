@@ -15,7 +15,9 @@ import { safeExecutionReturn } from "@/lib/executionCommands";
 import { DeliveryTaskDetail } from "./delivery/DeliveryTaskDetail";
 import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { ProjectContextGate } from "@/components/ProjectContextGate";
-import { preserveProjectContext } from "@/lib/projectPortfolioRoute";
+import { projectSessionKey } from "@/lib/projectPortfolio";
+import { bindSessionRequest } from "@/lib/http";
+import { eventProblem } from "@/lib/eventReceipts";
 
 const STATUSES = ["pending", "in_progress", "blocked", "completed"] as const;
 const PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
@@ -161,6 +163,7 @@ function TaskCard({
         </p>
       ) : null}
       <select
+        aria-label={`${task.title}: ${t("page.tasks.statusLabel")}`}
         className="mt-2 w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
         value={task.status || "pending"}
         disabled={busy}
@@ -177,6 +180,22 @@ function TaskCard({
 }
 
 type TasksProps = { initialTab?: Tab; focused?: boolean; initialSchedulerPanel?: SchedulerPanel | string };
+type TaskInlineAttempt = {
+  id: string; title: string; patch: Record<string, unknown>; origin: string;
+  send: ReturnType<typeof bindSessionRequest>;
+};
+type TaskInlineFeedback = {
+  attempt: TaskInlineAttempt;
+  phase: "saving" | "rejected" | "unknown" | "checking";
+  message: string;
+  observed?: { status: string; priority: string };
+  readError?: string;
+};
+const inlineEditCopy = {
+  "zh-CN": { saving: "正在保存", rejected: "任务修改未保存", unknown: "任务修改结果待确认", refresh: "重新读取当前任务", details: "查看任务详情", refusalHelp: "请根据原因调整，或打开任务详情处理依赖、权限和验收条件。", unknownHelp: "未收到保存回执，暂时锁定此任务的快捷修改。重新读取仅查看当前记录，不会重复提交；请在任务详情核实后继续处理。", current: "当前读取记录", readError: "读取失败", receiptMissing: "未收到有效的任务保存回执", recordInvalid: "无法确认当前任务记录，请打开任务详情核实" },
+  "en-US": { saving: "Saving", rejected: "Task change was not saved", unknown: "Task change needs confirmation", refresh: "Read current task", details: "Open task details", refusalHelp: "Review the reason or open task details to resolve dependencies, permissions and acceptance conditions.", unknownHelp: "No save receipt was received. Inline edits for this task are locked. Reading only checks the current record and never resubmits; verify the task details before continuing.", current: "Current observed record", readError: "Read failed", receiptMissing: "A valid task save receipt was not received", recordInvalid: "The current task record could not be confirmed. Check task details." },
+  "ja-JP": { saving: "保存中", rejected: "タスクの変更を保存できませんでした", unknown: "タスク変更の結果を確認してください", refresh: "現在のタスクを再取得", details: "タスク詳細を開く", refusalHelp: "原因を確認するか、タスク詳細で依存関係、権限、受入条件を確認してください。", unknownHelp: "保存の応答を受信できませんでした。このタスクの簡易編集をロックしています。再取得は現在の記録の参照のみで、再送信しません。詳細で確認してから続けてください。", current: "現在取得した記録", readError: "再取得に失敗しました", receiptMissing: "有効な保存応答を受信できませんでした", recordInvalid: "現在のタスク記録を確認できませんでした。詳細を確認してください。" },
+};
 export function Tasks(props: TasksProps) {
   return <ProjectContextGate><ProjectTasks {...props} /></ProjectContextGate>;
 }
@@ -189,10 +208,18 @@ function ProjectTasks({
   focused?: boolean;
   initialSchedulerPanel?: SchedulerPanel | string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
   const hasProject = Boolean(getProjectId());
+  const origin = projectSessionKey();
+  const scopedTaskRequest = bindSessionRequest({ projectId: getProjectId() || "", revision: getSessionRevision() || "" });
+  const editCopy = inlineEditCopy[i18n.language.startsWith("zh") ? "zh-CN" : i18n.language.startsWith("ja") ? "ja-JP" : "en-US"];
+  const [inlineFeedback, setInlineFeedback] = useState<Record<string, TaskInlineFeedback>>({});
+  // This synchronous lock also covers two callbacks before React commits a render.
+  const [inlineLocks] = useState(() => new Map<string, string>());
+  const [inlineReads] = useState(() => new Set<string>());
+  const [inlineAttempts] = useState(() => new Map<string, TaskInlineAttempt>());
   const [tab, setTab] = useState<Tab>(initialTab);
   const [sprintId, setSprintId] = useState<string>("");
   const [depQuery, setDepQuery] = useState("");
@@ -365,12 +392,34 @@ function ProjectTasks({
   const [newSprintId, setNewSprintId] = useState("");
 
   const patchTask = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
-      api.updateTask(id, patch),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["tasks"] });
-      void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
-      if (sprintId) void qc.invalidateQueries({ queryKey: ["sprint-progress", sprintId] });
+    mutationFn: async (attempt: TaskInlineAttempt) => {
+      const ack = await attempt.send<{ ok: boolean }>(`/api/v1/tasks/${encodeURIComponent(attempt.id)}`, {
+        method: "PATCH", body: JSON.stringify(attempt.patch),
+      });
+      if (!ack || ack.ok !== true) throw new Error(editCopy.receiptMissing);
+      return ack;
+    },
+    onSuccess: async (_data, attempt) => {
+      if (attempt.origin !== projectSessionKey() || inlineAttempts.get(attempt.id) !== attempt) return;
+      await Promise.allSettled([
+        qc.invalidateQueries({ queryKey: ["tasks"] }),
+        qc.invalidateQueries({ queryKey: ["tasksSummary"] }),
+        ...(sprintId ? [qc.invalidateQueries({ queryKey: ["sprint-progress", sprintId] })] : []),
+      ]);
+      if (attempt.origin !== projectSessionKey() || inlineAttempts.get(attempt.id) !== attempt) return;
+      inlineLocks.delete(attempt.id);
+      inlineAttempts.delete(attempt.id);
+      setInlineFeedback((previous) => {
+        const next = { ...previous }; delete next[attempt.id]; return next;
+      });
+    },
+    onError: (error, attempt) => {
+      if (attempt.origin !== projectSessionKey() || inlineAttempts.get(attempt.id) !== attempt) return;
+      const problem = eventProblem(error);
+      if (!problem.unknown) inlineLocks.delete(attempt.id);
+      setInlineFeedback((previous) => ({ ...previous, [attempt.id]: {
+        attempt, phase: problem.unknown ? "unknown" : "rejected", message: problem.message,
+      } }));
     },
   });
 
@@ -669,6 +718,53 @@ function ProjectTasks({
   const tasks = tab === "sprint" ? (sprintTasksQ.data ?? []) : linkedTaskRows(allTasksQ.data ?? [], linkedTaskId, taskQuery);
   const loading = tab === "sprint" ? sprintTasksQ.isLoading : allTasksQ.isLoading;
   const error = tab === "sprint" ? sprintTasksQ.error : allTasksQ.error;
+  const taskEditLocked = (id: string) => inlineLocks.get(id) === origin;
+  const hasInlineTaskLock = [...inlineLocks.values()].includes(origin);
+  const changeTask = (id: string, patch: Record<string, unknown>) => {
+    if (origin !== projectSessionKey() || taskEditLocked(id)) return;
+    const task = tasks.find((row: any) => row.id === id);
+    if (!task || Object.entries(patch).every(([key, value]) => task[key] === value)) return;
+    const attempt = { id, title: String(task.title || id), patch: { ...patch }, origin, send: scopedTaskRequest };
+    inlineAttempts.set(id, attempt);
+    inlineLocks.set(id, origin);
+    setInlineFeedback((previous) => ({ ...previous, [id]: { attempt, phase: "saving", message: "" } }));
+    patchTask.mutate(attempt);
+  };
+  const readCurrentTask = async (feedback: TaskInlineFeedback) => {
+    const { attempt } = feedback;
+    const readKey = `${attempt.origin}:${attempt.id}`;
+    if (attempt.origin !== projectSessionKey() || inlineAttempts.get(attempt.id) !== attempt || inlineReads.has(readKey) || feedback.phase === "checking" || feedback.phase === "saving") return;
+    inlineReads.add(readKey);
+    const unknown = feedback.phase === "unknown";
+    inlineLocks.set(attempt.id, attempt.origin);
+    setInlineFeedback((previous) => ({ ...previous, [attempt.id]: { ...feedback, phase: "checking", readError: undefined } }));
+    try {
+      const row = await attempt.send<{ id: string; status: string; priority: string }>(`/api/v1/tasks/${encodeURIComponent(attempt.id)}`, { method: "GET" });
+      if (attempt.origin !== projectSessionKey()) return;
+      if (row.id !== attempt.id || !includesStatus(row.status) || !includesPriority(row.priority)) throw new Error(editCopy.recordInvalid);
+      setInlineFeedback((previous) => ({ ...previous, [attempt.id]: { ...feedback, phase: unknown ? "unknown" : "rejected", observed: { status: row.status, priority: row.priority }, readError: undefined } }));
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
+    } catch (readError) {
+      if (attempt.origin !== projectSessionKey()) return;
+      setInlineFeedback((previous) => ({ ...previous, [attempt.id]: { ...feedback, phase: unknown ? "unknown" : "rejected", readError: eventProblem(readError).message } }));
+    } finally {
+      inlineReads.delete(readKey);
+      // A GET observes the current row; it cannot prove that a lost PATCH has finished.
+      if (!unknown && inlineLocks.get(attempt.id) === attempt.origin) inlineLocks.delete(attempt.id);
+    }
+  };
+  const persistTaskFilter = (key: string, value: string) => {
+    const [path, query] = window.location.hash.split("?");
+    if (path !== "#/tasks/execution" && path !== "#/tasks/board") return;
+    const params = new URLSearchParams(query);
+    if (value) params.set(key, value); else params.delete(key);
+    window.history.replaceState(window.history.state, "", `${path}${params.size ? `?${params}` : ""}`);
+  };
+  const updateTaskQuery = (value: string) => { if (origin !== projectSessionKey()) return; setTaskQuery(value); persistTaskFilter("q", value); };
+  const updateStatusFilter = (value: string) => { if (origin !== projectSessionKey()) return; setStatusFilter(value); persistTaskFilter("status", value); };
+  const updatePriorityFilter = (value: string) => { if (origin !== projectSessionKey()) return; setPriorityFilter(value); persistTaskFilter("priority", value); };
+  const updateSourceFilter = (value: string) => { if (origin !== projectSessionKey()) return; setSourceFilter(value); persistTaskFilter("source", value); };
 
   const boardGroups = useMemo(() => {
     const g: Record<string, any[]> = {};
@@ -717,6 +813,7 @@ function ProjectTasks({
     targetP: (typeof PRIORITIES)[number],
     insertBeforeId: string | null,
   ) => {
+    if ([...inlineLocks.values()].includes(origin) || origin !== projectSessionKey()) return;
     const base = groupsFromTasks(tasks);
     const next = moveTaskBetweenColumns(base, dragId, targetP, insertBeforeId);
     commitPriorityReorder(next);
@@ -725,11 +822,11 @@ function ProjectTasks({
   const handleBoardStatusDrop = (dragId: string, targetStatus: (typeof STATUSES)[number]) => {
     const task = tasks.find((t: any) => t.id === dragId);
     if (!task || task.status === targetStatus) return;
-    patchTask.mutate({ id: dragId, patch: { status: targetStatus } });
+    changeTask(dragId, { status: targetStatus });
   };
 
   const busy = patchTask.isPending || reorderBoard.isPending || createTaskMut.isPending || deleteTaskMut.isPending || bulkUpdateMut.isPending || interactionOpsMemoryMut.isPending || interactionOpsExportMut.isPending || dispatchMut.isPending || schedulerMut.isPending || schedulerActionMut.isPending || schedulerRunbookMut.isPending || schedulerInsightTasksMut.isPending || sprintOpsTasksMut.isPending || qualityPolicyMut.isPending || qualityTasksMut.isPending;
-  const canBulkUpdate = selectedTaskIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAssignee.trim());
+  const canBulkUpdate = selectedTaskIds.length > 0 && !selectedTaskIds.some(taskEditLocked) && Boolean(bulkStatus || bulkPriority || bulkAssignee.trim());
   const focusedSchedulerPanel = focused && tab === "scheduler" && schedulerPanel !== "ops";
   const showSchedulerPlanning = tab === "scheduler" && (!focusedSchedulerPanel || schedulerPanel === "insights");
   const schedulerLayoutClass = showSchedulerPlanning ? "grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]" : "space-y-4";
@@ -746,8 +843,13 @@ function ProjectTasks({
     return <div className="task-focused-detail space-y-4"><Space wrap>{returnTo && <Button href={returnTo}>{t("deliveryTaskAcceptance.back")}</Button>}<Button href="#/tasks/execution">{t("deliveryTaskAcceptance.allTasks")}</Button></Space><Card title={t("deliveryTaskAcceptance.details")}><DeliveryTaskDetail key={`${getProjectId()}:${getSessionRevision()}:${linkedTaskId}`} projectId={getProjectId()!} sessionId={getSessionRevision() || ""} taskId={linkedTaskId} /></Card></div>;
   }
   const taskBackground = () => {
-    const params = new URLSearchParams(); if (taskQuery) params.set("q", taskQuery); if (statusFilter) params.set("status", statusFilter); if (priorityFilter) params.set("priority", priorityFilter); if (sourceFilter) params.set("source", sourceFilter);
-    return preserveProjectContext(`#/tasks/execution${params.size ? `?${params}` : ""}`, window.location.hash);
+    const params = new URLSearchParams(window.location.hash.split("?")[1]);
+    params.delete("task_id");
+    for (const [key, value] of Object.entries({ q: taskQuery, status: statusFilter, priority: priorityFilter, source: sourceFilter })) {
+      if (value) params.set(key, value); else params.delete(key);
+    }
+    const path = tab === "board" ? "#/tasks/board" : "#/tasks/execution";
+    return `${path}${params.size ? `?${params}` : ""}`;
   };
   const tabs: { key: Tab; label: string }[] = [
     { key: "list", label: t("page.tasks.tabList") },
@@ -779,8 +881,9 @@ function ProjectTasks({
           size="small"
           className="w-32"
           value={value || "pending"}
-          disabled={busy}
-          onChange={(status) => patchTask.mutate({ id: task.id, patch: { status } })}
+          disabled={busy || taskEditLocked(task.id)}
+          aria-label={`${task.title}: ${t("page.tasks.statusLabel")}`}
+          onChange={(status) => changeTask(task.id, { status })}
           options={STATUSES.map((status) => ({ value: status, label: taskRecordStatusLabel(status, t) }))}
         />
       ),
@@ -794,8 +897,9 @@ function ProjectTasks({
           size="small"
           className="w-20"
           value={includesPriority(value) ? value : "P3"}
-          disabled={busy}
-          onChange={(priority) => patchTask.mutate({ id: task.id, patch: { priority } })}
+          disabled={busy || taskEditLocked(task.id)}
+          aria-label={`${task.title}: ${t("page.tasks.priority")}`}
+          onChange={(priority) => changeTask(task.id, { priority })}
           options={PRIORITIES.map((priority) => ({ value: priority, label: priority }))}
         />
       ),
@@ -827,9 +931,9 @@ function ProjectTasks({
           title={t("page.tasks.confirmDelete", { name: task.title })}
           okText={t("common.delete")}
           cancelText={t("common.cancel")}
-          onConfirm={() => deleteTaskMut.mutate(task.id)}
+          onConfirm={() => { if (!taskEditLocked(task.id)) deleteTaskMut.mutate(task.id); }}
         >
-          <Button size="small" danger disabled={busy}>{t("page.tasks.delete")}</Button>
+          <Button size="small" danger disabled={busy || taskEditLocked(task.id)}>{t("page.tasks.delete")}</Button>
         </Popconfirm>
       ),
     },
@@ -872,6 +976,32 @@ function ProjectTasks({
         }}
       />
 
+      {Object.values(inlineFeedback).filter((feedback) => feedback.attempt.origin === origin).map((feedback) => (
+        <div key={feedback.attempt.id} data-task-edit={feedback.attempt.id} role={feedback.phase === "saving" ? "status" : "alert"} aria-live="polite">
+          <Alert
+            showIcon
+            closable={feedback.phase === "rejected"}
+            onClose={() => {
+              if (feedback.phase !== "rejected" || inlineAttempts.get(feedback.attempt.id) !== feedback.attempt) return;
+              setInlineFeedback((previous) => { const next = { ...previous }; delete next[feedback.attempt.id]; return next; });
+            }}
+            type={feedback.phase === "saving" ? "info" : feedback.phase === "rejected" ? "error" : "warning"}
+            message={`${feedback.phase === "saving" ? editCopy.saving : feedback.phase === "rejected" ? editCopy.rejected : editCopy.unknown}: ${feedback.attempt.title}`}
+            description={<div className="space-y-2 break-words">
+              <p className="font-mono text-xs">{feedback.attempt.id} · {Object.entries(feedback.attempt.patch).map(([key, value]) => key === "status" ? taskRecordStatusLabel(String(value), t) : String(value)).join(" · ")}</p>
+              {feedback.message ? <p>{feedback.message}</p> : null}
+              {feedback.phase !== "saving" ? <p>{feedback.phase === "rejected" ? editCopy.refusalHelp : editCopy.unknownHelp}</p> : null}
+              {feedback.observed ? <p>{editCopy.current}: {taskRecordStatusLabel(feedback.observed.status, t)} · {feedback.observed.priority}</p> : null}
+              {feedback.readError ? <p>{editCopy.readError}: {feedback.readError}</p> : null}
+            </div>}
+            action={feedback.phase !== "saving" ? <Space wrap>
+              <Button size="small" loading={feedback.phase === "checking"} disabled={feedback.phase === "checking"} onClick={() => readCurrentTask(feedback)}>{editCopy.refresh}</Button>
+              <Button size="small" href={manualTaskHref({ id: feedback.attempt.id }, taskBackground())}>{editCopy.details}</Button>
+            </Space> : undefined}
+          />
+        </div>
+      ))}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         {!focused ? (
           <Segmented
@@ -900,13 +1030,13 @@ function ProjectTasks({
             className="min-w-0 w-full flex-1 sm:min-w-[20rem]"
             allowClear
             value={taskQuery}
-            onChange={(e) => setTaskQuery(e.target.value)}
+            onChange={(e) => updateTaskQuery(e.target.value)}
             placeholder={t("page.tasks.searchPh")}
           />
           <Select
             className="min-w-40"
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={updateStatusFilter}
             options={[
               { value: "", label: t("page.tasks.allStatuses") },
               ...STATUSES.map((status) => ({ value: status, label: taskRecordStatusLabel(status, t) })),
@@ -915,13 +1045,13 @@ function ProjectTasks({
           <Select
             className="min-w-36"
             value={priorityFilter}
-            onChange={setPriorityFilter}
+            onChange={updatePriorityFilter}
             options={[{ value: "", label: t("page.tasks.allPriorities") }, ...PRIORITIES.map((priority) => ({ value: priority, label: priority }))]}
           />
           <Select
             className="min-w-48"
             value={sourceFilter}
-            onChange={setSourceFilter}
+            onChange={updateSourceFilter}
             options={[
               { value: "", label: t("page.tasks.allSources") },
               { value: "manual", label: t("page.tasks.sourceManual") },
@@ -933,10 +1063,10 @@ function ProjectTasks({
           />
           <Button
             onClick={() => {
-              setTaskQuery("");
-              setStatusFilter("");
-              setPriorityFilter("");
-              setSourceFilter("");
+              updateTaskQuery("");
+              updateStatusFilter("");
+              updatePriorityFilter("");
+              updateSourceFilter("");
             }}
           >
             {t("page.tasks.clearFilters")}
@@ -954,7 +1084,7 @@ function ProjectTasks({
           </div>
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3">
             <div className="flex flex-wrap gap-2">
-              <Button size="small" onClick={() => setSourceFilter("interaction_ops")}>
+              <Button size="small" onClick={() => updateSourceFilter("interaction_ops")}>
                 {t("page.tasks.filterInteractionOps")}
               </Button>
               <Button size="small" href="#/system-map/productization">
@@ -1156,7 +1286,7 @@ function ProjectTasks({
               type="primary"
               disabled={!canBulkUpdate}
               loading={bulkUpdateMut.isPending}
-              onClick={() => bulkUpdateMut.mutate()}
+              onClick={() => { if (!selectedTaskIds.some(taskEditLocked)) bulkUpdateMut.mutate(); }}
             >
               {t("page.tasks.bulkApply")}
             </Button>
@@ -1872,9 +2002,9 @@ function ProjectTasks({
                       detailHref={manualTaskHref(task, taskBackground())}
                       key={task.id}
                       task={task}
-                      busy={busy}
+                      busy={busy || taskEditLocked(task.id)}
                       draggable
-                      onStatus={(id, status) => patchTask.mutate({ id, patch: { status } })}
+                      onStatus={(id, status) => changeTask(id, { status })}
                     />
                   ))
                 )}
@@ -1907,8 +2037,9 @@ function ProjectTasks({
                   priorityGroups[pr].map((task) => (
                     <li
                       key={task.id}
-                      draggable={!busy}
+                      draggable={!busy && !hasInlineTaskLock}
                       onDragStart={(e) => {
+                        if (busy || [...inlineLocks.values()].includes(origin)) { e.preventDefault(); return; }
                         e.dataTransfer.setData("text/task-id", task.id);
                         e.dataTransfer.effectAllowed = "move";
                       }}

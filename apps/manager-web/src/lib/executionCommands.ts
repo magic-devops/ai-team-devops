@@ -69,8 +69,10 @@ export function commandNodes(
   });
 }
 export function safeExecutionReturn(value: string, depth = 0): string | null {
+  const unsafeCharacters = (target: string) => /[\u0000-\u001f\u007f]/.test(target) || /%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(target) || target.indexOf("#", 1) >= 0;
   if (
-    !/^#\/(dev-flow|tasks\/execution)(?:\?|$)/.test(value) ||
+    !/^#\/(dev-flow|tasks\/(?:execution|board))(?:\?|$)/.test(value) ||
+    unsafeCharacters(value) ||
     value.length > 4000 ||
     depth > 2
   )
@@ -78,8 +80,8 @@ export function safeExecutionReturn(value: string, depth = 0): string | null {
   const params = new URLSearchParams(value.split("?")[1]);
   const parent = params.get("return_to");
   return parent !== null &&
-    !safeExecutionReturn(parent, depth + 1) &&
-    !safePortfolioReturn(parent)
+    (unsafeCharacters(parent) ||
+      (!safeExecutionReturn(parent, depth + 1) && !safePortfolioReturn(parent)))
     ? null
     : value;
 }

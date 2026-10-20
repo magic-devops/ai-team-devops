@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { getProjectId, getToken } from "../lib/authStorage";
+import { NeedLogin } from "./PageStates";
 import { enterPortfolioProject, fetchProjectPortfolioDetail, projectSessionKey } from "../lib/projectPortfolio";
 import { portfolioHash, portfolioReturnFromHash, routeProjectId } from "../lib/projectPortfolioRoute";
 import "../../subapps/main-admin/src/pages/projects/project-portfolio.css";
@@ -11,7 +12,17 @@ const subscribe = (callback: () => void) => {
   return () => { for (const event of ["hashchange", "popstate", "sop-session", "storage"]) window.removeEventListener(event, callback); };
 };
 const snapshot = () => JSON.stringify([window.location.hash, projectSessionKey()]);
-export function ProjectContextGate({ children }: { children: ReactNode }) {
+export function ProjectScopeNotice({ message, onRetry }: { message?: string; onRetry?: () => void }) {
+  const { t } = useTranslation();
+  return <section className="project-context-gate space-y-3" aria-live="polite">
+    <Alert type={message ? "error" : "info"} showIcon title={message || t("projectPortfolio.chooseProject")} />
+    <div className="flex flex-wrap gap-2">
+      <Button type="primary" href={portfolioHash()}>{t("projectPortfolio.back")}</Button>
+      {onRetry && <Button onClick={onRetry}>{t("common.refresh")}</Button>}
+    </div>
+  </section>;
+}
+export function ProjectContextGate({ children, requireSelection = false }: { children: ReactNode; requireSelection?: boolean }) {
   useSyncExternalStore(subscribe, snapshot, snapshot);
   const { t } = useTranslation();
   const tr = (key: string) => t(`projectPortfolio.${key}`);
@@ -19,6 +30,7 @@ export function ProjectContextGate({ children }: { children: ReactNode }) {
   const mismatch = Boolean(requestedId && requestedId !== getProjectId());
   const back = portfolioReturnFromHash(window.location.hash);
   const query = useQuery({ queryKey: ["projectContext", projectSessionKey(), requestedId], queryFn: ({ signal }) => fetchProjectPortfolioDetail(requestedId, signal), enabled: Boolean(mismatch && getToken()) });
+  if (requireSelection && !getToken()) return <NeedLogin />;
   if (mismatch) return <section className="project-context-gate">
     <h2>{tr("contextTitle")}</h2><p>{tr("contextHint")}</p><span className="project-portfolio-id">{requestedId}</span>
     {query.isLoading && <Skeleton active />}
@@ -26,5 +38,6 @@ export function ProjectContextGate({ children }: { children: ReactNode }) {
     {query.data && query.data.project.id === requestedId && <><strong>{query.data.project.name}</strong><Tag>{tr(query.data.project.status)}</Tag><Button type="primary" disabled={!query.data.project.permissions.can_enter || query.isError} onClick={() => { enterPortfolioProject(query.data!.project); }}>{tr("enter")}</Button></>}
     <Button href={back || portfolioHash()}>{tr("back")}</Button>
   </section>;
+  if (requireSelection && !getProjectId()) return <ProjectScopeNotice />;
   return <>{back && <div className="mb-3"><Button href={back}>{tr("back")}</Button></div>}{children}</>;
 }

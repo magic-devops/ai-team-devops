@@ -104,6 +104,30 @@ export function bindSessionRequest(expected: { projectId: string; revision: stri
   };
 }
 
+export function bindSessionDownload(expected: { projectId: string; revision: string }) {
+  const context = sessionContext();
+  return async (path: string, init?: RequestInit): Promise<Blob> => {
+    if (!context.token || !context.scope.projectId) throw new Error("请先登录并选择项目");
+    if (context.scope.projectId !== expected.projectId || context.revision !== expected.revision) {
+      throw new Error("账号或项目已切换，请在当前工作区重新操作");
+    }
+    assertCurrent(context);
+    if (!path.startsWith("/api/v1/")) throw new Error("项目下载必须使用已认证的业务接口");
+    const headers = new Headers(init?.headers);
+    for (const [name, value] of Object.entries(authHeaders(context))) headers.set(name, value);
+    const response = await fetch(API_BASE + path, { ...init, method: "GET", headers });
+    assertCurrent(context);
+    if (!response.ok) {
+      const message = await response.text().catch(() => response.statusText);
+      assertCurrent(context);
+      throw new Error(`HTTP ${response.status}: ${message}`);
+    }
+    const blob = await response.blob();
+    assertCurrent(context);
+    return blob;
+  };
+}
+
 async function requestInSession<T>(path: string, init: RequestInit | undefined, context: SessionContext): Promise<T> {
   if (!path.startsWith("/api/v1/auth/") && context.token && !context.scope.projectId) {
     context = await hydrateSessionScope(context);
@@ -119,6 +143,7 @@ async function requestInSession<T>(path: string, init: RequestInit | undefined, 
     ...init,
     headers,
   });
+  assertCurrent(context);
   if (!r.ok) {
     const txt = await r.text().catch(() => r.statusText);
     assertCurrent(context);

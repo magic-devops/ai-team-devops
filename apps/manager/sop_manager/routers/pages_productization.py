@@ -7,12 +7,14 @@ from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root
 from sop_manager.routers.productization_contract import now_iso, summarize_items, trace_id, unified_payload
 from sop_manager.routers.scope_guard import current_scope
+from sop_manager.routers.business_access import read_business_access
 from sop_manager.routers.tasks import TaskCreate, create_task, list_tasks
 
 router = APIRouter(prefix="/api/v1/pages", tags=["pages-productization"])
@@ -302,6 +304,8 @@ def _severity_from_status(status: str) -> str:
 def _interaction_ops_dependency(name: str, loader: Any, fallback: dict[str, Any]) -> dict[str, Any]:
     try:
         data = loader()
+    except (HTTPException, SQLAlchemyError):
+        raise
     except Exception as exc:
         degraded = dict(fallback)
         degraded["summary"] = {
@@ -738,7 +742,7 @@ def pages_interaction_tasks(body: InteractionTaskIn) -> dict[str, Any]:
     )
 
 
-@router.get("/interaction-ops")
+@router.get("/interaction-ops", dependencies=[Depends(read_business_access)])
 def pages_interaction_ops(domain: str = "all", q: str = "", status: str = "watch", limit: int = 80) -> dict[str, Any]:
     return _interaction_ops_payload(domain=domain, q=q, status=status, limit=limit)
 

@@ -182,6 +182,27 @@ describe("HTTP session consistency", () => {
     expect(await result).toBeInstanceOf(Error);
   });
 
+  it("does not consume JSON or error response bodies when the original session changed before fetch resolved", async () => {
+    const success = deferred<Response>();
+    const denied = deferred<Response>();
+    fetcher.mockReturnValueOnce(success.promise).mockReturnValueOnce(denied.promise);
+    const { request } = await import("./http");
+    const results = [
+      request("/api/v1/dashboard/summary").catch((error: Error) => error),
+      request("/api/v1/data-exchange/jobs").catch((error: Error) => error),
+    ];
+    const responses = [reply({ project_id: "project-a", private_count: 17 }), reply({ detail: "private-project-a-denial" }, 403)];
+    const bodyReads = responses.flatMap((response) => [
+      vi.spyOn(response, "json"), vi.spyOn(response, "text"), vi.spyOn(response, "blob"),
+    ]);
+    setSession("session-b", "project-b", "tenant-b");
+    success.resolve(responses[0]); denied.resolve(responses[1]);
+    for (const result of await Promise.all(results)) expect(result).toBeInstanceOf(Error);
+    for (const read of bodyReads) expect(read).not.toHaveBeenCalled();
+    expect(getToken()).toBe("session-b");
+    expect(getWorkspaceScope().projectId).toBe("project-b");
+  });
+
   it("does not reuse a pending response after logging back into the same account", async () => {
     const probe = deferred<Response>();
     fetcher.mockReturnValueOnce(probe.promise);

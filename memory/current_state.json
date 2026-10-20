@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-19T09:45:36.282060+00:00",
+  "updated_at": "2026-10-20T11:46:27.689124+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-19T09:45:36.282060+00:00",
-    "status": "bounded_requirements_verified",
+    "updated_at": "2026-10-20T11:46:27.689124+00:00",
+    "status": "interaction_source_stage_runtime_pending",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,11 +15,11 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/bounded-requirements/",
-    "verification_status": "passed_with_documented_limits",
-    "next_step": "canonical_reflection_intake_traceable_original_fixed_selection_then_remaining_gaps",
+    "evidence": ".sop-runtime/delivery-evidence/interaction-usability/",
+    "verification_status": "current_scope_and_interaction_runtime_unverified",
+    "next_step": "project_lifecycle_unknown_result_ux_then_fresh_source_pinned_runtime_window",
     "production_integration_complete": false,
-    "commit_after_verified_stage": true,
+    "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
     "verification": {
       "task_id": "T-bounded-requirements",
@@ -189,7 +189,9 @@
       "dynamic_verification": false,
       "next_slice": "canonical_reflection_intake_traceable_original_fixed_selection",
       "goal_complete": false
-    }
+    },
+    "runtime_verification_deferred_by_user": true,
+    "interaction_design": "docs/INTERACTION_USABILITY.md"
   },
   "tasks": {
     "completed": [
@@ -644,5 +646,18 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-bounded-requirements已验证：需求小头/精确定义、独立历史与记录/影响页、完整canonical变更证明、统一持久原请求恢复。Manager首次全量1774通过/3旧断言迁移后8项定向通过，Web939/SDKCLI1258与真实HTTP/36表GET零写通过；下一阶段继续generic/reflection真实业务闭环，整体goal active。提交及清理以阶段receipt为准。"
+  "current": "T-interaction-usability源码阶段：统一需求正式拆解与返回、需求/搜索读取恢复、任务快捷反馈和看板筛选、计划未知回执原件锁；包含项目范围源码修复。用户要求运行测试后置，本阶段无运行GREEN；独立静态审查与源码摘要已留档。整体全流程目标保持active。",
+  "interaction_usability": {
+    "task_id": "T-interaction-usability",
+    "updated_at": "2026-10-20T11:46:27.689124+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/INTERACTION_USABILITY.md",
+    "record": "memory/interaction-usability-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/interaction-usability/",
+    "runtime_tests_executed_this_stage": false,
+    "typecheck_build_browser_executed_this_stage": false,
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "next_step": "project_lifecycle_unknown_result_ux_then_fresh_source_pinned_runtime_window",
+    "full_lifecycle_complete": false
+  }
 }

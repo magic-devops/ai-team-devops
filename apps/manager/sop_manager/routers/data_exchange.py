@@ -1,4 +1,4 @@
-"""项目数据导出 / 导入（与 db_sql_compat 同一租户与 PROJECT_ID 上下文）"""
+"""Project data exchange within an explicitly authorized request scope."""
 from __future__ import annotations
 
 import json
@@ -10,15 +10,23 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import JSON, Integer, Float
+from sqlalchemy import JSON, Float, Integer
 from sqlalchemy.orm import Session
 
-from sop_manager.path_config import resolved_project_id, resolved_runtime_dir, resolved_tenant_id
-from sop_manager.task_owner import validate_task_owner_values
+from sop_manager.path_config import (
+    resolved_ai_memory_root,
+    resolved_project_id,
+    resolved_runtime_dir,
+    resolved_tenant_id,
+)
+from sop_manager.project_write_guard import project_file_write_scope, require_project_operation
 from sop_manager.task_acceptance import normalize_task_acceptance
-from .auth_sql import User, current_user, require_data_hub_import
+from sop_manager.task_owner import validate_task_owner_values
+
+from .auth_sql import User, require_data_hub_import
+from .business_access import read_business_access, require_business_access
 from .db_sql_compat import rows
-from .sql_models import get_session, Requirement, Task, Sprint, Issue
+from .sql_models import Issue, Requirement, Sprint, Task, get_session
 
 router = APIRouter(prefix="/api/v1/data-exchange", tags=["data-exchange"])
 
@@ -36,9 +44,7 @@ def _utc_now() -> str:
 
 
 def _jobs_file() -> Path:
-    p = resolved_runtime_dir() / "data-exchange" / "jobs.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    return resolved_runtime_dir() / "data-exchange" / "jobs.jsonl"
 
 
 def _read_jobs(limit: int = 50) -> list[dict[str, Any]]:
@@ -60,15 +66,18 @@ def _read_jobs(limit: int = 50) -> list[dict[str, Any]]:
 
 
 def _append_job(job: dict[str, Any]) -> dict[str, Any]:
-    path = _jobs_file()
     record = {
         "id": job.get("id") or f"dx-{uuid4().hex[:12]}",
+        **job,
         "tenant_id": resolved_tenant_id(),
         "project_id": resolved_project_id(),
         "created_at": _utc_now(),
-        **job,
     }
-    path.open("a", encoding="utf-8").write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+    with project_file_write_scope():
+        path = _jobs_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     return record
 
 
@@ -96,21 +105,35 @@ def _parse_modules_param(modules: Optional[str]) -> List[str]:
     return sorted(pick, key=lambda n: (0 if n in _SQL_TABLES else 1, n))
 
 
-def _module_counts() -> dict[str, int]:
-    out: dict[str, int] = {}
-    for name in _SQL_TABLES:
-        out[name] = len(rows(name, 1000))
+def _reflection_rows() -> list[dict[str, Any]]:
+    # Connecting an absent optional LanceDB store would create it on a GET.
+    db_dir = resolved_ai_memory_root() / "lancedb"
+    if not (db_dir / "agent_reflections.lance").exists():
+        return []
     try:
-        from sop_manager.routers.db import rows as lance_rows
+        import lancedb
 
-        out["agent_reflections"] = len(lance_rows("agent_reflections", 1000))
-    except Exception:
-        out["agent_reflections"] = 0
+        from .db import _json_safe_value
+
+        # Use a local connection: the legacy shared db.rows helper switches a
+        # process-global connection and hides configured-source read failures.
+        source = lancedb.connect(str(db_dir)).open_table("agent_reflections")
+        raw = source.to_pandas().head(1000).to_dict("records")
+        return [{key: _json_safe_value(value) for key, value in row.items()} for row in raw]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, "Agent reflection data is temporarily unavailable") from exc
+
+
+def _module_counts() -> dict[str, int]:
+    out = {name: len(rows(name, 1000)) for name in _SQL_TABLES}
+    out["agent_reflections"] = len(_reflection_rows())
     return out
 
 
 @router.get("/summary")
-def data_exchange_summary():
+def data_exchange_summary(_: User = Depends(read_business_access)):
     counts = _module_counts()
     modules = [
         {"name": "requirements", "label": "需求", "count": counts.get("requirements", 0), "kind": "sql"},
@@ -130,7 +153,7 @@ def data_exchange_summary():
 
 
 @router.get("/charts")
-def data_exchange_charts(_: User = Depends(current_user)) -> dict[str, Any]:
+def data_exchange_charts(_: User = Depends(read_business_access)) -> dict[str, Any]:
     counts = _module_counts()
     modules = [
         {"name": "requirements", "label": "需求", "count": counts.get("requirements", 0)},
@@ -155,18 +178,14 @@ def export_data(
         None,
         description="逗号分隔：requirements,tasks,issues,sprints,agent_reflections；空则全部",
     ),
+    _: User = Depends(read_business_access),
 ):
-    """匿名可下载（与历史行为一致）；导入写操作需登录。"""
+    """Download only the authenticated user's explicitly selected project."""
     names = _parse_modules_param(modules)
     data: Dict[str, Any] = {}
     for name in names:
         if name == "agent_reflections":
-            try:
-                from sop_manager.routers.db import rows as lance_rows
-
-                data["agent_reflections"] = lance_rows("agent_reflections", 1000)
-            except Exception:
-                data["agent_reflections"] = []
+            data["agent_reflections"] = _reflection_rows()
             continue
         raw = rows(name, 1000)
         if name == "tasks":
@@ -306,8 +325,7 @@ class ExportJobBody(BaseModel):
     modules: Optional[List[str]] = None
 
 
-@router.post("/preview")
-def preview_import(body: ImportBody, _: User = Depends(current_user)):
+def _preview_import(body: ImportBody):
     if body.mode not in ("merge",):
         raise HTTPException(400, "mode 仅支持 merge")
     out: dict[str, Any] = {"ok": True, "mode": body.mode, "modules": {}, "total": 0, "warnings": []}
@@ -334,8 +352,13 @@ def preview_import(body: ImportBody, _: User = Depends(current_user)):
     return out
 
 
+@router.post("/preview")
+def preview_import(body: ImportBody, _: User = Depends(read_business_access)):
+    return _preview_import(body)
+
+
 @router.get("/jobs")
-def data_exchange_jobs(limit: int = Query(30, ge=1, le=200), _: User = Depends(current_user)):
+def data_exchange_jobs(limit: int = Query(30, ge=1, le=200), _: User = Depends(read_business_access)):
     items = _read_jobs(limit)
     status_counts: dict[str, int] = {}
     for item in items:
@@ -345,7 +368,7 @@ def data_exchange_jobs(limit: int = Query(30, ge=1, le=200), _: User = Depends(c
 
 
 @router.post("/export-job")
-def create_export_job(body: ExportJobBody, user: User = Depends(current_user)):
+def create_export_job(body: ExportJobBody, user: User = Depends(require_business_access)):
     modules = _parse_modules_param(",".join(body.modules or []))
     counts = _module_counts()
     selected_counts = {name: counts.get(name, 0) for name in modules}
@@ -367,17 +390,19 @@ def create_export_job(body: ExportJobBody, user: User = Depends(current_user)):
 @router.post("/import")
 def import_data(
     body: ImportBody,
-    user: User = Depends(require_data_hub_import),
+    user: User = Depends(require_business_access),
     db: Session = Depends(get_session),
 ):
+    require_data_hub_import(user)
     if body.mode not in ("merge",):
         raise HTTPException(400, "mode 仅支持 merge")
-    tid = user.tenant_id
+    tid = resolved_tenant_id()
     pid = resolved_project_id()
     counts: Dict[str, int] = {}
-    preview = preview_import(body, user)
+    preview = _preview_import(body)
     order = ("sprints", "requirements", "tasks", "issues")
     try:
+        require_project_operation(db, tid, pid)
         for name in order:
             items = getattr(body, name, None)
             if not items:

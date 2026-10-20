@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root
 from .auth_sql import USER_ROLES, User, current_user
+from .business_access import read_business_access
 from .tasks import TaskBulkUpdate, TaskCreate, bulk_update_tasks, create_task, list_tasks
 
 router = APIRouter(prefix="/api/v1/system/pages", tags=["system-pages"])
@@ -1722,10 +1723,7 @@ def _existing_isolation_scan_compare_task_ids() -> set[str]:
 
 
 def _list_tasks_safe(**filters: Any) -> list[dict[str, Any]]:
-    try:
-        raw = list_tasks(**filters) if filters else list_tasks()
-    except Exception:
-        return []
+    raw = list_tasks(**filters) if filters else list_tasks()
     return [item for item in raw if isinstance(item, dict)]
 
 
@@ -5170,7 +5168,7 @@ def system_page_readiness_tasks(body: ReadinessTaskIn) -> dict[str, Any]:
     }
 
 
-@router.get("/governance-tasks")
+@router.get("/governance-tasks", dependencies=[Depends(read_business_access)])
 def system_pages_governance_tasks(
     status: str = "all",
     source: str = "all",

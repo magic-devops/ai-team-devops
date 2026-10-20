@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Checkbox, Input as AntInput, Select, Space, Statistic, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { BrainCircuit, ListTodo, Pencil, Plus, Save, Trash2, Wand2, X } from "lucide-react";
+import { BrainCircuit, Pencil, Plus, Save, Trash2, Wand2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,6 +16,8 @@ import {
 } from "@/components/PageStates";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { api } from "@/lib/api";
+import { ProjectScopeNotice } from "@/components/ProjectContextGate";
+import { projectSessionKey } from "@/lib/projectPortfolio";
 import { getProjectId, getToken } from "@/lib/authStorage";
 import { RequirementIntake } from "./product/RequirementIntake";
 import { RequirementAssistance } from "./product/RequirementAssistance";
@@ -23,7 +25,7 @@ import { ProductRequirementsShell } from "./product/ProductRequirementsShell";
 import { parseRequirementsHash } from "./product/requirementsNav";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "@/pages/shared/workbenchUi";
-import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { requirementListFilters, requirementPlanningHref } from "@/lib/requirementPlanning";
 
 const STATUS_ALL = "__all__";
 const PRIORITY_ALL = "__all__";
@@ -62,37 +64,6 @@ type Draft = {
   human_notes: string;
 };
 
-type TaskGenDraft = {
-  mode: string;
-  max_tasks: number;
-  owner_id: string;
-  dev_tool: string;
-  create_dependencies: boolean;
-};
-
-type TaskPlanItem = {
-  id?: string;
-  title?: string;
-  description?: string;
-  priority?: string;
-  estimate?: string;
-  owner_id?: string;
-  assigned_to?: string;
-  work_type?: string;
-  agent_hint?: string;
-  tool_hint?: string;
-  reason?: string;
-};
-
-type TaskPlanResult = {
-  ok?: boolean;
-  dry_run?: boolean;
-  mode?: string;
-  items?: TaskPlanItem[];
-  skipped?: TaskPlanItem[];
-  count?: number;
-};
-
 const emptyDraft: Draft = {
   title: "",
   description: "",
@@ -104,16 +75,6 @@ const emptyDraft: Draft = {
   dev_tool: "",
   human_notes: "",
 };
-
-function defaultTaskGenDraft(row: RequirementRow): TaskGenDraft {
-  return {
-    mode: "standard",
-    max_tasks: 6,
-    owner_id: "",
-    dev_tool: row.dev_tool || "",
-    create_dependencies: true,
-  };
-}
 
 function toLines(value?: string[] | string): string {
   if (Array.isArray(value)) return value.join("\n");
@@ -187,7 +148,13 @@ export function Requirements({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
-  const hasProject = Boolean(getProjectId());
+  const projectId = getProjectId() || "";
+  const hasProject = Boolean(projectId);
+  const origin = projectSessionKey();
+  const readInScope = <T,>(read: () => Promise<T>) => {
+    if (origin !== projectSessionKey()) throw new Error("账号或项目已切换，请在当前工作区重新操作");
+    return read();
+  };
   const [mode, setMode] = useState<RequirementMode>(initialMode);
   const [routeFocused, setRouteFocused] = useState(focused);
 
@@ -206,22 +173,14 @@ export function Requirements({
   useEffect(() => {
     applyRoute({ mode: initialMode, focused });
   }, [initialMode, focused]);
-  const [keyword, setKeyword] = useState("");
-  const [status, setStatus] = useState(STATUS_ALL);
-  const [priority, setPriority] = useState(PRIORITY_ALL);
+  const [keyword, setKeyword] = useState(() => requirementListFilters(window.location.hash).keyword);
+  const [status, setStatus] = useState(() => requirementListFilters(window.location.hash).status);
+  const [priority, setPriority] = useState(() => requirementListFilters(window.location.hash).priority);
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [editingId, setEditingId] = useState("");
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
   const [taskPlanReqId, setTaskPlanReqId] = useState("");
-  const [taskPlanDraft, setTaskPlanDraft] = useState<TaskGenDraft>({
-    mode: "standard",
-    max_tasks: 6,
-    owner_id: "",
-    dev_tool: "",
-    create_dependencies: true,
-  });
-  const [taskPlanResult, setTaskPlanResult] = useState<TaskPlanResult | null>(null);
   const [reviewReqId, setReviewReqId] = useState("");
   const [selectedReqIds, setSelectedReqIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState("");
@@ -233,46 +192,38 @@ export function Requirements({
   const [opsTaskResult, setOpsTaskResult] = useState<any>(null);
 
   const q = useQuery({
-    queryKey: ["requirements", keyword, status, priority],
-    queryFn: () =>
+    queryKey: ["requirements", keyword, status, priority, origin],
+    queryFn: () => readInScope(() =>
       api.requirements({
         q: keyword.trim(),
         status: status === STATUS_ALL ? "" : status,
         priority: priority === PRIORITY_ALL ? "" : priority,
-      }),
+      })),
     enabled: authed && hasProject,
   });
   const summaryQ = useQuery({
-    queryKey: ["requirementsSummary"],
-    queryFn: api.requirementsSummary,
+    queryKey: ["requirementsSummary", origin],
+    queryFn: () => readInScope(api.requirementsSummary),
     enabled: authed && hasProject,
   });
   const opsPlanQ = useQuery({
-    queryKey: ["requirementOpsPlan"],
-    queryFn: api.requirementOpsPlan,
+    queryKey: ["requirementOpsPlan", origin],
+    queryFn: () => readInScope(api.requirementOpsPlan),
     enabled: authed && hasProject,
   });
 
-  const requirements = (q.data ?? []) as RequirementRow[];
+  const listReady = !q.error && Array.isArray(q.data);
+  const summaryReady = !summaryQ.error && Boolean(summaryQ.data?.summary);
+  const opsReady = !opsPlanQ.error && Boolean(opsPlanQ.data?.health);
+  const requirements = (listReady ? q.data : []) as RequirementRow[];
   const metrics = useMemo(() => {
-    const summary = summaryQ.data?.summary;
-    if (summary) {
-      return {
-        total: summary.total ?? 0,
-        byStatus: new Map<string, number>(Object.entries(summary.by_status ?? {}).map(([k, v]) => [k, Number(v)])),
-        byPriority: new Map<string, number>(Object.entries(summary.by_priority ?? {}).map(([k, v]) => [k, Number(v)])),
-      };
-    }
-    const byStatus = new Map<string, number>();
-    const byPriority = new Map<string, number>();
-    for (const row of requirements) {
-      const st = row.status || "pending";
-      const pr = row.priority || "P?";
-      byStatus.set(st, (byStatus.get(st) ?? 0) + 1);
-      byPriority.set(pr, (byPriority.get(pr) ?? 0) + 1);
-    }
-    return { total: requirements.length, byStatus, byPriority };
-  }, [requirements, summaryQ.data]);
+    const summary = summaryReady ? summaryQ.data.summary : {};
+    return {
+      total: Number(summary.total ?? 0),
+      byStatus: new Map<string, number>(Object.entries(summary.by_status ?? {}).map(([k, v]) => [k, Number(v)])),
+      byPriority: new Map<string, number>(Object.entries(summary.by_priority ?? {}).map(([k, v]) => [k, Number(v)])),
+    };
+  }, [summaryReady, summaryQ.data]);
 
   const statuses = useMemo(() => {
     const set = new Set<string>(STATUSES);
@@ -346,26 +297,6 @@ export function Requirements({
     },
   });
 
-  const generateTasks = useMutation({
-    mutationFn: ({ id, dryRun }: { id: string; dryRun: boolean }) =>
-      api.generateRequirementTasks(id, {
-        dry_run: dryRun,
-        mode: taskPlanDraft.mode,
-        max_tasks: taskPlanDraft.max_tasks,
-        owner_id: taskPlanDraft.owner_id,
-        dev_tool: taskPlanDraft.dev_tool,
-        create_dependencies: taskPlanDraft.create_dependencies,
-      }),
-    onSuccess: (data, vars) => {
-      setTaskPlanReqId(vars.id);
-      setTaskPlanResult(data as TaskPlanResult);
-      if (!vars.dryRun) {
-        void qc.invalidateQueries({ queryKey: ["tasks"] });
-        void qc.invalidateQueries({ queryKey: ["task-dependencies"] });
-      }
-    },
-  });
-
   const opsTasksMut = useMutation({
     mutationFn: (dryRun: boolean) =>
       api.requirementOpsTasks({ dry_run: dryRun, priority: "P1", limit: 20 }),
@@ -378,11 +309,11 @@ export function Requirements({
     },
   });
 
-  const busy = createReq.isPending || updateReq.isPending || deleteReq.isPending || generateTasks.isPending || bulkUpdateReq.isPending || opsTasksMut.isPending;
+  const busy = createReq.isPending || updateReq.isPending || deleteReq.isPending || bulkUpdateReq.isPending || opsTasksMut.isPending;
   const selectedReqSet = useMemo(() => new Set(selectedReqIds), [selectedReqIds]);
   const canBulkUpdate = selectedReqIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAgent.trim() || bulkTool.trim());
 
-  const hubSummary = summaryQ.data?.summary ?? {};
+  const hubSummary = summaryReady ? summaryQ.data.summary : {};
   const kitTotal = Number(hubSummary.total ?? metrics.total);
   const kitReady = Number(hubSummary.ready ?? 0);
   const kitCompleted = Number(hubSummary.completed ?? metrics.byStatus.get("completed") ?? 0);
@@ -410,10 +341,16 @@ export function Requirements({
 
   if (!authed) return <NeedLogin />;
   if (!hasProject) {
-    return <p className="text-sm text-amber-700">{t("projectSelector.hint")}</p>;
+    return <ProjectScopeNotice />;
   }
 
-  const aiReq = aiContextReq ?? requirements.find((r) => r.id === reviewReqId) ?? requirements[0] ?? null;
+  const refreshReads = () => { void q.refetch(); void summaryQ.refetch(); void opsPlanQ.refetch(); };
+  const accessError = [q.error, summaryQ.error, opsPlanQ.error].find((error) => error instanceof Error && (
+    /^HTTP (?:401|403|404)(?::|\b)/.test(error.message) || error.message === "账号或项目已切换，请在当前工作区重新操作"
+  ));
+  if (accessError) return <ProjectScopeNotice message={(accessError as Error).message} onRetry={refreshReads} />;
+
+  const aiReq = listReady ? aiContextReq ?? requirements.find((r) => r.id === reviewReqId) ?? requirements[0] ?? null : null;
   const workbenchFocused = routeFocused;
   const opsRiskColumns: ColumnsType<any> = [
     {
@@ -443,24 +380,32 @@ export function Requirements({
   ];
   const showIntakePanel = !workbenchFocused || mode === "pool";
 
+  const readFailure = (label: string, error: unknown, retrying: boolean, retry: () => void) => (
+    <Alert className="mb-3" type="warning" showIcon message={label} description={(error as Error).message}
+      action={<Button size="small" aria-label={`${label}: ${t("common.refresh")}`} loading={retrying} disabled={retrying} onClick={retry}>{t("common.refresh")}</Button>} />
+  );
   const workbenchBody = (
     <>
+      {summaryQ.error ? readFailure(t("page.requirements.total"), summaryQ.error, summaryQ.isFetching, () => { void summaryQ.refetch(); }) : null}
       {showIntakePanel ? <RequirementIntake onImported={refreshRequirements} /> : null}
 
       <Card
         title={t("page.requirements.opsPlan")}
         actions={
           <Space wrap>
-            <Button loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(true)}>
+            <Button disabled={!opsReady} loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(true)}>
               {t("page.requirements.opsPreview")}
             </Button>
-            <Button type="primary" loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(false)}>
+            <Button type="primary" disabled={!opsReady} loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(false)}>
               {t("page.requirements.opsCreate")}
             </Button>
           </Space>
         }
       >
-        <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
+        {opsPlanQ.error ? readFailure(t("page.requirements.opsPlan"), opsPlanQ.error, opsPlanQ.isFetching, () => { void opsPlanQ.refetch(); }) : null}
+        {!opsReady && !opsPlanQ.error ? <LoadingBlock /> : null}
+        {opsTasksMut.error ? <ErrorBlock message={(opsTasksMut.error as Error).message} /> : null}
+        {opsReady ? <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
           <div className="rounded-md border border-[var(--border)] bg-[var(--panel-muted)] p-4">
             <Statistic
               title={t("page.requirements.opsHealth")}
@@ -507,10 +452,10 @@ export function Requirements({
               locale={{ emptyText: t("page.requirements.opsNoRisks") }}
             />
           </div>
-        </div>
+        </div> : null}
       </Card>
 
-      {workbenchFocused && mode !== "pool" ? (
+      {listReady && workbenchFocused && mode !== "pool" ? (
         <RequirementsModeWorkbench
           mode={mode}
           requirements={displayList}
@@ -519,24 +464,9 @@ export function Requirements({
           onAppliedReview={refreshRequirements}
           onCloseReview={() => setReviewReqId("")}
           taskPlanReqId={taskPlanReqId}
-          taskPlanDraft={taskPlanDraft}
-          taskPlanResult={taskPlanResult}
-          taskPlanPending={generateTasks.isPending}
-          taskPlanError={generateTasks.error}
-          onPickGeneration={(row) => {
-            const next = defaultTaskGenDraft(row);
-            setTaskPlanReqId(row.id);
-            setTaskPlanDraft(next);
-            setTaskPlanResult(null);
-            generateTasks.mutate({ id: row.id, dryRun: true });
-          }}
-          onTaskDraftChange={setTaskPlanDraft}
-          onPreviewTasks={(id) => generateTasks.mutate({ id, dryRun: true })}
-          onCreateTasks={(id) => generateTasks.mutate({ id, dryRun: false })}
-          onCloseTaskPlan={() => {
-            setTaskPlanReqId("");
-            setTaskPlanResult(null);
-          }}
+          onPickGeneration={(row) => setTaskPlanReqId(row.id)}
+          planningHref={(id) => requirementPlanningHref(id, projectId, window.location.hash, { keyword, status, priority })}
+          onCloseTaskPlan={() => setTaskPlanReqId("")}
         />
       ) : null}
 
@@ -580,7 +510,7 @@ export function Requirements({
               <option value={PRIORITY_ALL}>{t("page.requirements.allPriority")}</option>
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
-                  {p} ({metrics.byPriority.get(p) ?? 0})
+                  {p} ({summaryReady ? metrics.byPriority.get(p) ?? 0 : "—"})
                 </option>
               ))}
             </select>
@@ -611,11 +541,11 @@ export function Requirements({
           />
         ) : null}
 
-        {showBulkPanel ? renderBulkPanel() : null}
+        {showBulkPanel && listReady ? renderBulkPanel() : null}
 
-        {q.isLoading ? <LoadingBlock /> : null}
-        {q.error ? <ErrorBlock message={(q.error as Error).message} /> : null}
-        {!q.isLoading && !q.error && displayList.length === 0 ? (
+        {!listReady && !q.error ? <LoadingBlock /> : null}
+        {q.error ? readFailure(t("page.requirements.list"), q.error, q.isFetching, () => { void q.refetch(); }) : null}
+        {listReady && displayList.length === 0 ? (
           <EmptyState message={t("page.requirements.empty")} />
         ) : null}
 
@@ -666,14 +596,10 @@ export function Requirements({
                       <button
                         type="button"
                         className="rounded-lg border border-[var(--brand)]/30 p-2 text-[var(--brand)] hover:bg-[var(--brand-soft)] disabled:opacity-50"
-                        title={t("page.requirements.generateTasks")}
+                        title={t("delivery.plan")}
                         disabled={busy}
                         onClick={() => {
-                          const next = defaultTaskGenDraft(r);
-                          setTaskPlanReqId(r.id);
-                          setTaskPlanDraft(next);
-                          setTaskPlanResult(null);
-                          generateTasks.mutate({ id: r.id, dryRun: true });
+                          window.location.hash = requirementPlanningHref(r.id, projectId, window.location.hash, { keyword, status, priority });
                         }}
                       >
                         <Wand2 className="h-4 w-4" />
@@ -736,21 +662,6 @@ export function Requirements({
                       </li>
                     ))}
                   </ul>
-                ) : null}
-                {taskPlanReqId === r.id && showCardGenerate ? (
-                  <TaskPlanPanel
-                    draft={taskPlanDraft}
-                    onChange={setTaskPlanDraft}
-                    result={taskPlanResult}
-                    pending={generateTasks.isPending}
-                    error={generateTasks.error}
-                    onPreview={() => generateTasks.mutate({ id: r.id, dryRun: true })}
-                    onCreate={() => generateTasks.mutate({ id: r.id, dryRun: false })}
-                    onClose={() => {
-                      setTaskPlanReqId("");
-                      setTaskPlanResult(null);
-                    }}
-                  />
                 ) : null}
                 {reviewReqId === r.id && showCardReview && !workbenchFocused ? (
                   <RequirementAssistance key={r.id} requirementId={r.id} onApplied={refreshRequirements} onClose={() => setReviewReqId("")} />
@@ -854,22 +765,23 @@ export function Requirements({
               setAiOpen(true);
             }}
           />
-          <RefreshButton onClick={() => void q.refetch()} pending={q.isFetching} />
+          <RefreshButton onClick={refreshReads} pending={q.isFetching || summaryQ.isFetching || opsPlanQ.isFetching} />
         </>
       }
       metrics={
         <WorkbenchStats
           items={[
-            { label: t("page.requirements.total"), value: metrics.total },
-            { label: t("page.requirements.pending"), value: metrics.byStatus.get("pending") ?? 0 },
-            { label: t("page.requirements.inProgress"), value: metrics.byStatus.get("in_progress") ?? 0 },
-            { label: t("page.requirements.completed"), value: metrics.byStatus.get("completed") ?? 0 },
+            { label: t("page.requirements.total"), value: summaryReady ? metrics.total : "—" },
+            { label: t("page.requirements.pending"), value: summaryReady ? metrics.byStatus.get("pending") ?? 0 : "—" },
+            { label: t("page.requirements.inProgress"), value: summaryReady ? metrics.byStatus.get("in_progress") ?? 0 : "—" },
+            { label: t("page.requirements.completed"), value: summaryReady ? metrics.byStatus.get("completed") ?? 0 : "—" },
           ]}
         />
       }
     >
       {workbenchFocused ? (
         <ProductRequirementsShell
+          factsReady={summaryReady}
           phase={mode}
           total={kitTotal}
           ready={kitReady}
@@ -884,7 +796,7 @@ export function Requirements({
     </WorkbenchShell>
 
     <AiAssistDrawer
-      open={aiOpen}
+      open={aiOpen && listReady}
       onClose={() => setAiOpen(false)}
       module="product.requirements"
       context={
@@ -916,14 +828,8 @@ function RequirementsModeWorkbench({
   onAppliedReview,
   onCloseReview,
   taskPlanReqId,
-  taskPlanDraft,
-  taskPlanResult,
-  taskPlanPending,
-  taskPlanError,
   onPickGeneration,
-  onTaskDraftChange,
-  onPreviewTasks,
-  onCreateTasks,
+  planningHref,
   onCloseTaskPlan,
 }: {
   mode: RequirementMode;
@@ -933,14 +839,8 @@ function RequirementsModeWorkbench({
   onAppliedReview: () => void;
   onCloseReview: () => void;
   taskPlanReqId: string;
-  taskPlanDraft: TaskGenDraft;
-  taskPlanResult: TaskPlanResult | null;
-  taskPlanPending: boolean;
-  taskPlanError: unknown;
   onPickGeneration: (row: RequirementRow) => void;
-  onTaskDraftChange: (draft: TaskGenDraft) => void;
-  onPreviewTasks: (id: string) => void;
-  onCreateTasks: (id: string) => void;
+  planningHref: (id: string) => string;
   onCloseTaskPlan: () => void;
 }) {
   const { t } = useTranslation();
@@ -990,16 +890,10 @@ function RequirementsModeWorkbench({
           optionFilterProp="label"
         />
         {active && taskPlanReqId ? (
-          <TaskPlanPanel
-            draft={taskPlanDraft}
-            onChange={onTaskDraftChange}
-            result={taskPlanResult}
-            pending={taskPlanPending}
-            error={taskPlanError}
-            onPreview={() => onPreviewTasks(taskPlanReqId)}
-            onCreate={() => onCreateTasks(taskPlanReqId)}
-            onClose={onCloseTaskPlan}
-          />
+          <div className="mt-4 space-y-3">
+            <Alert type="info" showIcon title={t("delivery.plan")} description={t("delivery.planHint")} />
+            <Button type="primary" href={planningHref(active.id)}>{t("delivery.plan")}</Button>
+          </div>
         ) : (
           <p className="mt-3 text-sm text-[var(--muted)]">{t("page.requirements.kit.pickRequirementHint")}</p>
         )}
@@ -1106,138 +1000,6 @@ function RequirementEditor({
       </div>
       {error ? <p className="mt-2 text-sm text-rose-600">{(error as Error).message}</p> : null}
     </form>
-  );
-}
-
-function TaskPlanPanel({
-  draft,
-  onChange,
-  result,
-  pending,
-  error,
-  onPreview,
-  onCreate,
-  onClose,
-}: {
-  draft: TaskGenDraft;
-  onChange: (next: TaskGenDraft) => void;
-  result: TaskPlanResult | null;
-  pending: boolean;
-  error: unknown;
-  onPreview: () => void;
-  onCreate: () => void;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const items = result?.items ?? [];
-  const skipped = result?.skipped ?? [];
-  const set = (patch: Partial<TaskGenDraft>) => onChange({ ...draft, ...patch });
-  return (
-    <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900/70 dark:bg-sky-950/20">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            <ListTodo className="h-4 w-4 text-sky-500" />
-            {t("page.requirements.taskFlow")}
-          </div>
-          <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-            {t("page.requirements.taskFlowDesc")}
-          </p>
-        </div>
-        <button type="button" className={secondaryButtonClass} onClick={onClose}>
-          <X className="h-4 w-4" />
-          {t("common.close")}
-        </button>
-      </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-5">
-        <Field label={t("page.requirements.taskMode")}>
-          <select className={fieldClass} value={draft.mode} onChange={(e) => set({ mode: e.target.value })}>
-            {["standard", "fullstack", "frontend", "backend", "test"].map((m) => (
-              <option key={m} value={m}>
-                {t(`page.requirements.taskModeMap.${m}`)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t("page.requirements.maxTasks")}>
-          <input
-            className={fieldClass}
-            type="number"
-            min={1}
-            max={20}
-            value={draft.max_tasks}
-            onChange={(e) => set({ max_tasks: Number(e.target.value) || 6 })}
-          />
-        </Field>
-        <Field label={t("deliveryTeam.owner")}>
-          <ProjectOwnerSelect value={draft.owner_id} onChange={(owner_id) => set({ owner_id })} label={t("deliveryTeam.owner")} />
-        </Field>
-        <Field label={t("page.requirements.devTool")}>
-          <input className={fieldClass} value={draft.dev_tool} onChange={(e) => set({ dev_tool: e.target.value })} />
-        </Field>
-        <label className="flex items-end gap-2 pb-2 text-xs font-medium text-slate-500">
-          <input
-            type="checkbox"
-            checked={draft.create_dependencies}
-            onChange={(e) => set({ create_dependencies: e.target.checked })}
-          />
-          {t("page.requirements.createDependencies")}
-        </label>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" className={secondaryButtonClass} disabled={pending} onClick={onPreview}>
-          <Wand2 className="h-4 w-4" />
-          {t("page.requirements.previewTasks")}
-        </button>
-        <button type="button" className={primaryButtonClass} disabled={pending || items.length === 0} onClick={onCreate}>
-          <ListTodo className="h-4 w-4" />
-          {t("page.requirements.createTasks")}
-        </button>
-      </div>
-      {error ? <p className="mt-2 text-sm text-rose-600">{(error as Error).message}</p> : null}
-      {result ? (
-        <div className="mt-3 space-y-2">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
-              {result.dry_run ? t("page.requirements.previewReady") : t("page.requirements.tasksCreated", { count: result.count ?? items.length })}
-            </span>
-            {skipped.length ? (
-              <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                {t("page.requirements.tasksSkipped", { count: skipped.length })}
-              </span>
-            ) : null}
-          </div>
-          {items.length ? (
-            <div className="grid gap-2">
-              {items.map((item, idx) => (
-                <div key={`${item.title}-${idx}`} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/70">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold dark:bg-slate-800">
-                      {item.priority || "P2"}
-                    </span>
-                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950 dark:text-sky-200">
-                      {item.work_type || "engineering"}
-                    </span>
-                    <span className="text-[10px] text-slate-400">{item.estimate || "M"}</span>
-                    {item.id ? <span className="font-mono text-[10px] text-slate-400">{item.id}</span> : null}
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title}</p>
-                  {item.description ? (
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{item.description}</p>
-                  ) : null}
-                  <div className="mt-2 grid gap-2 text-[10px] text-slate-500 sm:grid-cols-2">
-                    <Info label={t("page.requirements.agent")} value={item.assigned_to || "-"} />
-                    <Info label={t("page.requirements.toolHint")} value={item.tool_hint || "-"} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState message={t("page.requirements.noTaskPlan")} />
-          )}
-        </div>
-      ) : null}
-    </div>
   );
 }
 

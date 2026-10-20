@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, GitBranch, Layers, Search, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
-import { LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
+import { LoadingBlock, RefreshButton } from "@/components/PageStates";
+import { ProjectContextGate, ProjectScopeNotice } from "@/components/ProjectContextGate";
 import { api } from "@/lib/api";
-import { getToken } from "@/lib/authStorage";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "@/pages/shared/workbenchUi";
 
@@ -16,11 +16,14 @@ const MODULES = [
 ];
 
 export function KnowledgeGraphHub() {
-  const { t } = useTranslation();
-  const authed = Boolean(getToken());
-  const q = useQuery({ queryKey: ["knowledgeGraphSummary"], queryFn: api.knowledgeGraphSummary, enabled: authed });
+  return <ProjectContextGate requireSelection><KnowledgeGraphContent /></ProjectContextGate>;
+}
 
-  if (!authed) return <NeedLogin />;
+function KnowledgeGraphContent() {
+  const { t } = useTranslation();
+  const q = useQuery({ queryKey: ["knowledgeGraphSummary"], queryFn: api.knowledgeGraphSummary });
+
+  if (q.isError) return <ProjectScopeNotice message={q.error instanceof Error ? q.error.message : undefined} onRetry={() => { void q.refetch(); }} />;
   if (q.isLoading) return <LoadingBlock />;
 
   const s = (q.data as any)?.summary ?? {};

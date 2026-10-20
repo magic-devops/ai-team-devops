@@ -1,3 +1,4 @@
+import { bindRequirementPlanningBack, requirementPlanningReturn } from "@/lib/requirementPlanning";
 import { requirementEditSourcePatch } from "@/lib/deliveryRequirementAdoption";
 import { currentEventHash, safeEventReturn } from "@/lib/eventReceipts";
 import {
@@ -26,6 +27,7 @@ import {
   Tooltip,
 } from "antd";
 import {
+  ArrowLeft,
   CheckCircle2,
   Circle,
   GitBranch,
@@ -552,6 +554,17 @@ function ProjectDelivery() {
     onOpen: openTarget,
   });
   const releaseReturn = releaseReturnFromHash(location.hash);
+  const requirementReturn = requirementPlanningReturn(location.hash, projectId);
+  const returnToRequirements = bindRequirementPlanningBack(executionExit.canNavigate);
+  const requirementBack = requirementReturn ? (
+    <Button
+      icon={<ArrowLeft size={14} />}
+      disabled={executionExit.pending}
+      onClick={returnToRequirements}
+    >
+      {t("nav.requirements")}
+    </Button>
+  ) : null;
   const eventReturn = safeEventReturn(
     new URLSearchParams(currentEventHash().split("?")[1]).get("event_return") ||
       "",
@@ -927,6 +940,7 @@ function ProjectDelivery() {
   if (query.isPending)
     return (
       <>
+        {requirementBack}
         <Skeleton active paragraph={{ rows: 12 }} />
         {requirementRecovery}
         {historyFallback}
@@ -935,6 +949,7 @@ function ProjectDelivery() {
   if (!data)
     return (
       <>
+        {requirementBack}
         <Alert
           type="error"
           showIcon
@@ -957,6 +972,7 @@ function ProjectDelivery() {
   if (data.query_state.status !== "ready")
     return (
       <>
+        {requirementBack}
         <Alert
           type="warning"
           showIcon
@@ -1046,6 +1062,7 @@ function ProjectDelivery() {
           </Button>
         </div>
       </header>
+      {requirementBack}
       {(query.error || actionError) && (
         <Alert
           type="error"
@@ -1421,6 +1438,7 @@ function ProjectDelivery() {
           if (executionExit.canNavigate()) {
             if (collaborationReturn) collaborationNavigate(collaborationReturn);
             else if (releaseReturn) location.hash = releaseReturn;
+            else if (requirementReturn) returnToRequirements();
             else navigate(view, "");
           }
         }}
@@ -1728,7 +1746,10 @@ function ProjectDelivery() {
           data={data}
           requirement={planRequirement}
           requirementVersion={planVersion.current}
-          onClose={() => setPlanRequirement(null)}
+          onUnresolvedChange={(value) => executionPending(`plan:${planRequirement.id}`, value)}
+          onClose={() => {
+            if (executionExit.canNavigate()) setPlanRequirement(null);
+          }}
           onSaved={(updated) => {
             if (originScope.current !== sessionSnapshot()) return;
             saveWorkspace(updated);

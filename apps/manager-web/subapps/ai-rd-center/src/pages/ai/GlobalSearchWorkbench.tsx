@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Empty, Input, List, Segmented, Tabs, Tag, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ProjectContextGate, ProjectScopeNotice } from "@/components/ProjectContextGate";
 import { api } from "@/lib/api";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import {
@@ -47,6 +48,42 @@ type SearchRow = {
   source?: string;
 };
 
+function isProjectAccessError(error: unknown): boolean {
+  return error instanceof Error && (
+    /^HTTP (?:401|403|404)(?::|\b)/.test(error.message) ||
+    error.message === "账号或项目已切换，请在当前工作区重新操作"
+  );
+}
+
+function SearchReadFailure({ label, error, retrying, onRetry }: {
+  label: string;
+  error: Error | null;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Alert
+      className="mb-3"
+      type="warning"
+      showIcon
+      message={label}
+      description={error?.message}
+      action={
+        <Button
+          size="small"
+          loading={retrying}
+          disabled={retrying}
+          aria-label={`${label}: ${t("common.refresh")}`}
+          onClick={onRetry}
+        >
+          {t("common.refresh")}
+        </Button>
+      }
+    />
+  );
+}
+
 function rowHref(mode: SearchMode, row: SearchRow): string {
   const key = String(mode === "keyword" ? row.type : row.table || row.type || "").toLowerCase();
   const map = mode === "keyword" ? KEYWORD_TARGETS : SEMANTIC_TARGETS;
@@ -61,6 +98,7 @@ function ResultList({
   minHint,
   trimmedLen,
   showScore,
+  failed,
 }: {
   loading: boolean;
   items: SearchRow[];
@@ -69,13 +107,14 @@ function ResultList({
   minHint: string;
   trimmedLen: number;
   showScore?: boolean;
+  failed?: boolean;
 }) {
   return (
     <List
       loading={loading}
       locale={{
         emptyText:
-          trimmedLen < 2 ? (
+          failed ? null : trimmedLen < 2 ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={minHint} />
           ) : (
             <Empty description={empty} />
@@ -109,6 +148,14 @@ function ResultList({
 }
 
 export function GlobalSearchWorkbench() {
+  return (
+    <ProjectContextGate requireSelection>
+      <ProjectGlobalSearch />
+    </ProjectContextGate>
+  );
+}
+
+function ProjectGlobalSearch() {
   const { t } = useTranslation();
   const [q, setQ] = useState(() => parseHashQuery().get("q") ?? "");
   const [mode, setMode] = useState<SearchMode>("hybrid");
@@ -116,6 +163,8 @@ export function GlobalSearchWorkbench() {
   const [recent, setRecent] = useState<string[]>(() => loadRecentSearches());
   const debounced = useDebouncedValue(q.trim(), 320);
   const enabled = debounced.length >= 2;
+  const keywordEnabled = enabled && (mode === "keyword" || mode === "hybrid");
+  const semanticEnabled = enabled && (mode === "semantic" || mode === "hybrid");
 
   const statusQ = useQuery({
     queryKey: ["semanticSearchStatus"],
@@ -152,7 +201,7 @@ export function GlobalSearchWorkbench() {
   const keywordQ = useQuery({
     queryKey: ["workspaceSearchPage", debounced],
     queryFn: () => api.workspaceSearch(debounced),
-    enabled: enabled && (mode === "keyword" || mode === "hybrid"),
+    enabled: keywordEnabled,
   });
 
   const semanticQ = useQuery({
@@ -160,16 +209,17 @@ export function GlobalSearchWorkbench() {
     queryFn: () =>
       api.semanticSearch(
         debounced,
-        statusQ.data?.default_tables,
+        statusQ.isError ? undefined : statusQ.data?.default_tables,
         mode === "hybrid" ? "hybrid" : mode === "semantic" ? "vector" : "keyword",
         8,
       ),
-    enabled: enabled && (mode === "semantic" || mode === "hybrid"),
+    enabled: semanticEnabled,
     retry: false,
   });
 
-  const semanticPayload = semanticQ.data;
-  const keywordItems: SearchRow[] = keywordQ.data ?? [];
+  const statusData = statusQ.isError ? undefined : statusQ.data;
+  const semanticPayload = semanticQ.isError ? undefined : semanticQ.data;
+  const keywordItems: SearchRow[] = keywordQ.isError ? [] : keywordQ.data ?? [];
   const semanticItems: SearchRow[] = semanticPayload?.items ?? [];
 
   const rawItems: SearchRow[] = useMemo(() => {
@@ -184,8 +234,8 @@ export function GlobalSearchWorkbench() {
     return [...merged.values()].sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0));
   }, [mode, keywordItems, semanticItems]);
 
-  const semanticAvailable = semanticPayload?.available ?? statusQ.data?.available ?? false;
-  const semanticReason = semanticPayload?.reason ?? statusQ.data?.reason ?? "";
+  const semanticAvailable = semanticPayload?.available ?? statusData?.available ?? false;
+  const semanticReason = semanticPayload?.reason ?? statusData?.reason ?? "";
   const loading =
     mode === "keyword"
       ? keywordQ.isFetching
@@ -199,7 +249,24 @@ export function GlobalSearchWorkbench() {
     return rawItems.filter((row) => String(row.type || "").toLowerCase().includes(typeFilter));
   }, [rawItems, typeFilter, mode]);
 
-  const indexReady = (statusQ.data?.tables ?? []).filter((x) => x.ready).length;
+  const deniedQuery = [statusQ, ...(keywordEnabled ? [keywordQ] : []), ...(semanticEnabled ? [semanticQ] : [])]
+    .find((query) => query.isError && isProjectAccessError(query.error));
+  if (deniedQuery) {
+    return (
+      <ProjectScopeNotice
+        message={deniedQuery.error?.message}
+        onRetry={() => {
+          void statusQ.refetch();
+          if (keywordEnabled) void keywordQ.refetch();
+          if (semanticEnabled) void semanticQ.refetch();
+        }}
+      />
+    );
+  }
+
+  const indexReady = (statusData?.tables ?? []).filter((x) => x.ready).length;
+  const searchFailed = (keywordEnabled && keywordQ.isError) || (semanticEnabled && semanticQ.isError);
+  const searchUnresolved = (keywordEnabled && keywordQ.data === undefined) || (semanticEnabled && semanticQ.data === undefined);
 
   return (
     <WorkbenchShell
@@ -208,10 +275,10 @@ export function GlobalSearchWorkbench() {
       metrics={
         <WorkbenchStats
           items={[
-            { label: t("page.search.results"), value: enabled ? items.length : "—" },
+            { label: t("page.search.results"), value: enabled && !searchFailed && !searchUnresolved ? items.length : "—" },
             {
               label: t("page.search.indexHealth"),
-              value: statusQ.isLoading ? "…" : `${indexReady}/${statusQ.data?.tables?.length ?? 0}`,
+              value: statusQ.isError ? "—" : statusQ.isLoading ? "…" : statusData ? `${indexReady}/${statusData.tables?.length ?? 0}` : "—",
             },
             {
               label: t("page.search.mode"),
@@ -230,6 +297,7 @@ export function GlobalSearchWorkbench() {
         <Input.Search
           size="large"
           allowClear
+          aria-label={t("page.search.placeholder")}
           placeholder={t("page.search.placeholder")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -239,7 +307,14 @@ export function GlobalSearchWorkbench() {
           {t("page.search.hint")}
         </Typography.Paragraph>
 
-        {statusQ.data ? (
+        {statusQ.isError ? (
+          <SearchReadFailure
+            label={t("page.search.indexHealth")}
+            error={statusQ.error}
+            retrying={statusQ.isFetching}
+            onRetry={() => { void statusQ.refetch(); }}
+          />
+        ) : statusData && !(semanticEnabled && semanticQ.isError) ? (
           <Alert
             className="mb-3"
             type={semanticAvailable ? "success" : "info"}
@@ -251,9 +326,26 @@ export function GlobalSearchWorkbench() {
             }
             description={
               semanticAvailable
-                ? (statusQ.data.tables ?? []).map((tb) => `${tb.table}:${tb.rows}`).join(" · ")
+                ? (statusData.tables ?? []).map((tb) => `${tb.table}:${tb.rows}`).join(" · ")
                 : semanticReason || undefined
             }
+          />
+        ) : null}
+
+        {keywordEnabled && keywordQ.isError ? (
+          <SearchReadFailure
+            label={t("page.search.tabKeyword")}
+            error={keywordQ.error}
+            retrying={keywordQ.isFetching}
+            onRetry={() => { void keywordQ.refetch(); }}
+          />
+        ) : null}
+        {semanticEnabled && semanticQ.isError ? (
+          <SearchReadFailure
+            label={t("page.search.tabSemantic")}
+            error={semanticQ.error}
+            retrying={semanticQ.isFetching}
+            onRetry={() => { void semanticQ.refetch(); }}
           />
         ) : null}
 
@@ -281,7 +373,7 @@ export function GlobalSearchWorkbench() {
               label: t("page.search.tabHybrid"),
               children: (
                 <>
-                  {!semanticAvailable && !semanticQ.isLoading && semanticReason ? (
+                  {!statusQ.isError && !semanticQ.isError && !semanticAvailable && !semanticQ.isLoading && semanticReason ? (
                     <Alert type="warning" showIcon className="mb-3" message={semanticReason} />
                   ) : null}
                   <ResultList
@@ -292,6 +384,7 @@ export function GlobalSearchWorkbench() {
                     minHint={t("page.search.minChars")}
                     trimmedLen={debounced.length}
                     showScore
+                    failed={searchFailed}
                   />
                 </>
               ),
@@ -317,6 +410,7 @@ export function GlobalSearchWorkbench() {
                     empty={t("page.search.empty")}
                     minHint={t("page.search.minChars")}
                     trimmedLen={debounced.length}
+                    failed={keywordQ.isError}
                   />
                 </>
               ),
@@ -326,7 +420,7 @@ export function GlobalSearchWorkbench() {
               label: t("page.search.tabSemantic"),
               children: (
                 <>
-                  {!semanticAvailable && !semanticQ.isLoading ? (
+                  {!statusQ.isError && !semanticQ.isError && !semanticAvailable && !semanticQ.isLoading ? (
                     <Alert
                       type="info"
                       showIcon
@@ -343,6 +437,7 @@ export function GlobalSearchWorkbench() {
                     minHint={t("page.search.minChars")}
                     trimmedLen={debounced.length}
                     showScore
+                    failed={semanticQ.isError}
                   />
                 </>
               ),

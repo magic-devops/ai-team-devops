@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { ErrorBlock, LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
+import { ProjectScopeNotice } from "@/components/ProjectContextGate";
 import { api } from "@/lib/api";
-import { getProjectId, getToken } from "@/lib/authStorage";
+import { getProjectId, getSessionRevision, getToken } from "@/lib/authStorage";
+import { bindProjectDataExport } from "@/lib/projectDataExport";
 
 export type AnalyticsSection = "overview" | "blueprint" | "reports" | "catalog" | "lineage" | "exchange" | "nlq";
 export type CatalogPanel = "assets" | "metrics" | "services" | "quality" | "development";
@@ -50,7 +52,12 @@ export function Analytics({
 }) {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
-  const hasProject = Boolean(getProjectId());
+  const projectId = getProjectId() || "";
+  const hasProject = Boolean(projectId);
+  const exportData = bindProjectDataExport({ projectId, revision: getSessionRevision() || "" });
+  const [downloadGuard] = useState(() => ({ active: false }));
+  const [downloadPath, setDownloadPath] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState("");
   const [question, setQuestion] = useState("");
   const [showRaw, setShowRaw] = useState(false);
   const [exchangeModules, setExchangeModules] = useState<string[]>([
@@ -545,7 +552,22 @@ export function Analytics({
   });
 
   if (!authed) return <NeedLogin />;
-  if (!hasProject) return <p className="text-sm text-amber-700">{t("projectSelector.hint")}</p>;
+  if (!hasProject) return <ProjectScopeNotice />;
+
+  const downloadExport = async (path: string, filename: string) => {
+    if (downloadGuard.active) return;
+    downloadGuard.active = true;
+    setDownloadPath(path);
+    setDownloadError("");
+    try {
+      await exportData(path, filename);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      downloadGuard.active = false;
+      setDownloadPath(null);
+    }
+  };
 
   const toggleExchangeModule = (name: string) => {
     setExchangeModules((prev) => (prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]));
@@ -581,6 +603,7 @@ export function Analytics({
 
   return (
     <div className="w-full space-y-6">
+      {downloadError ? <ErrorBlock message={downloadError} /> : null}
       {show("blueprint") ? (
         <Card
           title={t("page.analytics.blueprint")}
@@ -938,15 +961,16 @@ export function Analytics({
                     {t("page.analytics.attributionBadge", { score: attribution.score ?? 0, level: attribution.risk_level })}
                   </span>
                 ) : null}
-                <a
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--text)] hover:bg-[var(--surface-muted)]"
-                  href={api.analyticsReportMarkdownUrl(String(report.id))}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--text)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
+                  disabled={Boolean(downloadPath)}
+                  aria-busy={downloadPath === api.analyticsReportMarkdownUrl(String(report.id))}
+                  onClick={() => downloadExport(api.analyticsReportMarkdownUrl(String(report.id)), `${report.id}.md`)}
                 >
                   <Download className="h-3.5 w-3.5" />
                   {t("page.analytics.exportMarkdown")}
-                </a>
+                </button>
               </div>
               {(report.tags ?? []).length ? (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -1238,10 +1262,10 @@ export function Analytics({
           title={catalogLayout === "module" ? undefined : t("page.analytics.dataGovernance")}
           actions={
             catalogLayout === "module" ? undefined : (
-              <a className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-muted)]" href={api.analyticsExportCsvUrl()} target="_blank" rel="noreferrer">
+              <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] disabled:opacity-50" disabled={Boolean(downloadPath)} aria-busy={downloadPath === api.analyticsExportCsvUrl()} onClick={() => downloadExport(api.analyticsExportCsvUrl(), "analytics-overview.csv")}>
                 <Download className="h-4 w-4" />
                 {t("page.analytics.exportCsv")}
-              </a>
+              </button>
             )
           }
         >
@@ -1820,15 +1844,16 @@ export function Analytics({
               <Clock3 className="h-4 w-4" />
               {t("page.analytics.createExportJob")}
             </button>
-            <a
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-muted)]"
-              href={api.dataExchangeExportUrl(selectedExchangeModules)}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
+              disabled={Boolean(downloadPath)}
+              aria-busy={downloadPath === api.dataExchangeExportUrl(selectedExchangeModules)}
+              onClick={() => downloadExport(api.dataExchangeExportUrl(selectedExchangeModules), "export.json")}
             >
               <Download className="h-4 w-4" />
               {t("page.analytics.exportJson")}
-            </a>
+            </button>
           </div>
         }
       >
@@ -1971,9 +1996,9 @@ export function Analytics({
                     <td className="px-4 py-3 font-mono text-xs text-[var(--muted)]">{job.created_at || "-"}</td>
                     <td className="px-4 py-3">
                       {job.download_url ? (
-                        <a className="text-xs font-medium text-[var(--brand)] underline" href={job.download_url} target="_blank" rel="noreferrer">
+                        <button type="button" className="text-xs font-medium text-[var(--brand)] underline disabled:opacity-50" disabled={Boolean(downloadPath)} aria-busy={downloadPath === job.download_url} onClick={() => downloadExport(String(job.download_url), "export.json")}>
                           {t("page.analytics.download")}
-                        </a>
+                        </button>
                       ) : (
                         <span className="text-xs text-[var(--muted)]">-</span>
                       )}

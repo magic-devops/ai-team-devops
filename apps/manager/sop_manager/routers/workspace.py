@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -23,13 +23,14 @@ from sop_manager.path_config import (
     sop_dir,
 )
 from sop_manager.routers.db_sql_compat import rows, table, now
+from sop_manager.routers.business_access import read_business_access, require_business_access
 
 from sop_manager.project_write_guard import project_file_write_scope
 
 router = APIRouter(prefix="/api/v1", tags=["workspace"])
 
 
-@router.get("/dashboard")
+@router.get("/dashboard", dependencies=[Depends(read_business_access)])
 def dashboard() -> dict[str, Any]:
     tasks_all = rows("tasks")
     reqs = rows("requirements")
@@ -91,7 +92,7 @@ def _design_doc_search_hits(q: str) -> list[dict[str, Any]]:
     return hits
 
 
-@router.get("/search/hub")
+@router.get("/search/hub", dependencies=[Depends(read_business_access)])
 def search_hub() -> dict[str, Any]:
     status = semantic_search_status()
     tables = status.get("tables") if isinstance(status.get("tables"), list) else []
@@ -120,7 +121,7 @@ def search_hub() -> dict[str, Any]:
     }
 
 
-@router.get("/search")
+@router.get("/search", dependencies=[Depends(read_business_access)])
 def search(q: str = Query(..., min_length=1)) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for name in ["requirements", "tasks", "issues"]:
@@ -147,13 +148,13 @@ def search(q: str = Query(..., min_length=1)) -> list[dict[str, Any]]:
     return results[:50]
 
 
-@router.get("/state")
+@router.get("/state", dependencies=[Depends(read_business_access)])
 def get_state() -> Any:
     f = resolved_project_path() / "memory" / "current_state.json"
     return json.loads(f.read_text()) if f.exists() else {"error": "current_state.json not found"}
 
 
-@router.patch("/state")
+@router.patch("/state", dependencies=[Depends(require_business_access)])
 def update_state(body: dict[str, Any]) -> dict[str, str]:
     with project_file_write_scope():
         f = resolved_project_path() / "memory" / "current_state.json"
@@ -166,7 +167,7 @@ def update_state(body: dict[str, Any]) -> dict[str, str]:
         return {"ok": "true"}
 
 
-@router.get("/analytics")
+@router.get("/analytics", dependencies=[Depends(read_business_access)])
 def analytics() -> dict[str, Any]:
     tasks_all = rows("tasks", 1000)
     reqs = rows("requirements", 1000)
@@ -309,7 +310,7 @@ def _vector_semantic_hits(q: str, tables: list[str], limit_per_table: int = 5) -
     return results, ""
 
 
-@router.get("/semantic-search/status")
+@router.get("/semantic-search/status", dependencies=[Depends(read_business_access)])
 def semantic_search_status() -> dict[str, Any]:
     tables = [t.strip() for t in _SEMANTIC_DEFAULT_TABLES.split(",") if t.strip()]
     indexed: list[dict[str, Any]] = []
@@ -339,7 +340,7 @@ def semantic_search_status() -> dict[str, Any]:
     }
 
 
-@router.get("/semantic-search")
+@router.get("/semantic-search", dependencies=[Depends(read_business_access)])
 def semantic_search(
     q: str = Query(..., min_length=2),
     tables: str = _SEMANTIC_DEFAULT_TABLES,
@@ -446,7 +447,7 @@ def update_spec(path: str = Query(...), body: SpecContentBody = SpecContentBody(
         return {"ok": "true"}
 
 
-@router.get("/custom")
+@router.get("/custom", dependencies=[Depends(read_business_access)])
 def list_custom() -> list[dict[str, Any]]:
     custom_dir = resolved_project_path() / "sop" / "custom"
     if not custom_dir.exists():
@@ -466,7 +467,7 @@ def list_custom() -> list[dict[str, Any]]:
     ]
 
 
-@router.get("/custom/content")
+@router.get("/custom/content", dependencies=[Depends(read_business_access)])
 def get_custom_content(path: str = Query(...)) -> dict[str, Any]:
     custom_dir = (resolved_project_path() / "sop" / "custom").resolve()
     target = (custom_dir / path).resolve()
@@ -479,7 +480,7 @@ def get_custom_content(path: str = Query(...)) -> dict[str, Any]:
     return {"content": None, "type": "binary"}
 
 
-@router.get("/agent-reflections")
+@router.get("/agent-reflections", dependencies=[Depends(read_business_access)])
 def get_agent_reflections(limit: int = 100) -> Any:
     try:
         from sop_manager.routers.db import rows as lance_rows
@@ -489,7 +490,7 @@ def get_agent_reflections(limit: int = 100) -> Any:
         return []
 
 
-@router.get("/rules")
+@router.get("/rules", dependencies=[Depends(read_business_access)])
 def get_rules() -> Any:
     try:
         from sop_manager.routers.db import rows as lr
@@ -499,7 +500,7 @@ def get_rules() -> Any:
         return []
 
 
-@router.get("/knowledge")
+@router.get("/knowledge", dependencies=[Depends(read_business_access)])
 def get_knowledge() -> Any:
     try:
         from sop_manager.routers.db import rows as lr
@@ -516,7 +517,7 @@ class RuleCreateBody(BaseModel):
     confidence: float = 0.75
 
 
-@router.post("/rules")
+@router.post("/rules", dependencies=[Depends(require_business_access)])
 def create_rule(body: RuleCreateBody) -> dict[str, Any]:
     try:
         ensure_lance_ops_import_path()
@@ -598,7 +599,7 @@ def _knowledge_ai_polish(body: KnowledgeAiPolish) -> dict[str, Any]:
     return {"title": title, "content": content, "category": cat, "tags": tags}
 
 
-@router.post("/knowledge")
+@router.post("/knowledge", dependencies=[Depends(require_business_access)])
 def create_knowledge(body: KnowledgeCreate) -> dict[str, Any]:
     try:
         ensure_lance_ops_import_path()
@@ -615,7 +616,7 @@ def create_knowledge(body: KnowledgeCreate) -> dict[str, Any]:
         raise HTTPException(500, str(e)) from e
 
 
-@router.post("/knowledge/ai-polish")
+@router.post("/knowledge/ai-polish", dependencies=[Depends(read_business_access)])
 def knowledge_ai_polish(body: KnowledgeAiPolish) -> dict[str, Any]:
     try:
         return {"ok": True, **_knowledge_ai_polish(body)}
@@ -625,7 +626,7 @@ def knowledge_ai_polish(body: KnowledgeAiPolish) -> dict[str, Any]:
         raise HTTPException(502, f"AI 处理失败: {e}") from e
 
 
-@router.post("/knowledge/extract-text")
+@router.post("/knowledge/extract-text", dependencies=[Depends(read_business_access)])
 async def knowledge_extract_text(file: UploadFile = File(...)) -> dict[str, Any]:
     raw = await file.read()
     if len(raw) > 2_000_000:
@@ -659,7 +660,7 @@ async def knowledge_extract_text(file: UploadFile = File(...)) -> dict[str, Any]
     raise HTTPException(400, "暂支持 .txt / .md / .markdown / .pdf；其它格式请粘贴文本")
 
 
-@router.delete("/knowledge/{doc_id}")
+@router.delete("/knowledge/{doc_id}", dependencies=[Depends(require_business_access)])
 def delete_knowledge(doc_id: str) -> dict[str, str]:
     t = table("knowledge")
     if t is None:
@@ -671,7 +672,7 @@ def delete_knowledge(doc_id: str) -> dict[str, str]:
         raise HTTPException(500, str(e)) from e
 
 
-@router.post("/knowledge/index")
+@router.post("/knowledge/index", dependencies=[Depends(require_business_access)])
 def index_knowledge() -> dict[str, Any]:
     try:
         ensure_lance_ops_import_path()
@@ -683,7 +684,7 @@ def index_knowledge() -> dict[str, Any]:
         raise HTTPException(500, str(e)) from e
 
 
-@router.get("/knowledge/search")
+@router.get("/knowledge/search", dependencies=[Depends(read_business_access)])
 def search_knowledge(q: str = Query(...), category: Optional[str] = None) -> list[dict[str, Any]]:
     try:
         ensure_lance_ops_import_path()

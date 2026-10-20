@@ -3,6 +3,7 @@ import { Save } from "lucide-react";
 import { Suspense, lazy, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ErrorBlock, LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
+import { ProjectContextGate, ProjectScopeNotice } from "@/components/ProjectContextGate";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
@@ -22,6 +23,14 @@ function pieToRecord(items?: Array<{ name: string; value: number }>) {
 }
 
 export function AnalyticsOverviewWorkbench() {
+  return (
+    <ProjectContextGate requireSelection>
+      <ProjectAnalyticsOverview />
+    </ProjectContextGate>
+  );
+}
+
+function ProjectAnalyticsOverview() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
@@ -65,8 +74,21 @@ export function AnalyticsOverviewWorkbench() {
   }, [charts.data, t]);
 
   if (!authed) return <NeedLogin />;
-  if (overview.isLoading) return <LoadingBlock />;
-  if (overview.isError) return <ErrorBlock message={(overview.error as Error).message} />;
+  const deniedSave = saveReport.isError && /\bHTTP (?:401|403|404)\b/.test(saveReport.error?.message ?? "");
+  const error = overview.isError ? overview.error : charts.isError ? charts.error : deniedSave ? saveReport.error : null;
+  if (error) {
+    return (
+      <ProjectScopeNotice
+        message={error.message}
+        onRetry={() => {
+          saveReport.reset();
+          void overview.refetch();
+          void charts.refetch();
+        }}
+      />
+    );
+  }
+  if (overview.isLoading || charts.isLoading) return <LoadingBlock />;
 
   return (
     <WorkbenchShell
@@ -103,6 +125,7 @@ export function AnalyticsOverviewWorkbench() {
         />
       }
     >
+      {saveReport.isError ? <ErrorBlock message={saveReport.error.message} /> : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <WorkbenchPanel title={t("page.analytics.taskStatusChart")}>
           <Suspense fallback={<LoadingBlock />}>

@@ -1,25 +1,46 @@
-import { CheckCircle2, ChevronRight, Library, Rows3, SearchCheck, Sparkles } from "lucide-react";
+import { ChevronRight, Library, Rows3, SearchCheck, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { RequirementMode } from "../Requirements";
 import { requirementsPhaseHref } from "./requirementsNav";
 
-const PHASE_META: Record<
-  RequirementMode,
-  { icon: LucideIcon; step: number; navKey: string }
-> = {
-  pool: { icon: Library, step: 1, navKey: "requirementPool" },
-  review: { icon: SearchCheck, step: 2, navKey: "requirementReview" },
-  generation: { icon: Sparkles, step: 3, navKey: "requirementGeneration" },
-  batch: { icon: Rows3, step: 4, navKey: "requirementBatch" },
+const PHASE_META: Record<RequirementMode, { icon: LucideIcon }> = {
+  pool: { icon: Library },
+  review: { icon: SearchCheck },
+  generation: { icon: Sparkles },
+  batch: { icon: Rows3 },
 };
+
+const SHELL_LABELS = {
+  "zh-CN": {
+    title: "需求治理工作台",
+    hubTotal: "需求总数",
+    hubReady: "含验收标准",
+    hubCompleted: "登记完成",
+    hubCompletion: "登记完成率",
+  },
+  "en-US": {
+    title: "Requirements workbench",
+    hubTotal: "Total requirements",
+    hubReady: "With acceptance criteria",
+    hubCompleted: "Marked completed",
+    hubCompletion: "Marked completion rate",
+  },
+  "ja-JP": {
+    title: "要件ワークベンチ",
+    hubTotal: "要件数",
+    hubReady: "受け入れ条件あり",
+    hubCompleted: "完了に設定",
+    hubCompletion: "完了設定率",
+  },
+} as const;
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-      <p className="text-xs text-[var(--muted)]">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-[var(--text)]">{value}</p>
+    <div className="min-w-0">
+      <dt className="text-xs text-[var(--muted)]">{label}</dt>
+      <dd className="mt-1 text-sm font-semibold tabular-nums text-[var(--text)]">{value}</dd>
     </div>
   );
 }
@@ -30,78 +51,62 @@ export function ProductRequirementsShell(props: {
   ready: number;
   completed: number;
   completionRate: number;
+  factsReady?: boolean;
   children: ReactNode;
 }) {
-  const { t } = useTranslation();
-  const readyPct = props.total > 0 ? Math.round((props.ready / props.total) * 100) : 0;
+  const { t, i18n } = useTranslation();
+  const language = i18n?.resolvedLanguage || i18n?.language || "zh-CN";
+  const locale = language.startsWith("ja") ? "ja-JP" : language.startsWith("en") ? "en-US" : "zh-CN";
+  const labels = SHELL_LABELS[locale];
+  const label = (key: keyof typeof labels) => t(
+    `page.requirements.${
+      key === "title" ? "kit.title"
+        : key === "hubCompleted" ? "kit.recordedCompleted"
+          : key === "hubCompletion" ? "kit.recordedCompletionRate" : key
+    }`,
+    { lng: locale, fallbackLng: false, defaultValue: labels[key] },
+  );
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-[var(--border)] bg-gradient-to-br from-[var(--brand-soft)]/40 via-[var(--surface)] to-[var(--surface)] p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand)]">
-              {t("page.requirements.kit.badge")}
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-[var(--text)] sm:text-xl">
-              {t("page.requirements.kit.title")}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted-strong)]">
-              {t("page.requirements.kit.desc")}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Metric label={t("page.requirements.hubTotal")} value={props.total} />
-            <Metric label={t("page.requirements.hubReady")} value={`${readyPct}%`} />
-            <Metric label={t("page.requirements.hubCompletion")} value={`${props.completionRate}%`} />
-          </div>
-        </div>
-
-        <ol className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {(Object.keys(PHASE_META) as RequirementMode[]).map((key) => {
-            const meta = PHASE_META[key];
-            const Icon = meta.icon;
-            const active = props.phase === key;
-            const done =
-              key === "pool"
-                ? props.total > 0
-                : key === "review"
-                  ? props.ready > 0
-                  : key === "generation"
-                    ? props.completed > 0
-                    : props.total > 0 && props.completionRate >= 30;
-            return (
-              <li key={key}>
-                <a
-                  href={requirementsPhaseHref(key)}
-                  className={`flex h-full items-start gap-3 rounded-lg border px-3 py-3 transition ${
-                    active
-                      ? "border-[var(--brand)] bg-[var(--brand-soft)] shadow-sm"
-                      : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--brand)]/50 hover:bg-[var(--surface-muted)]"
-                  }`}
-                >
-                  <span
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                      active ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted-strong)]"
+      <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4">
+        <nav aria-label={label("title")}>
+          <ol className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+            {(Object.keys(PHASE_META) as RequirementMode[]).map((key) => {
+              const meta = PHASE_META[key];
+              const Icon = meta.icon;
+              const active = props.phase === key;
+              return (
+                <li key={key}>
+                  <a
+                    href={requirementsPhaseHref(key)}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex h-full min-h-11 items-center gap-2 rounded-lg border px-3 py-2 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] ${
+                      active
+                        ? "border-[var(--brand)] bg-[var(--brand-soft)] shadow-sm"
+                        : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--brand)]/50 hover:bg-[var(--surface-muted)]"
                     }`}
                   >
-                    {done && !active ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : meta.step}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1 text-sm font-semibold text-[var(--text)]">
-                      <Icon className="h-4 w-4 shrink-0 text-[var(--brand)]" />
-                      {t(`nav.${meta.navKey}`)}
+                    <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--brand)]" />
+                    <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--text)]">
+                      {t(`page.requirements.mode.${key}.title`)}
                     </span>
-                    <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">
-                      {t(`page.requirements.kit.step.${key}`)}
-                    </span>
-                  </span>
-                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--muted)]" />
-                </a>
-              </li>
-            );
-          })}
-        </ol>
+                    <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+                  </a>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+        <p className="text-sm leading-6 text-[var(--muted-strong)]">
+          {t(`page.requirements.mode.${props.phase}.hint`)}
+        </p>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)] pt-3 sm:grid-cols-4">
+          <Metric label={label("hubTotal")} value={props.factsReady === false ? "—" : props.total} />
+          <Metric label={label("hubReady")} value={props.factsReady === false ? "—" : `${props.ready} / ${props.total}`} />
+          <Metric label={label("hubCompleted")} value={props.factsReady === false ? "—" : props.completed} />
+          <Metric label={label("hubCompletion")} value={props.factsReady === false ? "—" : `${props.completionRate}%`} />
+        </dl>
       </div>
 
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5">
