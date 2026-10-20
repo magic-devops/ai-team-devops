@@ -78,6 +78,10 @@ def queue(bridge):
 
 
 def sync(bridge, execution):
+    from sop_manager.routers.delivery_execution_handoff import handoff_once
+
+    # Plans are now prepared by the durable background owner, never by sync.
+    handoff_once(bridge[0].app, bridge[1])
     response = command(bridge[0], "execution.sync", {"id": execution["id"]})
     assert response.status_code == 200, response.text
     return response.json()["executions"][-1]
@@ -188,6 +192,9 @@ def test_failed_execution_creates_single_traceable_issue_and_can_promote(bridge)
 
 
 def test_runtime_permissions_are_not_elevated_and_cannot_double_dispatch(bridge):
+    from sop_manager.routers.delivery_execution_handoff import handoff_once
+    from sop_manager.routers.delivery_execution_handoff_model import DeliveryExecutionHandoff
+
     client, sessions, _, _, _, _, _ = bridge
     queue(bridge)
     with pytest.raises(AssertionError):
@@ -196,27 +203,30 @@ def test_runtime_permissions_are_not_elevated_and_cannot_double_dispatch(bridge)
         db.get(User, "lead").role = "tenant_admin"
         db.commit()
     state = client.get("/api/v1/delivery/workspace").json()
+    handoff_once(client.app, sessions)
+    with sessions() as db:
+        assert db.query(DeliveryExecutionHandoff).one().state == "blocked"
+    assert not bridge[2].list(bridge[3], bridge[4]["id"], "runs")
     response = command(client, "execution.sync", {"id": state["executions"][0]["id"]})
-    assert response.status_code == 403
+    assert response.status_code == 409  # Observation cannot create a missing plan.
 
 
 def test_dispatch_recovery_after_runtime_commit_before_manager_commit(bridge, monkeypatch):
-    from sop_manager.routers import delivery_execution
+    from sop_manager.routers import delivery_execution_handoff as service
 
     client, _, store, p, ws, _, _ = bridge
     intent = queue(bridge)
-    original = delivery_execution._observe
+    original = service.project_handoff
 
     def interrupted(*args, **kwargs):
         from fastapi import HTTPException
 
         raise HTTPException(503, "Simulated interruption after runtime commit")
 
-    monkeypatch.setattr(delivery_execution, "_observe", interrupted)
-    response = command(client, "execution.sync", {"id": intent["id"]})
-    assert response.status_code == 503
+    monkeypatch.setattr(service, "project_handoff", interrupted)
+    assert service.handoff_once(client.app, bridge[1]) == 0
     assert len(store.list(p, ws["id"], "runs")) == 1
-    monkeypatch.setattr(delivery_execution, "_observe", original)
+    monkeypatch.setattr(service, "project_handoff", original)
     execution = sync(bridge, intent)
     assert execution["run_id"]
     assert len(store.list(p, ws["id"], "runs")) == 1

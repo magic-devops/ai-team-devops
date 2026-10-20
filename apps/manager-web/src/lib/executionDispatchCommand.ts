@@ -110,21 +110,16 @@ export function executionDispatchRecoveryPending(projectId: string, action: Exec
     if (!raw) return false;
     if (raw.length > MAX_RETAINED_LENGTH) return true;
     const saved: unknown = JSON.parse(raw);
-    return !record(saved) || !validOriginal(saved.original, action, targetId) || action === "execution.sync" || saved.phase !== "refused";
+    return !record(saved) || !validOriginal(saved.original, action, targetId) || saved.phase !== "refused";
   } catch { return true; }
 }
 export function createExecutionDispatchController(options: Omit<DeliveryControllerOptions<ExecutionDispatchOriginal>, "validateOriginal" | "validateAck"> & { action: ExecutionDispatchAction; targetId: string }) {
   return createDeliveryCommandController({ ...options,
-    uncertainOnRefusal: options.action === "execution.sync",
     save: (raw) => { if (raw.length > MAX_RETAINED_LENGTH) throw new Error("retainedOriginalUnavailable"); options.save(raw); },
     load: () => {
       if (!id(options.projectId) || !id(options.targetId) || !["execution.queue", "execution.sync"].includes(options.action)) throw new Error("retainedOriginalInvalid");
       const raw = options.load();
       if (raw !== null && (typeof raw !== "string" || raw.length > MAX_RETAINED_LENGTH)) throw new Error("retainedOriginalInvalid");
-      if (raw && options.action === "execution.sync") {
-        const saved: unknown = JSON.parse(raw);
-        if (record(saved) && saved.phase === "refused") return JSON.stringify({ ...saved, phase: "unknown" });
-      }
       return raw;
     },
     validateOriginal: (value) => validOriginal(value, options.action, options.targetId),

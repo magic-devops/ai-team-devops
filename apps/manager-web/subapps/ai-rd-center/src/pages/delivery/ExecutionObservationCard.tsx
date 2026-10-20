@@ -31,6 +31,8 @@ import { ExecutionSyncControl } from "./ExecutionSyncControl";
 import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
 import { executionControlRecoveryPending } from "@/lib/executionControlCommand";
 import { executionDispatchRecoveryPending } from "@/lib/executionDispatchCommand";
+import { handoffAccessFailure, useExecutionHandoffQuery, type ExecutionHandoffRead } from "@/lib/executionHandoff";
+import { ExecutionHandoffStatus, handoffControlsId } from "./ExecutionHandoffStatus";
 
 export function ExecutionStageFacts({
   observation,
@@ -99,6 +101,7 @@ export function ExecutionObservationCard({
   initialStream,
   disabled = false,
   isActive,
+  handoffRead,
 }: {
   entry: DeliveryExecution;
   projectId: string;
@@ -112,6 +115,7 @@ export function ExecutionObservationCard({
   initialStream?: string;
   disabled?: boolean;
   isActive?: () => boolean;
+  handoffRead?: ExecutionHandoffRead;
   onCommand: (
     action: DeliveryAction,
     payload: Record<string, unknown>,
@@ -141,6 +145,8 @@ export function ExecutionObservationCard({
   };
   const origin = useRef(projectSessionKey()), access = useRef({ disabled, isActive });
   access.current = { disabled, isActive };
+  const ownHandoff = useExecutionHandoffQuery(projectId, entry.id, entry.task_id, sessionId, Boolean(entry.handoff_id) && !handoffRead, isActive);
+  const handoff = handoffRead || ownHandoff, handoffAccess = useRef(handoff); handoffAccess.current = handoff;
   const cursor = useRef<string>();
   const controller = useRef<AbortController>();
   const readingRef = useRef(false);
@@ -193,7 +199,7 @@ export function ExecutionObservationCard({
     return () => clearInterval(timer);
   }, [active, paused, terminal, observe, observation?.more]);
   async function act(action: () => Promise<void>) {
-    if (actionPending.current || controlPending.current || executionOperationPending(projectId, entry.id) || access.current.disabled || access.current.isActive?.() === false || origin.current !== projectSessionKey()) return;
+    if (actionPending.current || controlPending.current || !handoffAccess.current.readable || executionOperationPending(projectId, entry.id) || access.current.disabled || access.current.isActive?.() === false || origin.current !== projectSessionKey()) return;
     actionPending.current = true;
     setBusy(true);
     setActionError("");
@@ -234,10 +240,16 @@ export function ExecutionObservationCard({
         run_version: observation?.run_version,
       }),
     );
+  if (entry.handoff_id && handoffAccessFailure(handoff.error)) return <article>
+    <ExecutionHandoffStatus projectId={projectId} executionId={entry.id} taskId={entry.task_id} sessionId={sessionId} read={handoff} isActive={isActive} />
+    {executionOperationPending(projectId, entry.id) && <ExecutionOperationRecovery projectId={projectId} executionId={entry.id} sessionId={sessionId}
+      isActive={() => access.current.isActive?.() !== false} onSaved={onSaved} onUnresolvedChange={onUnresolvedChange} />}
+  </article>;
   return (
     <article
       className={`runtime-execution-card is-${stale ? "stale" : status}`}
     >
+      {entry.handoff_id && <ExecutionHandoffStatus projectId={projectId} executionId={entry.id} taskId={entry.task_id} sessionId={sessionId} read={handoff} isActive={isActive} controlsAvailable={!recovering} />}
       <div className="runtime-section-heading">
         <Tag
           color={
@@ -342,6 +354,7 @@ export function ExecutionObservationCard({
           </Button>
         )}
       </Space>
+      <section id={handoffControlsId(projectId, entry.id, sessionId)} tabIndex={-1}>
       {recovering ? <ExecutionOperationRecovery projectId={projectId} executionId={entry.id} sessionId={sessionId}
         isActive={() => access.current.isActive?.() !== false} onSaved={onSaved} onUnresolvedChange={(value) => {
           const retained = executionOperationPending(projectId, entry.id);
@@ -357,8 +370,9 @@ export function ExecutionObservationCard({
         executionId={entry.id}
         sessionId={sessionId}
         workspaceVersion={workspaceVersion}
-        canSync={Boolean(permissions?.can_sync)}
-        disabled={disabled || busy || Boolean(readError) || runtimePending.current}
+        canSync={handoff.readable && Boolean(permissions?.can_sync)}
+        disabled={disabled || busy || Boolean(readError) || !handoff.readable || runtimePending.current}
+        canSubmit={() => handoffAccess.current.readable}
         isActive={() => !actionPending.current && !runtimePending.current && !executionControlRecoveryPending(projectId, entry.id) && access.current.isActive?.() !== false}
         onSaved={onSaved}
         onObserved={observe}
@@ -372,7 +386,8 @@ export function ExecutionObservationCard({
         sessionId={sessionId}
         active={active}
         paused={paused}
-        disabled={disabled || busy || Boolean(readError)}
+        disabled={disabled || busy || Boolean(readError) || !handoff.readable}
+        canSubmit={() => handoffAccess.current.readable}
         onSaved={onSaved}
         initialNodeId={initialNodeId}
         initialAttempt={initialAttempt}
@@ -382,6 +397,7 @@ export function ExecutionObservationCard({
         }}
       />
       </>}
+      </section>
       <Collapse
         size="small"
         ghost
@@ -566,7 +582,7 @@ export function ExecutionObservationCard({
           },
         ]}
       />
-      {permissions?.can_review && (
+      {handoff.readable && permissions?.can_review && (
         <div className="runtime-review">
           <p className="runtime-help">{tr("reviewHint")}</p>
           <label htmlFor={`runtime-review-${entry.id}`}>{tr("comment")}</label>

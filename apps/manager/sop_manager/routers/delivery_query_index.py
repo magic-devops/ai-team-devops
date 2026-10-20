@@ -138,6 +138,7 @@ def _execution_facts(project, evaluation):
                 "stale",
                 "issue_id",
                 "attempt",
+                "handoff_id",
             )
         }
         data["position"] = position

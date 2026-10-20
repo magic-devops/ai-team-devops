@@ -7,19 +7,19 @@ import { useExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
 
 export type ExecutionSyncControlProps = {
   projectId: string; executionId: string; sessionId: string; workspaceVersion?: number;
-  canSync?: boolean; disabled?: boolean; isActive?: () => boolean;
+  canSync?: boolean; disabled?: boolean; isActive?: () => boolean; canSubmit?: () => boolean;
   onSaved: (ack: DeliveryCommandAck) => void;
   onObserved?: () => Promise<void>;
   onUnresolvedChange?: (value: boolean) => void;
 };
-/** Sync may create a runtime plan. A failed response cannot prove that no plan exists. */
+/** Synchronization observes an existing plan; unknown HTTP outcomes retain their original request. */
 export function ExecutionSyncControl({ projectId, executionId, sessionId, workspaceVersion,
-  canSync = false, disabled = false, isActive, onSaved, onObserved, onUnresolvedChange }: ExecutionSyncControlProps) {
+  canSync = false, disabled = false, isActive, canSubmit, onSaved, onObserved, onUnresolvedChange }: ExecutionSyncControlProps) {
   const { t } = useTranslation(), tr = (key: string) => t(`deliveryExecutionRuntime.${key}`);
   const origin = useRef(projectSessionKey()), mounted = useRef(true), pending = useRef(false), generation = useRef(0);
   const epoch = generation.current, identity = JSON.stringify([projectId, executionId, sessionId]);
-  const active = useRef({ identity, canSync, disabled, isActive, workspaceVersion });
-  active.current = { identity, canSync, disabled, isActive, workspaceVersion };
+  const active = useRef({ identity, canSync, disabled, isActive, canSubmit, workspaceVersion });
+  active.current = { identity, canSync, disabled, isActive, canSubmit, workspaceVersion };
   const [error, setError] = useState("");
   const command = useExecutionDispatchCommand(projectId, "execution.sync", executionId, sessionId, onUnresolvedChange);
   const state = command.state;
@@ -35,7 +35,7 @@ export function ExecutionSyncControl({ projectId, executionId, sessionId, worksp
   };
   const submit = async (replay = false) => {
     const latest = active.current;
-    if (!current() || pending.current || !replay && (epoch !== generation.current || latest.disabled || !latest.canSync ||
+    if (!current() || pending.current || !replay && (epoch !== generation.current || latest.disabled || !latest.canSync || latest.canSubmit?.() === false ||
       !Number.isSafeInteger(latest.workspaceVersion) || Number(latest.workspaceVersion) < 0 || command.snapshot().phase !== "idle")) return;
     if (replay && command.snapshot().phase !== "unknown") return;
     pending.current = true; setError("");
@@ -60,7 +60,12 @@ export function ExecutionSyncControl({ projectId, executionId, sessionId, worksp
         pending.current = true;
         try { await complete(command.snapshot().ack); } finally { pending.current = false; }
       }}>{tr("finishConfirmed")}</Button>} />}
-    {state.phase === "refused" && <Alert type="warning" title={tr("operationRefused")} />}
+    {state.phase === "refused" && <Alert type="warning" title={tr("syncRefused")}
+      action={<Button size="small" data-action="dismiss-sync-refused" onClick={() => {
+        if (!current() || pending.current || command.snapshot().phase !== "refused") return;
+        command.reset();
+        if (command.snapshot().phase === "idle") { generation.current++; setError(""); }
+      }}>{tr("dismissSyncRefusal")}</Button>} />}
     {(state.error || error) && <Alert role="alert" type={state.phase === "succeeded" ? "info" : "error"}
       title={tr(state.error === "retainedOriginalInvalid" || state.error === "retainedOriginalUnavailable" ? state.error : "actionFailed")} description={error || state.error} />}
     {retained && <p className="runtime-help">{tr("syncConsequence")}</p>}

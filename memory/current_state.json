@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-20T14:01:01.291478+00:00",
+  "updated_at": "2026-10-20T15:23:19.772015+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-20T14:01:01.291478+00:00",
-    "status": "execution_dispatch_recovery_source_stage_runtime_pending",
+    "updated_at": "2026-10-20T15:23:19.772015+00:00",
+    "status": "durable_execution_handoff_source_stage_runtime_pending",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/execution-dispatch-recovery/",
-    "verification_status": "current_scope_interaction_project_agent_and_dispatch_runtime_unverified",
-    "next_step": "positive_reconciliation_protocol_task_pending_locator_review_handoff_a2a_ops_and_full_validation",
+    "evidence": ".sop-runtime/delivery-evidence/durable-execution-handoff/",
+    "verification_status": "current_source_runtime_types_build_and_browser_unverified",
+    "next_step": "runtime_validation_when_window_recovers_then_durable_control_ack_reconciliation_and_full_lifecycle_gaps",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -194,7 +194,8 @@
     "interaction_design": "docs/INTERACTION_USABILITY.md",
     "project_editor_design": "docs/PROJECT_EDITOR_USABILITY.md",
     "canonical_agent_entry_design": "docs/CANONICAL_AGENT_ENTRY_DESIGN.md",
-    "execution_dispatch_recovery_design": "docs/EXECUTION_DISPATCH_RECOVERY_DESIGN.md"
+    "execution_dispatch_recovery_design": "docs/EXECUTION_DISPATCH_RECOVERY_DESIGN.md",
+    "durable_execution_handoff_design": "docs/DURABLE_EXECUTION_HANDOFF_DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -649,7 +650,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-execution-dispatch-recovery源码阶段：队列/同步固定原请求、真实回执、任务详情及读取失败恢复、同步/运行互斥。测试、类型、构建和视觉按用户要求后置；跨存储对账、冷任务定位及完整全流程目标继续。",
+  "current": "T-durable-execution-handoff源码阶段：耐久后台交接、Core原子计划与单向关闭、同步只读已有运行、授权任务定位及唯一恢复宿主。源码已冻结并独立审查，运行测试/类型/构建/视觉按用户要求后置；原取消ACK对账及完整全流程目标继续。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -705,5 +706,22 @@
     "next_step": "positive_reconciliation_protocol_task_pending_locator_review_handoff_a2a_ops_and_full_validation",
     "cross_store_reconciliation_implemented": false,
     "full_lifecycle_complete": false
+  },
+  "durable_execution_handoff": {
+    "task_id": "T-durable-execution-handoff",
+    "updated_at": "2026-10-20T15:23:19.772015+00:00",
+    "status": "source_stage_frozen_reviewed_runtime_validation_deferred_by_user",
+    "design": "docs/DURABLE_EXECUTION_HANDOFF_DESIGN.md",
+    "record": "memory/durable-execution-handoff-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/durable-execution-handoff/",
+    "base_commit": "3906c1f290610194d69d708d549ead75d8eabf10",
+    "runtime_tests_executed_this_stage": false,
+    "typecheck_build_browser_executed_this_stage": false,
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "full_lifecycle_complete": false,
+    "next_step": "runtime_validation_when_window_recovers_then_durable_control_ack_reconciliation_and_full_lifecycle_gaps",
+    "new_dispatch_handoff_source_implemented": true,
+    "cancel_command_ack_reconciliation_complete": false,
+    "core_global_runtime_lock_graph_verified": false
   }
 }

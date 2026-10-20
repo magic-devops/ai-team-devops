@@ -49,6 +49,7 @@ import {
 import { ExecutionQueueRecovery } from "./ExecutionQueueRecovery";
 import { executionQueueOriginal, validExecutionQueuePreview, type ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
 import { projectSessionKey } from "@/lib/projectPortfolio";
+import { executionHandoffCopy } from "@/i18n/execution-handoff";
 
 export function ExecutionPlanEditor({
   initial,
@@ -75,7 +76,8 @@ export function ExecutionPlanEditor({
   canSubmit?: () => boolean;
   onUnresolvedChange?: (value: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const handoffCopy = executionHandoffCopy(i18n.language);
   const tr = (key: string) => t(`deliveryRuntime.${key}`);
   const tm = (key: string) => t(`deliveryTeamRuntime.${key}`);
   const qc = useQueryClient();
@@ -356,7 +358,7 @@ export function ExecutionPlanEditor({
       >
         {commandLocked ? <ExecutionQueueRecovery command={queueCommand} projectId={initial.projectId} taskId={initial.taskId}
           isActive={isActive} onSaved={onSaved} onResolved={() => { confirmed.current = true; setFinished(true); notify.current?.(false); onClose(); }} /> : finished ?
-          <Alert type="success" title={tr("queueConfirmed")} description={error ? tr(error) : tr("planReady")} /> : <>
+          <Alert type="success" title={handoffCopy.received} description={error ? tr(error) : handoffCopy.receivedHint} /> : <>
         <p className="runtime-help">{tr("selectFirst")}</p>
         {queueCommand.state.error && <Alert type="error" role="alert" title={queueCommand.state.error === "retainedOriginalUnavailable" ? tr("queueStorageUnavailable") : queueCommand.state.error === "retainedOriginalInvalid" ? tr("queueOriginalUnavailable") : queueCommand.state.error} />}
         {error && (
@@ -623,7 +625,7 @@ export function ExecutionPlanEditor({
         <p className="runtime-help">{tr("previewRequired")}</p>
         {draft.preview && (
           <section className="runtime-plan-preview">
-            <Alert type="success" title={tr("planReady")} />
+            <Alert type="info" title={handoffCopy.previewReady} />
             <strong>
               {tr("pinned")} ·{" "}
               {draft.preview.snapshot.requirement

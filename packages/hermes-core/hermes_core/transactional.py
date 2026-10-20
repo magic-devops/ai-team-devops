@@ -10,12 +10,15 @@ from typing import Any, Callable
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
+    Boolean,
     Column,
     Integer,
     MetaData,
     String,
     Table,
     Text,
+    UniqueConstraint,
     and_,
     create_engine,
     event,
@@ -59,6 +62,17 @@ class Store:
             Column("version", Integer, nullable=False), Column("data", JSON, nullable=False), Column("created_at", String(40), nullable=False))
         self.receipts = Table("hermes_receipts", meta, Column("id", String(64), primary_key=True),
             Column("request_hash", String(64), nullable=False), Column("result", JSON, nullable=False), Column("created_at", String(40), nullable=False))
+        # Internal protocol state: deliberately absent from the editable entity API.
+        self.managed_handoffs = Table("hermes_managed_handoffs", meta,
+            Column("id", String(64), primary_key=True),
+            Column("tenant", String(128), nullable=False), Column("business", String(128), nullable=False),
+            Column("workspace", String(64), nullable=False), Column("actor", String(128), nullable=False),
+            Column("project_id", String(64), nullable=False), Column("execution_id", String(64), nullable=False),
+            Column("request_hash", String(64), nullable=False), Column("request", JSON, nullable=False),
+            Column("fence", BigInteger, nullable=False), Column("closed", Boolean, nullable=False),
+            Column("result", JSON), Column("close_receipt_id", String(64)),
+            Column("created_at", String(40), nullable=False), Column("updated_at", String(40), nullable=False),
+            UniqueConstraint("tenant", "business", "workspace", "execution_id", name="uq_hermes_handoff_execution"))
         meta.create_all(self.engine)
 
     @contextmanager
@@ -123,17 +137,22 @@ class Store:
             return self._receipt(conn, principal, workspace, operation, key, request)[1]
 
     def create(self, principal: Principal, workspace: str, kind: str, data: dict, key: str, trace: str, *, status="active", entity_id: str | None = None, operation: str = "", request: dict | None = None):
-        receipt_request = data if request is None else request
         with self.transaction() as conn:
-            receipt_id, cached = self._receipt(conn, principal, workspace, operation or "create:" + kind, key, receipt_request)
-            if cached is not None:
-                return cached
-            item = dict(id=entity_id or uuid.uuid4().hex, kind=kind, tenant=principal.tenant, business=principal.business,
-                workspace=workspace, version=1, status=status, data=data, created_at=now(), updated_at=now())
-            conn.execute(insert(self.entities).values(**item))
-            self._record(conn, principal, workspace, item, kind + ".created", trace, {"status": status})
-            conn.execute(insert(self.receipts).values(id=receipt_id, request_hash=digest(receipt_request), result=item, created_at=now()))
-            return item
+            return self._create(conn, principal, workspace, kind, data, key, trace, status=status,
+                                entity_id=entity_id, operation=operation, request=request)
+
+    def _create(self, conn, principal: Principal, workspace: str, kind: str, data: dict, key: str, trace: str, *, status="active", entity_id: str | None = None, operation: str = "", request: dict | None = None):
+        """Create in the caller's transaction; never opens or commits a nested transaction."""
+        receipt_request = data if request is None else request
+        receipt_id, cached = self._receipt(conn, principal, workspace, operation or "create:" + kind, key, receipt_request)
+        if cached is not None:
+            return cached
+        item = dict(id=entity_id or uuid.uuid4().hex, kind=kind, tenant=principal.tenant, business=principal.business,
+            workspace=workspace, version=1, status=status, data=data, created_at=now(), updated_at=now())
+        conn.execute(insert(self.entities).values(**item))
+        self._record(conn, principal, workspace, item, kind + ".created", trace, {"status": status})
+        conn.execute(insert(self.receipts).values(id=receipt_id, request_hash=digest(receipt_request), result=item, created_at=now()))
+        return item
 
     def mutate(self, principal: Principal, workspace: str, kind: str, entity_id: str, *, operation: str, key: str,
                request: dict, trace: str, expected: int | None, transform: Callable[[dict], dict],

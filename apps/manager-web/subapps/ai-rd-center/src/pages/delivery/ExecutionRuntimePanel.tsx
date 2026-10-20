@@ -20,6 +20,7 @@ type Props = {
   paused: boolean;
   disabled: boolean;
   isActive?: () => boolean;
+  canSubmit?: () => boolean;
   onSaved: (data: DeliveryCommandAck) => void;
   onUnresolvedChange: (value: boolean) => void;
   initialNodeId?: string;
@@ -35,6 +36,7 @@ export function ExecutionRuntimePanel({
   paused,
   disabled,
   isActive,
+  canSubmit,
   onSaved,
   onUnresolvedChange,
   initialNodeId,
@@ -122,6 +124,7 @@ export function ExecutionRuntimePanel({
         executionId={executionId}
         workspaceId={workspaceId}
         isActive={isActive}
+        canSubmit={canSubmit}
         sessionId={sessionId}
         runtime={error ? undefined : runtime}
         disabled={disabled || Boolean(error) || !runtime}

@@ -237,21 +237,21 @@ def test_handed_off_planned_run_survives_rebinding_and_preserves_test_and_human_
 
 
 def test_receipt_recovery_precedes_binding_revalidation_after_manager_rollback(bound, monkeypatch):
-    from sop_manager.routers import delivery_execution
+    from sop_manager.routers import delivery_execution_handoff as service
 
     bridge, _, _ = bound
     client, _, store, principal, ws, _, _ = bridge
     entry = queued(bound)
-    original = delivery_execution._observe
+    original = service.project_handoff
 
     def interrupted(*args, **kwargs):
         raise HTTPException(503, "Manager commit interrupted after runtime handoff")
 
-    monkeypatch.setattr(delivery_execution, "_observe", interrupted)
-    assert command(client, "execution.sync", {"id": entry["id"]}).status_code == 503
+    monkeypatch.setattr(service, "project_handoff", interrupted)
+    assert service.handoff_once(client.app, bridge[1]) == 0
     assert len(store.list(principal, ws["id"], "runs")) == 1
     revise_binding(bound, generation=2, unbound=True)
-    monkeypatch.setattr(delivery_execution, "_observe", original)
+    monkeypatch.setattr(service, "project_handoff", original)
     before = all_counts(bridge)
     observation = client.get(f"/api/v1/delivery/executions/{entry['id']}/observations")
     assert observation.status_code == 200, observation.text

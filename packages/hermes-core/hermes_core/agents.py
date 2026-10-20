@@ -107,12 +107,15 @@ class Agents:
 
     def bindings(self, conn, principal, workspace, nodes):
         bindings = {}
-        for node in nodes:
-            if node.kind != "agent":
-                continue
+        agent_nodes = [node for node in nodes if node.kind == "agent"]
+        for node in agent_nodes:
             if not node.agent_id or not node.prompt.strip() or node.argv:
                 raise CoreError("invalid_agent_node", "Agent nodes require an agent and prompt, without argv", 422)
-            agent = self.store._get(conn, principal, workspace, "agents", node.agent_id)
+        # Configuration lock order is independent from executable/role order.
+        agents = {identity: self.store._get(conn, principal, workspace, "agents", identity)
+                  for identity in sorted({node.agent_id for node in agent_nodes})}
+        for node in agent_nodes:
+            agent = agents[node.agent_id]
             if agent["status"] != "active":
                 raise CoreError("agent_inactive", "The selected agent is archived", 409)
             profile = AgentProfile.model_validate(agent["data"])
@@ -121,16 +124,24 @@ class Agents:
         return bindings
 
     def dispatch(self, principal, workspace, task_id, body, trace, delivery):
+        with self.store.transaction() as conn:
+            return self.dispatch_in_transaction(conn, principal, workspace, task_id, body, trace, delivery)
+
+    def dispatch_in_transaction(self, conn, principal, workspace, task_id, body, trace, delivery):
+        """Resolve pinned profiles and create the plan in the caller's transaction."""
         resource, target = ("agents", body.agent_id) if body.agent_id else ("squads", body.squad_id)
         operation = "task.agent-dispatch:" + task_id
         if not body.dry_run:
-            cached = self.store.receipt(principal, workspace, operation, body.idempotency_key, body.model_dump())
+            cached = self.store._receipt(conn, principal, workspace, operation, body.idempotency_key, body.model_dump())[1]
             if cached is not None:
                 return cached
-        definition = self.store.get(principal, workspace, resource, target)
+        # All dispatch variants share the workspace lock before Task/profile
+        # locks, including standalone Agent vs Squad calls for the same Task.
+        self.store._get(conn, principal, "", "workspaces", workspace)
+        task = self.store._get(conn, principal, workspace, "tasks", task_id)
+        definition = self.store._get(conn, principal, workspace, resource, target)
         if definition["version"] != body.target_version or definition["status"] != "active":
             raise CoreError("configuration_changed", "Agent or squad changed; reload before dispatch", 409)
-        task = self.store.get(principal, workspace, "tasks", task_id)
         context = json.dumps({"task": task["data"].get("title"),
                               "description": task["data"].get("description", ""),
                               "acceptance_criteria": task["data"].get("acceptance_criteria", ""),
@@ -138,9 +149,11 @@ class Agents:
         members = ([{"agent_id": target, "role": "implementer", "instructions": "",
                      "agent_version": definition["version"]}] if resource == "agents"
                    else sorted(definition["data"]["members"], key=lambda member: {"leader": 0, "implementer": 1, "reviewer": 2}[member["role"]]))
+        agents = {identity: self.store._get(conn, principal, workspace, "agents", identity)
+                  for identity in sorted({member["agent_id"] for member in members})}
         nodes = []
         for index, member in enumerate(members):
-            agent = self.store.get(principal, workspace, "agents", member["agent_id"])
+            agent = agents[member["agent_id"]]
             if agent["version"] != member["agent_version"] or agent["status"] != "active":
                 raise CoreError("configuration_changed", "Squad member changed; save the squad again", 409)
             prompt = f"Role: {member['role']}\n{member['instructions']}\nTask context:\n{context}"
@@ -157,7 +170,7 @@ class Agents:
         plan = TaskDispatch(**body.model_dump(exclude={"agent_id", "squad_id", "target_version", "prompt", "test_nodes"}), nodes=nodes)
         source = {"resource": resource, "id": target, "version": definition["version"],
                   "members": members, "request": body.model_dump()}
-        return delivery.dispatch(principal, workspace, task_id, plan, trace, agent_source=source)
+        return delivery.dispatch_in_transaction(conn, principal, workspace, task_id, plan, trace, agent_source=source)
 
 
 def single_agent_nodes(agent: dict, task_data: dict, test_nodes: list[Node], prompt: str = "") -> list[Node]:
@@ -171,8 +184,10 @@ def single_agent_nodes(agent: dict, task_data: dict, test_nodes: list[Node], pro
 
 
 def validate_bound_profiles(store, conn, principal, workspace, bindings):
+    agents = {identity: store._get(conn, principal, workspace, "agents", identity)
+              for identity in sorted({binding["agent_id"] for binding in bindings.values()})}
     for binding in bindings.values():
-        agent = store._get(conn, principal, workspace, "agents", binding["agent_id"])
+        agent = agents[binding["agent_id"]]
         if agent["status"] != "active" or agent["version"] != binding["version"]:
             raise CoreError("configuration_changed", "Agent changed after the execution plan was reviewed", 409)
 

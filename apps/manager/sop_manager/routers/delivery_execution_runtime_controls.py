@@ -59,7 +59,9 @@ def _transition_cancel(db, project, state, entry, run):
         entry["stop_pending"] = False
         entry["stop_snapshot"] = {"id": "", "state": "not_started", "reason": "No runtime dispatch exists.",
                                   "node_id": None, "attempt": 1, "requested_at": entry["cancelled_at"],
-                                  "confirmed_at": None, "evidence": "No external dispatch receipt was found."}
+                                  "confirmed_at": None, "evidence": (
+                                      "The Core handoff gate is durably closed with no runtime plan."
+                                      if entry.get("handoff_id") else "No external dispatch receipt was found.")}
     if current:
         VerificationContext(db, project, state).tasks[entry["task_id"]].status = "blocked"
 
@@ -109,6 +111,10 @@ def apply_control(db, project, user, state, action, body, store, execution, *, c
         capability = _selected_capability(controls, action, body.decision)
         if cached is None:
             _validate_fixed_preview(db, project, state, entry, workspace, run, approval, controls, body, action, capability)
+        if action == "execution.cancel" and run is None and entry.get("handoff_id"):
+            from .delivery_execution_handoff import close_pending_handoff
+
+            close_pending_handoff(db, project, entry, store, execution)
         # Recover the existing Core receipt before checking the post-effect run status.
         # Current authority is still required above; receipt recovery never authorizes new execution.
         resume = None

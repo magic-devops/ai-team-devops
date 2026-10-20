@@ -41,6 +41,7 @@ from .delivery_execution_contract import (
     ExecutionQueue,
     ExecutionTargetsResponse,
 )
+from .delivery_execution_handoff_contract import ExecutionHandoffDetail, TaskHandoffPage
 from .delivery_execution_runtime_contract import (
     ExecutionControlPreviewInput,
     ExecutionControlPreviewResponse,
@@ -1401,6 +1402,36 @@ def execution_observations(
         )
     except CoreError as exc:
         raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc
+
+
+@router.get("/executions/{execution_id}/handoff", response_model=ExecutionHandoffDetail)
+def execution_handoff(
+    execution_id: Annotated[str, Path(min_length=1, max_length=64)],
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_execution_handoff_query import handoff_detail
+
+    project = _progress_project(db, user, project_id)
+    return handoff_detail(db, project, user, execution_id, getattr(request.app.state, "hermes_store", None))
+
+
+@router.get("/tasks/{task_id}/execution-handoffs", response_model=TaskHandoffPage)
+def task_execution_handoffs(
+    task_id: Annotated[str, Path(min_length=1, max_length=64)],
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str, Query(max_length=4000)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_execution_handoff_query import task_handoffs
+
+    project = _progress_project(db, user, project_id)
+    return task_handoffs(db, project, user, task_id, getattr(request.app.state, "hermes_store", None), limit=limit, cursor=cursor)
 
 
 def _runtime_entry(db, project, execution_id):

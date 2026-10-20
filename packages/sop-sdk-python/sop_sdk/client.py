@@ -571,6 +571,19 @@ class ManagerClient:
         """Explicit authorized derived-index repair; never used as a hidden GET fallback."""
         return self._request("POST", "/api/v1/delivery/query/rebuild")
 
+    def delivery_execution_handoff(self, execution_id: str) -> dict[str, Any]:
+        """Read the canonical accepted handoff without dispatching or starting work."""
+        return self._request("GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}/handoff")
+
+    def delivery_task_handoffs(self, task_id: str, *, limit: int = 20, cursor: str = "") -> dict[str, Any]:
+        """Read one authorized task history page; never follow the next cursor automatically."""
+        if not isinstance(cursor, str) or any(127 <= ord(char) <= 159 for char in cursor):
+            raise ValueError("invalid opaque handoff cursor")
+        return self._request(
+            "GET", f"/api/v1/delivery/tasks/{_resource_segment(task_id)}/execution-handoffs",
+            params=_delivery_query_params(limit=limit, cursor=cursor),
+        )
+
     def delivery_execution_runtime(self, execution_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}/runtime")
 

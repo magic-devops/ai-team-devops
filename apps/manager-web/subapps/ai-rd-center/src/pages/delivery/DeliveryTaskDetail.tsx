@@ -29,6 +29,7 @@ import { useExecutionExitGuard } from "@/lib/executionExitGuard";
 import { executionDispatchRecoveryPending, useExecutionDispatchCommand, type ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
 import { ExecutionQueueRecovery } from "./ExecutionQueueRecovery";
 import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
+import { TaskExecutionHandoffRecovery } from "./TaskExecutionHandoffRecovery";
 
 type TaskContentProps = {
   detail?: DeliveryTaskData;
@@ -221,6 +222,8 @@ export function DeliveryTaskDetail({
   expectedRequirementId,
   queryGeneration,
   onUnresolvedChange,
+  onRecoveryIdentity,
+  isActive: parentIsActive,
 }: {
   projectId: string;
   sessionId: string;
@@ -228,13 +231,16 @@ export function DeliveryTaskDetail({
   expectedRequirementId?: string;
   queryGeneration?: number | null;
   onUnresolvedChange?: (value: boolean) => void;
+  onRecoveryIdentity?: (executionId: string) => void;
+  isActive?: () => boolean;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const origin = useRef(projectSessionKey());
   const mounted = useRef(true), identity = `${projectId}:${sessionId}:${taskId}`, activeIdentity = useRef(identity);
+  const parentAccess = useRef(parentIsActive); parentAccess.current = parentIsActive;
   activeIdentity.current = identity;
-  const isActive = () => mounted.current && origin.current === projectSessionKey() && activeIdentity.current === identity;
+  const isActive = () => mounted.current && origin.current === projectSessionKey() && activeIdentity.current === identity && parentAccess.current?.() !== false;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const executionExit = useExecutionExitGuard();
   const [pinnedWorkspace, setPinnedWorkspace] = useState<DeliveryTaskData>();
@@ -317,6 +323,11 @@ export function DeliveryTaskDetail({
     ])
       void qc.invalidateQueries({ queryKey: [name] });
   };
+  const rememberRecovery = (executionId: string) => {
+    if (!isActive() || !executionOperationPending(projectId, executionId)) return;
+    knownExecution.current = executionId;
+    onRecoveryIdentity?.(executionId);
+  };
   const intent = useRef<{ signature: string; key: string }>();
   async function command(
     action: DeliveryAction,
@@ -361,6 +372,13 @@ export function DeliveryTaskDetail({
   return (
     <div className="delivery-task-detail">
       <ExecutionQueueRecovery command={queueCommand} projectId={projectId} taskId={taskId} onSaved={saved} isActive={isActive} />
+      {query.error && !queueLocked && !displayedOperationRecovery && !(knownExecution.current && executionOperationPending(projectId, knownExecution.current)) && <TaskExecutionHandoffRecovery
+        key={`${projectId}:${sessionId}:${taskId}`} projectId={projectId} taskId={taskId} sessionId={sessionId} isActive={() => isActive() && taskAccess.current.error}
+        onLocated={(executionId) => {
+          if (!isActive() || !taskAccess.current.error || !["idle", "refused"].includes(queueCommand.snapshot().phase) || executionDispatchRecoveryPending(projectId, "execution.queue", taskId) || !executionOperationPending(projectId, executionId)) return;
+          rememberRecovery(executionId); operationRecoveryLive.current = executionId; setOperationRecoveryId(executionId);
+          onUnresolvedChange?.(executionExit.setPending(`execution:${taskId}`, true));
+        }} />}
       {displayedOperationRecovery && <ExecutionOperationRecovery key={`${projectId}:${sessionId}:${displayedOperationRecovery}`} projectId={projectId} executionId={displayedOperationRecovery} sessionId={sessionId}
         isActive={() => isActive() && operationRecoveryLive.current === displayedOperationRecovery} onSaved={saved}
         onUnresolvedChange={(value) => {
@@ -431,7 +449,7 @@ export function DeliveryTaskDetail({
         queueCommand={queueCommand}
         isActive={() => isActive() && !writePending.current}
         canSubmitQueue={canUseQueueEditor}
-        onExecutionRecovery={(executionId) => { if (isActive()) knownExecution.current = executionId; }}
+        onExecutionRecovery={rememberRecovery}
         onEditingChange={editingChanged}
         onCommand={command}
         onUnresolvedChange={(value) => {

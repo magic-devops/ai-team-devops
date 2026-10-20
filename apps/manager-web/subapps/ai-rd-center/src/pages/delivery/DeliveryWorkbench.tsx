@@ -122,6 +122,9 @@ import { ProjectContextGate } from "@/components/ProjectContextGate";
 import { preserveProjectContext } from "@/lib/projectPortfolioRoute";
 import { DeliveryExecutionInspector } from "./DeliveryExecutionInspector";
 import { ExecutionRouteRecoveryGate } from "./ExecutionRouteRecoveryGate";
+import { TaskExecutionHandoffRecovery, TaskQueueOriginalRecovery } from "./TaskExecutionHandoffRecovery";
+import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
+import { executionDispatchRecoveryPending } from "@/lib/executionDispatchCommand";
 import { useExecutionExitGuard } from "@/lib/executionExitGuard";
 import { parseExecutionSelection } from "@/lib/executionRuntime";
 import { DeliveryReleaseWorkbench } from "./DeliveryReleaseWorkbench";
@@ -203,6 +206,12 @@ function ProjectDelivery() {
   const [selectedTaskId, setSelectedTaskId] = useState(
     () => parseDeliveryRoute(location.hash).task,
   );
+  type LocatedRecovery = { kind: "queue" | "execution"; taskId: string; executionId: string };
+  const [locatedRecovery, setLocatedRecovery] = useState<LocatedRecovery | null>(null);
+  const locatedRecoveryLive = useRef("");
+  const contextReadAccess = useRef({ failed: false });
+  const knownTaskRecovery = useRef<{ taskId: string; executionId: string }>();
+  const taskRouteLive = useRef(selectedTaskId); taskRouteLive.current = selectedTaskId;
   const requestedTaskId =
     !selectedId && ["team", "timeline"].includes(view) ? selectedTaskId : "";
   const taskInspector = useDrawerIdentity(
@@ -433,6 +442,43 @@ function ProjectDelivery() {
     void qc.invalidateQueries({
       queryKey: ["delivery-inbox", projectId, sessionId],
     });
+  };
+  const contextFailed = Boolean(query.error) || query.isPending || !data || data.query_state.status !== "ready";
+  contextReadAccess.current = { failed: contextFailed };
+  const recoveryKey = (value: LocatedRecovery) => JSON.stringify([value.kind, value.taskId, value.executionId]);
+  let failedRecovery: LocatedRecovery | null = null;
+  if (contextFailed && selectedTaskId && executionDispatchRecoveryPending(projectId, "execution.queue", selectedTaskId))
+    failedRecovery = { kind: "queue", taskId: selectedTaskId, executionId: "" };
+  else if (contextFailed && selectedExecutionId && executionOperationPending(projectId, selectedExecutionId))
+    failedRecovery = { kind: "execution", taskId: selectedTaskId, executionId: selectedExecutionId };
+  else if (contextFailed && knownTaskRecovery.current?.taskId === selectedTaskId && executionOperationPending(projectId, knownTaskRecovery.current.executionId))
+    failedRecovery = { kind: "execution", ...knownTaskRecovery.current };
+  const displayedRecovery = locatedRecovery || failedRecovery;
+  locatedRecoveryLive.current = displayedRecovery ? recoveryKey(displayedRecovery) : "";
+  useEffect(() => {
+    if (failedRecovery && !locatedRecovery) { setLocatedRecovery(failedRecovery); executionPending("task-locator-recovery", true); }
+  }, [failedRecovery?.kind, failedRecovery?.taskId, failedRecovery?.executionId, locatedRecovery]);
+  const rememberTaskRecovery = (taskId: string, executionId: string) => {
+    if (originScope.current !== sessionSnapshot() || taskRouteLive.current !== taskId || !executionOperationPending(projectId, executionId)) return;
+    knownTaskRecovery.current = { taskId, executionId };
+  };
+  const recoveryPending = (value: boolean) => {
+    if (!displayedRecovery || originScope.current !== sessionSnapshot() || locatedRecoveryLive.current !== recoveryKey(displayedRecovery)) return;
+    const retained = displayedRecovery.kind === "queue" ? executionDispatchRecoveryPending(projectId, "execution.queue", displayedRecovery.taskId) : executionOperationPending(projectId, displayedRecovery.executionId);
+    if (!value && !retained) {
+      if (displayedRecovery.kind === "execution") executionExit.setPending(`execution:${displayedRecovery.executionId}`, false);
+      const queueRemains = displayedRecovery.taskId && executionDispatchRecoveryPending(projectId, "execution.queue", displayedRecovery.taskId);
+      const known = knownTaskRecovery.current;
+      const next: LocatedRecovery | null = queueRemains ? { kind: "queue", taskId: displayedRecovery.taskId, executionId: "" } :
+        known && executionOperationPending(projectId, known.executionId) ? { kind: "execution", ...known } :
+        selectedExecutionId && executionOperationPending(projectId, selectedExecutionId) ? { kind: "execution", taskId: displayedRecovery.taskId, executionId: selectedExecutionId } : null;
+      if (next) {
+        locatedRecoveryLive.current = recoveryKey(next); setLocatedRecovery(next); executionPending("task-locator-recovery", true); return;
+      }
+      executionExit.setPending(`task:${displayedRecovery.taskId}`, false);
+      knownTaskRecovery.current = undefined; locatedRecoveryLive.current = ""; setLocatedRecovery(null);
+    }
+    executionPending("task-locator-recovery", value || retained);
   };
   const openTarget = (target: DeliveryInboxTarget) => {
     if (!executionExit.canNavigate()) return;
@@ -936,25 +982,44 @@ function ProjectDelivery() {
       {independentHistory}
     </Drawer>
   ) : null;
+  const taskHandoffFallback = displayedRecovery ? displayedRecovery.kind === "queue" ?
+    <TaskQueueOriginalRecovery key={`${projectId}:${sessionId}:queue:${displayedRecovery.taskId}`} projectId={projectId} taskId={displayedRecovery.taskId} sessionId={sessionId}
+      isActive={() => originScope.current === sessionSnapshot() && locatedRecoveryLive.current === recoveryKey(displayedRecovery)} onPending={recoveryPending} onSaved={saveWorkspace} /> :
+    <ExecutionOperationRecovery key={`${projectId}:${sessionId}:${displayedRecovery.executionId}`} projectId={projectId} executionId={displayedRecovery.executionId} sessionId={sessionId}
+      isActive={() => originScope.current === sessionSnapshot() && locatedRecoveryLive.current === recoveryKey(displayedRecovery)} onSaved={saveWorkspace} onUnresolvedChange={recoveryPending} /> :
+    contextFailed && selectedTaskId && !selectedExecutionId ? <TaskExecutionHandoffRecovery key={`${projectId}:${sessionId}:${selectedTaskId}`} projectId={projectId} taskId={selectedTaskId} sessionId={sessionId}
+      isActive={() => originScope.current === sessionSnapshot() && contextReadAccess.current.failed && taskRouteLive.current === selectedTaskId && !locatedRecoveryLive.current}
+      onLocated={(executionId) => {
+        if (originScope.current !== sessionSnapshot() || !contextReadAccess.current.failed || taskRouteLive.current !== selectedTaskId || locatedRecoveryLive.current || executionDispatchRecoveryPending(projectId, "execution.queue", selectedTaskId) || !executionOperationPending(projectId, executionId)) return;
+        const next: LocatedRecovery = { kind: "execution", taskId: selectedTaskId, executionId };
+        knownTaskRecovery.current = { taskId: selectedTaskId, executionId }; locatedRecoveryLive.current = recoveryKey(next); setLocatedRecovery(next);
+        executionPending("task-locator-recovery", true);
+      }} /> : null;
   if (!projectId || !getToken())
     return (
       <Empty description={tr("noProject")}>
         <Button href="#/projects">{tr("chooseProject")}</Button>
       </Empty>
     );
+  if (displayedRecovery) return <section className="delivery-workbench space-y-4">
+    {taskHandoffFallback}
+    {query.error && <Alert type="warning" title={t("deliveryQuery.readFailed")} description={query.error.message} />}
+  </section>;
   if (query.isPending)
     return (
       <>
         {requirementBack}
+        {taskHandoffFallback}
         <Skeleton active paragraph={{ rows: 12 }} />
         {requirementRecovery}
         {historyFallback}
       </>
     );
-  if (!data)
+  if (query.error || !data)
     return (
       <>
         {requirementBack}
+        {taskHandoffFallback}
         <Alert
           type="error"
           showIcon
@@ -978,6 +1043,7 @@ function ProjectDelivery() {
     return (
       <>
         {requirementBack}
+        {taskHandoffFallback}
         <Alert
           type="warning"
           showIcon
@@ -1410,6 +1476,8 @@ function ProjectDelivery() {
             onUnresolvedChange={(value) =>
               executionPending(`task:${taskInspector.displayId}`, value)
             }
+            onRecoveryIdentity={(executionId) => rememberTaskRecovery(taskInspector.displayId, executionId)}
+            isActive={() => originScope.current === sessionSnapshot() && !contextReadAccess.current.failed && !locatedRecoveryLive.current}
           />
         )}
       </Drawer>
@@ -1418,6 +1486,7 @@ function ProjectDelivery() {
         sessionId={sessionId}
         workspace={data}
         onSaved={saveWorkspace}
+        isActive={() => originScope.current === sessionSnapshot() && !contextReadAccess.current.failed && !locatedRecoveryLive.current}
         nodeId={executionSelection.nodeId}
         attempt={executionSelection.attempt}
         stream={executionSelection.stream}
@@ -1653,6 +1722,8 @@ function ProjectDelivery() {
                         onUnresolvedChange={(value) =>
                           executionPending(`task:${selectedTaskId}`, value)
                         }
+                        onRecoveryIdentity={(executionId) => rememberTaskRecovery(selectedTaskId, executionId)}
+                        isActive={() => originScope.current === sessionSnapshot() && !contextReadAccess.current.failed && !locatedRecoveryLive.current}
                       />
                     </>
                   ),

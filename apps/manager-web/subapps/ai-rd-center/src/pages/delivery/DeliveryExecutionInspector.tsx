@@ -23,6 +23,7 @@ export function DeliveryExecutionInspector({
   nodeId,
   attempt,
   stream,
+  isActive,
 }: {
   executionId: string;
   sessionId: string;
@@ -37,13 +38,16 @@ export function DeliveryExecutionInspector({
   nodeId?: string;
   attempt?: number;
   stream?: string;
+  isActive?: () => boolean;
 }) {
   const { t } = useTranslation();
   const [locked, setLocked] = useState(false);
   const pending = useRef(false), requested = useRef(executionId);
+  const parentActive = useRef(isActive); parentActive.current = isActive;
   requested.current = executionId;
   const [recoveryId, setRecoveryId] = useState(() => executionOperationPending(workspace.project.id, executionId) ? executionId : "");
   const unresolved = (value: boolean) => {
+    if (parentActive.current?.() === false) return;
     const retained = executionOperationPending(workspace.project.id, identity.displayId);
     pending.current = value || retained;
     setLocked(value || retained);
@@ -54,6 +58,7 @@ export function DeliveryExecutionInspector({
     `${workspace.project.id}:${sessionId}`,
     executionId,
   );
+  const current = () => parentActive.current?.() !== false && Boolean(requested.current) && requested.current === identity.displayId;
   useEffect(() => {
     setRecoveryId(executionOperationPending(workspace.project.id, identity.displayId) ? identity.displayId : "");
   }, [workspace.project.id, sessionId, identity.displayId]);
@@ -66,7 +71,7 @@ export function DeliveryExecutionInspector({
     ],
     queryFn: ({ signal }) =>
       fetchExecutionDetail(workspace.project.id, identity.displayId, signal),
-    enabled: Boolean(identity.displayId) && !locked,
+    enabled: Boolean(identity.displayId) && !locked && parentActive.current?.() !== false,
     retry: false,
     gcTime: 0,
   });
@@ -84,7 +89,7 @@ export function DeliveryExecutionInspector({
       maskClosable={!locked && !executionOperationPending(workspace.project.id, identity.displayId)}
       keyboard={!locked && !executionOperationPending(workspace.project.id, identity.displayId)}
       onClose={() => {
-        if (!pending.current && requested.current === executionId && !executionOperationPending(workspace.project.id, identity.displayId)) onClose();
+        if (current() && !pending.current && requested.current === executionId && !executionOperationPending(workspace.project.id, identity.displayId)) onClose();
       }}
       afterOpenChange={identity.afterOpenChange}
       destroyOnHidden
@@ -95,7 +100,7 @@ export function DeliveryExecutionInspector({
           projectId={workspace.project.id}
           executionId={identity.displayId}
           sessionId={sessionId}
-          isActive={() => Boolean(requested.current) && requested.current === identity.displayId}
+          isActive={current}
           onSaved={onSaved}
           onUnresolvedChange={unresolved}
         />
@@ -106,7 +111,7 @@ export function DeliveryExecutionInspector({
         ) : query.error ? (
           <DeliveryQueryError
             error={query.error}
-            onRetry={() => void query.refetch()}
+            onRetry={() => { if (current()) void query.refetch(); }}
           />
         ) : entry ? (
           <ExecutionObservationCard
@@ -121,7 +126,7 @@ export function DeliveryExecutionInspector({
             initialStream={stream}
             active={Boolean(executionId) && executionId === identity.displayId}
             disabled={!executionId || executionId !== identity.displayId}
-            isActive={() => Boolean(requested.current) && requested.current === identity.displayId}
+            isActive={current}
             onCommand={onCommand}
             onUnresolvedChange={unresolved}
           />

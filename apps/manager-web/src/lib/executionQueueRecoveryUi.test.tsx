@@ -304,7 +304,7 @@ describe("actual dispatch editor and permanent recovery host (definitions, not e
     await retry(); await retry();
     const confirmed = JSON.stringify(renderRecovery());
     expect(h.controller.snapshot().phase).toBe("idle"); expect(h.raw).toBe(""); expect(h.send).toHaveBeenCalledOnce();
-    expect(confirmed).toContain("deliveryRuntime.queueConfirmed"); expect(confirmed).toContain("deliveryRuntime.queueRefreshAfterSaveFailed");
+    expect(confirmed).toContain("Dispatch accepted"); expect(confirmed).toContain("deliveryRuntime.queueRefreshAfterSaveFailed");
     expect(confirmed).not.toContain("deliveryRuntime.queueUnknown"); expect(confirmed).not.toContain("deliveryRuntime.queueOriginalUnavailable");
   });
   it("does not label a pre-POST storage refusal as an unknown dispatch outcome", async () => {
@@ -312,7 +312,7 @@ describe("actual dispatch editor and permanent recovery host (definitions, not e
     const refusedBeforeSend = JSON.stringify(renderRecovery());
     expect(h.controller.snapshot().phase).toBe("idle"); expect(h.send).not.toHaveBeenCalled();
     expect(refusedBeforeSend).toContain("deliveryRuntime.queueStorageUnavailable");
-    expect(refusedBeforeSend).not.toContain("deliveryRuntime.queueUnknown"); expect(refusedBeforeSend).not.toContain("deliveryRuntime.queueConfirmed");
+    expect(refusedBeforeSend).not.toContain("deliveryRuntime.queueUnknown"); expect(refusedBeforeSend).not.toContain("Dispatch accepted");
   });
   it("shows a damaged retained slot and never offers destructive clearing or a new request", () => {
     h.raw = "{broken"; controller(); const tree = renderRecovery();

@@ -185,6 +185,22 @@ def tasks(
     )
 
 
+@app.command("execution-handoff")
+def execution_handoff(execution_id: Annotated[str, typer.Option("--id")]):
+    """读取精确派发的后台交接状态；不创建计划或启动执行。"""
+    _query_output("delivery_execution_handoff", execution_id)
+
+
+@app.command("task-handoffs")
+def task_handoffs(
+    task_id: Annotated[str, typer.Option("--id")],
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+):
+    """分页定位当前有权读取的任务派发；保留原游标，不自动翻页。"""
+    _query_output("delivery_task_handoffs", task_id, limit=limit, cursor=cursor)
+
+
 @app.command("task")
 def task(task_id: Annotated[str, typer.Option("--id")]):
     """读取精确任务、有效验收和当前排期依据。"""

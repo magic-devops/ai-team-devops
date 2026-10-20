@@ -178,18 +178,14 @@ describe("durable queue and sync command contracts", () => {
     expect(command.snapshot()).toMatchObject({ phase: "unknown", original: value }); expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
   });
 
-  it.each([400, 401, 403, 404, 409, 422])("keeps the first HTTP%s sync result unknown while a SQL-only queue refusal can be explicitly reset", async (status) => {
+  it.each([400, 401, 403, 404, 409, 422])("retains a first definite HTTP%s refusal for SQL-only queue and observation sync until explicit reset", async (status) => {
     for (const action of actions) {
       const send = vi.fn(async () => { throw new Error(`HTTP ${status}: ${JSON.stringify({ detail: { code: "operation_refused", message: "Review the original operation" } })}`); });
-      const h = harness(action, send), command = createExecutionDispatchController({ ...h.options, uncertainOnRefusal: false }), value = original(action);
+      const h = harness(action, send), command = createExecutionDispatchController(h.options), value = original(action);
       await command.run(value);
-      expect(command.snapshot()).toMatchObject({ phase: action === "execution.sync" ? "unknown" : "refused", original: value });
+      expect(command.snapshot()).toMatchObject({ phase: "refused", original: value });
       await command.run({ ...value, intent: { ...value.intent, key: "replacement-operation-key" } }); expect(send).toHaveBeenCalledTimes(1);
-      command.reset(); expect(command.snapshot().phase).toBe(action === "execution.sync" ? "unknown" : "idle");
-      if (action === "execution.sync") {
-        await command.run({ ...value, intent: { ...value.intent, key: "another-replacement-key" } });
-        expect(send).toHaveBeenCalledTimes(1); expect(command.snapshot().original).toEqual(value);
-      }
+      command.reset(); expect(command.snapshot().phase).toBe("idle");
     }
   });
 
@@ -290,17 +286,16 @@ describe("durable queue and sync command contracts", () => {
     restored.reset(); await restored.run(original()); expect(send).toHaveBeenCalledTimes(1);
   });
 
-  it("restores a previously stored sync refusal as unresolved without changing its original", async () => {
+  it("restores a definite observation-sync refusal without converting it into an unknown external dispatch", async () => {
     const value = original("execution.sync"), send = vi.fn(async () => ack(value)), h = harness("execution.sync", send);
-    const raw = JSON.stringify({ phase: "refused", original: value, error: "HTTP 422: external envelope may exist" });
+    const raw = JSON.stringify({ phase: "refused", original: value, error: "HTTP 422: observation refused" });
     h.restore(raw);
     const key = executionDispatchStorageKey("P", "execution.sync", "E")!; retained.set(key, raw);
-    expect(executionDispatchRecoveryPending("P", "execution.sync", "E")).toBe(true);
+    expect(executionDispatchRecoveryPending("P", "execution.sync", "E")).toBe(false);
     expect(retained.get(key)).toBe(raw);
-    const restored = h.create(); expect(restored.snapshot()).toMatchObject({ phase: "unknown", original: value });
-    restored.reset(); await restored.run({ ...value, intent: { ...value.intent, key: "replacement-sync-key" } });
-    expect(send).not.toHaveBeenCalled(); await restored.replay();
-    expect(send).toHaveBeenCalledTimes(1); expect(send).toHaveBeenCalledWith(value); expect(restored.snapshot().phase).toBe("succeeded");
+    const restored = h.create(); expect(restored.snapshot()).toMatchObject({ phase: "refused", original: value });
+    await restored.replay(); expect(send).not.toHaveBeenCalled();
+    restored.reset(); expect(restored.snapshot().phase).toBe("idle");
   });
 });
 

@@ -13,6 +13,7 @@ export type ExecutionRuntimeControlProps = {
   projectId: string; executionId: string; sessionId: string;
   workspaceId?: string; runtime?: ExecutionRuntime;
   isActive?: () => boolean;
+  canSubmit?: () => boolean;
   disabled?: boolean; readOnly?: boolean;
   onSaved: (data: DeliveryCommandAck) => void;
   onObserved: (data: ExecutionRuntime) => void;
@@ -23,14 +24,14 @@ type Draft = {
   preview: ExecutionControlPreview | null; intent: ExecutionControlIntent | null;
 };
 /** The same retained request is available before any fresh runtime read succeeds. */
-export function ExecutionRuntimeControl({ projectId, executionId, sessionId, workspaceId, runtime, isActive,
+export function ExecutionRuntimeControl({ projectId, executionId, sessionId, workspaceId, runtime, isActive, canSubmit,
   disabled = false, readOnly = false, onSaved, onObserved, onUnresolvedChange }: ExecutionRuntimeControlProps) {
   const { t } = useTranslation(), tr = (key: string) => t(`deliveryExecutionRuntime.${key}`);
   const origin = useRef(projectSessionKey()), mounted = useRef(true), pending = useRef(false);
   const identity = JSON.stringify([projectId, executionId, sessionId]), liveIdentity = useRef(identity);
   liveIdentity.current = identity;
-  const access = useRef({ disabled, readOnly, workspaceId, runtime, isActive });
-  access.current = { disabled, readOnly, workspaceId, runtime, isActive };
+  const access = useRef({ disabled, readOnly, workspaceId, runtime, isActive, canSubmit });
+  access.current = { disabled, readOnly, workspaceId, runtime, isActive, canSubmit };
   const [draft, setDraft] = useState<Draft | null>(null), draftRef = useRef(draft);
   draftRef.current = draft;
   const changeDraft = (value: Draft | null) => { draftRef.current = value; setDraft(value); };
@@ -44,7 +45,7 @@ export function ExecutionRuntimeControl({ projectId, executionId, sessionId, wor
   controller.current = command;
   const snapshot = () => command.snapshot();
   const isLocked = () => !["idle", "refused"].includes(snapshot().phase);
-  const canWrite = () => access.current.isActive?.() !== false && !access.current.disabled && !access.current.readOnly && Boolean(access.current.workspaceId) &&
+  const canWrite = () => access.current.isActive?.() !== false && access.current.canSubmit?.() !== false && !access.current.disabled && !access.current.readOnly && Boolean(access.current.workspaceId) &&
     access.current.runtime?.project_id === projectId && access.current.runtime?.execution_id === executionId;
   const state = command.state, unknown = state.phase === "unknown", confirmed = state.phase === "succeeded";
   const locked = busy || command.locked;

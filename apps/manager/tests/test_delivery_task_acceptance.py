@@ -463,6 +463,9 @@ def test_native_owner_status_invalidates_but_display_name_change_preserves_recei
         entry = db.get(DeliveryWorkspace, "project").data["executions"][-1]
         assert bool(entry.get("planning_invalidated")) is (field == "status")
         assert entry["snapshot"]["owner"]["name"] == "lead"
+    from sop_manager.routers.delivery_execution_handoff import handoff_once
+
+    handoff_once(client.app, sessions)
     assert command(client, "execution.sync", {"id": intent["id"]}).status_code == (
         409 if field == "status" else 200
     )
@@ -531,6 +534,9 @@ def test_native_owner_invalidation_and_user_edit_rollback_together(bridge, write
             db.rollback()
             assert db.get(User, "lead").status == "active"
             assert not db.get(DeliveryWorkspace, "project").data["executions"][-1].get("planning_invalidated")
+    from sop_manager.routers.delivery_execution_handoff import handoff_once
+
+    handoff_once(client.app, sessions)
     assert command(client, "execution.sync", {"id": intent["id"]}).status_code == 200
 
 

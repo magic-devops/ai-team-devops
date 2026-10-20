@@ -551,6 +551,8 @@ def test_public_device_presence_renewal_preserves_basis_and_preview_is_pure(brid
 @pytest.mark.parametrize("change", ["offline", "worker", "revoke"])
 def test_pending_intent_rechecks_real_device_before_cross_store_dispatch(bridge, monkeypatch, change):
     from hermes_core import execution_targets
+    from sop_manager.routers.delivery_execution_handoff import handoff_once
+    from sop_manager.routers.delivery_execution_handoff_model import DeliveryExecutionHandoff
 
     runtime, device_id, presence, headers = remote_device(bridge)
     client, _, store, principal, ws, _, _ = bridge
@@ -575,6 +577,9 @@ def test_pending_intent_rechecks_real_device_before_cross_store_dispatch(bridge,
             json={"expected_version": device["version"], "idempotency_key": "revoke", "dry_run": False},
         )
         assert response.status_code == 200, response.text
+    assert handoff_once(client.app, bridge[1]) == 0
+    with bridge[1]() as db:
+        assert db.query(DeliveryExecutionHandoff).filter_by(execution_id=entry["id"]).one().state == "blocked"
     before = all_counts(bridge)
     response = command(client, "execution.sync", {"id": entry["id"]})
     assert response.status_code == 409, response.text

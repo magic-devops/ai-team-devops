@@ -240,7 +240,8 @@ def observations(db, project, user, state, entry, store, execution, permissions,
             and "approve" in principal.permissions
             and entry["status"] not in CLOSED
             and bool(run and run["status"] in {"completed", "failed", "cancelled"}),
-            "can_sync": (actionable or bool(entry.get("stop_pending")))
+            "can_sync": bool(run)
+            and (actionable or bool(entry.get("stop_pending")))
             and not executor_invalidated
             and permissions["write"]
             and "read" in principal.permissions,

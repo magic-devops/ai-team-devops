@@ -689,6 +689,12 @@ class ApiKey(Base):
     created_at   = Column(DateTime, default=datetime.utcnow)
 
 
+# T-durable-execution-handoff: register only this phase's new canonical model.
+from .delivery_execution_handoff_model import register_handoff_model  # noqa: E402
+
+DeliveryExecutionHandoff = register_handoff_model(Base)
+
+
 def create_all():
     from sop_manager.schema_upgrade import require_current_schema
 

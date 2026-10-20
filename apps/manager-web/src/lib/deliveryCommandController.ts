@@ -79,8 +79,6 @@ export type DeliveryControllerOptions<T extends DeliveryOriginal> = {
   send: (original: T) => Promise<unknown>;
   validateOriginal: (original: T) => boolean;
   validateAck: (original: T, value: unknown) => boolean;
-  // Some cross-store actions can report a 4xx after creating an external plan.
-  uncertainOnRefusal?: boolean;
   onPending?: (pending: boolean) => void;
 };
 export function createDeliveryCommandController<T extends DeliveryOriginal>(
@@ -171,7 +169,7 @@ export function createDeliveryCommandController<T extends DeliveryOriginal>(
       if (!current() || !gate.current(ticket)) return;
       const problem = eventProblem(error);
       retain({
-        phase: replay || problem.unknown || options.uncertainOnRefusal ? "unknown" : "refused",
+        phase: replay || problem.unknown ? "unknown" : "refused",
         original,
         error: problem.message,
       });

@@ -91,19 +91,20 @@ def test_paused_pending_cannot_handoff_but_can_cancel(bridge):  # noqa: F811
 
 
 def test_paused_receipt_recovers_after_manager_rollback_before_fresh_dispatch_gate(bridge, monkeypatch):  # noqa: F811
-    from sop_manager.routers import delivery_execution
+    from sop_manager.routers import delivery_execution_handoff as service
 
     intent = queue(bridge)
-    original = delivery_execution._observe
+    original = service.project_handoff
 
     def interrupted(*args, **kwargs):
         raise HTTPException(503, "Manager interrupted after committed receipt")
 
-    monkeypatch.setattr(delivery_execution, "_observe", interrupted)
-    assert command(bridge[0], "execution.sync", {"id": intent["id"]}).status_code == 503
+    monkeypatch.setattr(service, "project_handoff", interrupted)
+    assert service.handoff_once(bridge[0].app, bridge[1]) == 0
+    assert len(bridge[2].list(bridge[3], bridge[4]["id"], "runs")) == 1
     with bridge[1].kw["bind"].begin() as connection:
         connection.execute(Project.__table__.update().where(Project.id == "project").values(status="paused"))
-    monkeypatch.setattr(delivery_execution, "_observe", original)
+    monkeypatch.setattr(service, "project_handoff", original)
     recovered = sync(bridge, intent)
     assert recovered["run_id"] and recovered["status"] == "planned"
     response = bridge[0].get(f"/api/v1/delivery/executions/{intent['id']}/observations")

@@ -21,7 +21,11 @@ def sync_once(app, sessions=SessionLocal):
     store = getattr(app.state, "hermes_store", None)
     if store is None:
         return 0
-    applied = 0
+    from .delivery_execution_handoff import handoff_once
+
+    # Accepted originals must get their bounded scan even if an unrelated legacy
+    # observation/deployment later fails in this shared lifecycle iteration.
+    applied = handoff_once(app, sessions)
     with sessions() as db:
         rows = db.query(DeliveryWorkspace.project_id).all()
     for (project_id,) in rows:

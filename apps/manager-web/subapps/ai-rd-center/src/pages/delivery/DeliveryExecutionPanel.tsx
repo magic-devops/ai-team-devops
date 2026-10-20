@@ -25,6 +25,7 @@ import "./delivery-runtime.css";
 import type { ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
+import { useExecutionHandoffQuery } from "@/lib/executionHandoff";
 
 type Props = {
   sessionId: string;
@@ -144,6 +145,11 @@ export function DeliveryExecutionPanel({
       .flatMap((page) => page.items.map((item) => item.data))
       .filter((entry) => entry.id !== task.execution_id) || [];
   const current = currentQuery.error ? undefined : currentQuery.data?.execution;
+  const freshReads = useRef({ error: false }); freshReads.current = { error: Boolean(currentQuery.error || targets.error) };
+  const handoff = useExecutionHandoffQuery(data.project.id, current?.id || task.execution_id || "", task.id, sessionId, Boolean(current?.handoff_id), activeTask);
+  const handoffAccess = useRef(handoff); handoffAccess.current = handoff;
+  const canReplaceHandoff = () => !handoffAccess.current.required || handoffAccess.current.readable &&
+    ["planned", "cancelled"].includes(handoffAccess.current.value?.handoff.state || "");
   // Keep only an execution actually selected or reported by a mounted card.
   // A refresh may remove its row even when the list request itself succeeds.
   const knownExecutionId = recoveryIdentity.current === identity ? knownPendingExecution.current || historyId : "";
@@ -181,8 +187,9 @@ export function DeliveryExecutionPanel({
     targets.data?.can_execute &&
     !targets.isError &&
     !currentQuery.isError &&
+    handoff.readable && canReplaceHandoff() &&
     task.execution_gate.eligible &&
-    (!current || closed.includes(current.status));
+    (!task.execution_id || Boolean(current && closed.includes(current.status)));
   useEffect(() => {
     if (!draft) return;
     onEditingChange?.(true);
@@ -200,7 +207,7 @@ export function DeliveryExecutionPanel({
           icon={<Send size={14} />}
           disabled={!canDispatch}
           onClick={() => {
-            if (!canDispatch || pendingControls.current.size || origin.current !== projectSessionKey() || isActive?.() === false || canSubmitQueue?.() === false || !queueCommand?.current()) return;
+            if (!canDispatch || freshReads.current.error || live.current.executionId !== (task.execution_id || "") || !handoffAccess.current.readable || !canReplaceHandoff() || pendingControls.current.size || origin.current !== projectSessionKey() || isActive?.() === false || canSubmitQueue?.() === false || !queueCommand?.current()) return;
             if (queueCommand.snapshot().phase === "refused") { queueCommand.reset(); if (queueCommand.snapshot().phase !== "idle") return; }
             if (queueCommand.snapshot().phase !== "idle") return;
             setDraft(openExecutionDraft(data, task.id, crypto.randomUUID()));
@@ -295,6 +302,7 @@ export function DeliveryExecutionPanel({
             active
             isActive={() => activeTask() && live.current.executionId === current.id}
             onCommand={onCommand}
+            handoffRead={handoff}
           />
         </>
       )}

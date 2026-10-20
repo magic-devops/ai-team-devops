@@ -16,6 +16,7 @@ import {
   type AgentRunsTab, type AgentRunsRoute, type CanonicalAgentExecution,
 } from "@/lib/canonicalAgentRuns";
 import { canonicalAgentRunsCopy } from "@/i18n/canonical-agent-runs";
+import { executionHandoffCopy } from "@/i18n/execution-handoff";
 
 const subscribe = (callback: () => void) => {
   for (const event of ["hashchange", "popstate", "sop-session", "storage"]) window.addEventListener(event, callback);
@@ -38,6 +39,7 @@ function ProjectAgentRuns({ focused, initialTab }: { focused: boolean; initialTa
   useSyncExternalStore(subscribe, snapshot, snapshot);
   const { i18n } = useTranslation();
   const copy = canonicalAgentRunsCopy(i18n.language);
+  const handoffCopy = executionHandoffCopy(i18n.language);
   const projectId = getProjectId() || "";
   const revision = getSessionRevision() || "";
   const tenant = getTenantCode() || "";
@@ -95,6 +97,10 @@ function ProjectAgentRuns({ focused, initialTab }: { focused: boolean; initialTa
   const rows = page ? filterAgentRuns(page.items, route) : [];
   const label = (status: string) => copy.states[status as keyof typeof copy.states] || copy.unknown;
   const tag = (status: string) => <Tag color={statusColor(status)} title={status}>{label(status)}</Tag>;
+  const handoffTag = (entry: CanonicalAgentExecution) => entry.handoff && !entry.run_id && entry.status === "pending_dispatch" ?
+    <Tag color={entry.handoff.state === "blocked" ? "red" : "processing"} title={entry.handoff.error?.message}>
+      {handoffCopy.states[entry.handoff.state]}
+    </Tag> : null;
   const entryActions = (entry: CanonicalAgentExecution) => <Space size={[4, 8]} wrap>
     <Button type="link" size="small" href={canonicalExecutionHref(projectId, entry, background)}>{copy.execution}</Button>
     <Button type="link" size="small" href={canonicalTaskHref(projectId, entry.task_id, background)}>{copy.task}</Button>
@@ -103,7 +109,7 @@ function ProjectAgentRuns({ focused, initialTab }: { focused: boolean; initialTa
   const columns: ColumnsType<CanonicalAgentExecution> = [
     { title: copy.executionId, dataIndex: "id", render: (id: string, entry) => <div><a className="font-mono text-xs text-[var(--brand)]" href={canonicalExecutionHref(projectId, entry, background)}>{id}</a><div className="mt-1 text-xs text-[var(--muted)]">{entry.workspace_id}</div></div> },
     { title: copy.taskId, dataIndex: "task_id", render: (id: string) => <a className="font-mono text-xs text-[var(--brand)]" href={canonicalTaskHref(projectId, id, background)}>{id}</a> },
-    { title: copy.status, dataIndex: "status", render: (status: string, entry) => <Space direction="vertical" size={2}>{tag(status)}{entry.stale && <Tag color="warning">{copy.staleLabel}</Tag>}</Space> },
+    { title: copy.status, dataIndex: "status", render: (status: string, entry) => <Space direction="vertical" size={2}>{tag(status)}{handoffTag(entry)}{entry.stale && <Tag color="warning">{copy.staleLabel}</Tag>}</Space> },
     { title: copy.runId, dataIndex: "run_id", render: (id: string) => <span className="font-mono text-xs" title={id}>{id || copy.notStarted}</span> },
     { title: copy.attempt, dataIndex: "attempt", render: (value: number | null | undefined) => value ?? "—", width: 90 },
     { title: copy.progress, dataIndex: "progress", render: (value: number | null) => value == null ? "—" : `${value}%`, width: 120 },
@@ -158,7 +164,7 @@ function ProjectAgentRuns({ focused, initialTab }: { focused: boolean; initialTa
         <div className="grid gap-3 md:hidden">
           {rows.map((entry) => <article key={entry.id} className="min-w-0 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
             <div className="flex flex-wrap justify-between gap-2"><a href={canonicalExecutionHref(projectId, entry, background)} className="break-all font-mono text-sm font-semibold text-[var(--brand)]">{entry.id}</a>{tag(entry.status)}</div>
-            {entry.stale && <Tag color="warning">{copy.staleLabel}</Tag>}
+            {handoffTag(entry)}{entry.stale && <Tag color="warning">{copy.staleLabel}</Tag>}
             <dl className="grid grid-cols-2 gap-3 text-xs">
               <div><dt className="text-[var(--muted)]">{copy.taskId}</dt><dd className="break-all"><a href={canonicalTaskHref(projectId, entry.task_id, background)}>{entry.task_id}</a></dd></div>
               <div><dt className="text-[var(--muted)]">{copy.workspace}</dt><dd className="break-all">{entry.workspace_id}</dd></div>

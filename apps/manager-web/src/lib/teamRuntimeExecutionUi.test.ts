@@ -18,7 +18,7 @@ vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>
   return hooks.state[index];
 }, useEffect: () => {} }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: hooks.catalogue, isError: hooks.failed, isFetching: false, refetch: vi.fn() }), useQueryClient: () => ({ setQueryData: vi.fn() }) }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en-US" } }) }));
 vi.mock("./deliveryExecution", async () => ({ ...await vi.importActual<typeof import("./deliveryExecution")>("./deliveryExecution"), previewDeliveryExecution: vi.fn() }));
 const member = { id: "agent:one", name: "Executor", kind: "agent" as const, active: true, role: "Developer", tool: "" };
 let controller: ReturnType<typeof createExecutionDispatchController>;

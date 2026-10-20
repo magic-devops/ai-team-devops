@@ -399,7 +399,7 @@ def reference_page(db, project, user, filters, *, limit=50, cursor="", store=Non
     query = select(fact.entity_id, fact.label, fact.data).where(*scope(project, fact), fact.kind == kind)
     runtime_scope = None
     if kind == "execution":
-        query, runtime_scope = _execution_reference_scope(query, project, user, store)
+        query, runtime_scope = _execution_reference_scope(db, query, project, user, store)
     ids = _reference_ids(filters.get("ids", ""))
     if ids:
         query = query.where(fact.entity_id.in_(ids))
@@ -450,6 +450,14 @@ def reference_page(db, project, user, filters, *, limit=50, cursor="", store=Non
         if ids and kind == "resource"
         else [_reference_item(row, kind) for row in page[:limit]]
     )
+    if kind == "execution":
+        from .delivery_execution_handoff_query import page_handoff_summaries
+
+        handoffs = page_handoff_summaries(db, project, user, [item["id"] for item in items], store)
+        for item in items:
+            handoff = handoffs.get(item["id"])
+            if handoff is not None:
+                item["data"]["handoff"] = handoff
     _unchanged(db, project, stamp)
     return {
         **metadata(db, project, stamp),
@@ -483,16 +491,10 @@ def _reference_sort_key(sort):
     return fact.entity_id
 
 
-def _execution_reference_scope(query, project, user, store):
-    from .hermes_workspace import runtime_identity
+def _execution_reference_scope(db, query, project, user, store):
+    from .delivery_execution_handoff_query import _principal
 
-    if not user or user.status != "active" or str(user.tenant_id) != str(project.tenant_id):
-        raise HTTPException(403, "Current account cannot read runtime metadata")
-    if store is None:
-        raise HTTPException(503, "Execution runtime is not configured")
-    principal = runtime_identity(user, store)
-    if principal.tenant != project.tenant_id or "read" not in principal.permissions:
-        raise HTTPException(403, "Runtime read permission required")
+    _current, principal = _principal(db, project, user, store)
     if principal.workspace_ids is None:
         return query, "all"
     allowed = sorted(principal.workspace_ids)

@@ -8,17 +8,16 @@ from copy import deepcopy
 from dataclasses import replace
 
 from fastapi import HTTPException
-from hermes_core.agents import AgentDispatch, Agents
+from hermes_core.agents import AgentDispatch
 from hermes_core.delivery import Delivery
 from hermes_core.models import CoreError, TaskDispatch, TaskReview
 from hermes_core.repository import Repository
 from hermes_core.transactional import digest
 
-from .auth_sql import check_project_access
 from .delivery_contract import default_flow
 from .delivery_service import get_record, identifier, stamp
 from .hermes_workspace import runtime_identity
-from .sql_models import Issue, Task, User
+from .sql_models import Issue, Task
 
 CLOSED = {"accepted", "changes_requested", "cancelled"}
 
@@ -186,6 +185,7 @@ def _queue(db, project, user, state, body, store, execution=None):
     task = get_record(db, Task, project, body.task_id)
     entry = {
         "id": identifier("execution"),
+        "project_id": project.id,
         **body.model_dump(mode="json"),
         "test_node_ids": plan["test_node_ids"],
         "plan_nodes": plan["nodes"],
@@ -209,6 +209,9 @@ def _queue(db, project, user, state, body, store, execution=None):
     }
     state.setdefault("executions", []).append(entry)
     task.status = "in_progress"
+    from .delivery_execution_handoff import accept_handoff
+
+    accept_handoff(db, project, user, entry)
     return entry["id"], None
 
 
@@ -249,6 +252,16 @@ def _dispatch_body(entry):
 
 def _recover_dispatch(store, principal, entry):
     """Recover committed external receipts before revalidating an unstarted plan."""
+    if entry.get("handoff_id"):
+        from hermes_core.managed_handoff import ManagedHandoff
+
+        fact = ManagedHandoff(store, None).probe(principal, entry["workspace_id"], operation_id=entry["handoff_id"],
+            project_id=entry["project_id"], execution_id=entry["id"], envelope=_envelope_data(entry),
+            body=_dispatch_body(entry), plan_basis=entry["plan_basis"])
+        if fact and fact["state"] == "planned":
+            entry.update(run_id=fact["run_id"], runtime_task_id=fact["runtime_task_id"])
+            return True
+        return False
     snapshot = entry.get("snapshot")
     # A missing original definition cannot identify an immutable external request.
     if not entry.get("target_basis") or not isinstance(snapshot, dict) or "requirement" not in snapshot:
@@ -270,48 +283,6 @@ def _recover_dispatch(store, principal, entry):
         return False
     entry.update(run_id=cached["run"]["id"], runtime_task_id=envelope["id"])
     return True
-
-
-def _dispatch(store, principal, entry, execution=None):
-    from hermes_core.execution_targets import validate_execution_target_snapshot
-
-    if _recover_dispatch(store, principal, entry):
-        return
-    if not entry.get("target_snapshot"):
-        raise HTTPException(
-            409,
-            {
-                "code": "target_basis_missing",
-                "message": "Prepare a new plan with an explicit execution target",
-            },
-        )
-    validate_execution_target_snapshot(
-        store,
-        execution,
-        principal,
-        entry["workspace_id"],
-        entry["target_snapshot"],
-        provider=(entry.get("agent_snapshot") or {}).get("provider", ""),
-    )
-    envelope = store.create(
-        principal,
-        entry["workspace_id"],
-        "tasks",
-        _envelope_data(entry),
-        entry["id"],
-        entry["id"],
-        status="active",
-    )
-    service = Delivery(store, Repository(execution))
-    request = _dispatch_body(entry)
-    if entry["agent_id"]:
-        result = Agents(store).dispatch(
-            principal, entry["workspace_id"], envelope["id"], request, entry["id"], service
-        )
-    else:
-        result = service.dispatch(principal, entry["workspace_id"], envelope["id"], request, entry["id"])
-    entry["runtime_task_id"] = envelope["id"]
-    entry["run_id"] = result["run"]["id"]
 
 
 def _observe(db, project, state, entry, store, principal):
@@ -425,57 +396,6 @@ def _review(entry, run, task, flow, body, user, store, principal):
         )
 
 
-def _handoff_pending(db, project, state, entry, store, principal, execution):
-    """Recover committed work first; authorize only a genuinely new handoff."""
-    if entry.get("run_id") or _recover_dispatch(
-        store, replace(principal, actor=entry["requested_by"]), entry
-    ):
-        return
-    from .project_lifecycle import require_active
-
-    require_active(project)
-    from .delivery_execution_runtime import require_previous_stops
-
-    originator = db.get(User, entry["requested_by"])
-    if not originator or originator.status != "active":
-        raise HTTPException(403, "Original dispatcher is no longer active; cancel and prepare a new plan")
-    require_previous_stops(db, project, originator, state, entry["task_id"], store, exclude=entry["id"])
-    check_project_access(originator, project.id, db)
-    dispatcher, workspace = context(store, originator, entry["workspace_id"], "execute")
-    from .delivery_verification import VerificationContext
-
-    verification = VerificationContext(db, project, state)
-    if (
-        not verification.execution_snapshot_current(entry)
-        or workspace["version"] != entry["workspace_version"]
-    ):
-        raise HTTPException(409, "Dispatch context changed; cancel this intent and prepare a new plan")
-    if verification.pending_executor_binding_invalidated(entry):
-        raise HTTPException(
-            409,
-            {
-                "code": "executor_binding_invalidated",
-                "message": "The execution member association changed. Cancel this pending intent and prepare a new plan.",
-            },
-        )
-    if entry.get("executor_member_id"):
-        from .delivery_team_runtime import resolve_executor_binding
-
-        resolve_executor_binding(
-            db,
-            project,
-            state,
-            originator,
-            store,
-            member_id=entry["executor_member_id"],
-            expected_basis=entry["executor_binding_basis"],
-            workspace_id=entry["workspace_id"],
-            agent_id=entry["agent_id"],
-            agent_version=entry["agent_version"],
-        )
-    _dispatch(store, dispatcher, entry, execution)
-
-
 def apply_execution(db, project, user, state, action, body, store, execution=None):
     try:
         if action == "execution.queue":
@@ -495,7 +415,11 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
             principal, _ = context(store, user, entry["workspace_id"], permission)
         if action == "execution.cancel":
             raise HTTPException(422, "Use the fixed execution control preview and command payload")
-        _handoff_pending(db, project, state, entry, store, principal, execution)
+        if not entry.get("run_id"):
+            _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry)
+        if not entry.get("run_id"):
+            raise HTTPException(409, {"code": "execution_handoff_pending",
+                "message": "The accepted handoff has no runtime plan yet. Observe its handoff state; sync and review never dispatch."})
         run, task, _, flow = _observe(db, project, state, entry, store, principal)
         if action == "execution.review":
             if entry["stale"]:

@@ -4,6 +4,7 @@ import type { TaskPlanning } from "./deliveryTaskPlan";
 import type { TaskAcceptance } from "./taskAcceptance";
 import type { ProgressState } from "./deliveryProgress";
 import type { ExecutorSnapshot } from "./deliveryTeamRuntime";
+import type { ExecutionHandoff } from "./executionHandoff";
 import type { DeliveryCommandAck } from "./deliveryQuery";
 import { assertDeliveryGeneration } from "./deliveryQuery";
 export type {
@@ -124,6 +125,8 @@ export type DeliveryTask = {
 };
 export type DeliveryExecution = {
   id: string;
+  handoff_id?: string | null;
+  handoff?: ExecutionHandoff;
   task_id: string;
   workspace_id: string;
   agent_id: string;

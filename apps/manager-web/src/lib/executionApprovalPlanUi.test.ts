@@ -34,7 +34,7 @@ vi.mock("react", async () => ({
   useEffect: () => {},
 }));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en-US" } }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: undefined, isError: false }),

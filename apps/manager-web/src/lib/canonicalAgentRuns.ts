@@ -4,6 +4,7 @@ import { assertDeliveryGeneration, fetchDeliveryContext, fetchDeliveryReferences
 import { fetchTeamRuntimeBindings } from "./deliveryTeamRuntime";
 import { fetchExecutionRuntime } from "./executionRuntime";
 import { safeExecutionReturn } from "./executionCommands";
+import { validExecutionHandoff, type ExecutionHandoff } from "./executionHandoff";
 
 export const agentRunsTabs = ["runs", "heartbeat", "profiles", "retry"] as const;
 export type AgentRunsTab = typeof agentRunsTabs[number];
@@ -15,6 +16,7 @@ export type CanonicalAgentExecution = {
   id: string; task_id: string; workspace_id: string; status: string; run_id: string;
   run_version: number | null; progress: number | null; created_at: string; stale: boolean;
   issue_id?: string | null; attempt?: number | null;
+  handoff_id?: string | null; handoff?: ExecutionHandoff;
 };
 const clean = (value: string | null, max: number) => value && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value) ? value : "";
 const identity = (value: unknown): value is string => typeof value === "string" && Boolean(value) && value.length <= 128 && !/[\s\u0000-\u001f\u007f]/.test(value);
@@ -65,7 +67,8 @@ export function filterAgentRuns(rows: CanonicalAgentExecution[], route: Pick<Age
   const query = route.q.toLocaleLowerCase();
   return rows.filter((row) =>
     (route.tab !== "heartbeat" || agentActiveStatuses.includes(row.status)) &&
-    (route.tab !== "retry" || row.stale || ["failed", "cancelled", "interrupted", "unknown", "changes_requested"].includes(row.status)) &&
+    (route.tab !== "retry" || row.stale || ["failed", "cancelled", "interrupted", "unknown", "changes_requested"].includes(row.status) ||
+      Boolean(row.handoff && ["retry_wait", "blocked"].includes(row.handoff.state))) &&
     (!route.status || row.status === route.status) &&
     (!query || [row.id, row.task_id, row.workspace_id, row.run_id].some((value) => value.toLocaleLowerCase().includes(query))),
   );
@@ -114,7 +117,11 @@ export async function readAgentRuns(projectId: string, scope: string, context: D
       typeof item.status !== "string" || !item.status || typeof item.created_at !== "string" || typeof item.stale !== "boolean" ||
       !(item.run_version == null || Number.isSafeInteger(item.run_version) && item.run_version >= 0) ||
       !(item.progress == null || Number.isFinite(item.progress) && item.progress >= 0 && item.progress <= 100) ||
-      !(item.attempt == null || positive(item.attempt))
+      !(item.attempt == null || positive(item.attempt)) ||
+      !(item.handoff_id == null || identity(item.handoff_id)) ||
+      item.handoff !== undefined && (!validExecutionHandoff(projectId, item.id, item.task_id, {
+        project_id: projectId, execution_id: item.id, task_id: item.task_id, handoff: item.handoff,
+      }) || item.handoff.workspace_id !== item.workspace_id || Boolean(item.handoff_id && item.handoff_id !== item.handoff.id))
     ) throw new Error("agentResponseInvalid");
     ids.add(item.id);
   }

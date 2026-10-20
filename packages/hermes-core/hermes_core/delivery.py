@@ -126,85 +126,91 @@ class Delivery:
         )
 
     def dispatch(self, principal: Principal, workspace: str, task_id: str, body: TaskDispatch, trace: str, *, agent_source=None):
+        with self.store.transaction() as conn:
+            return self.dispatch_in_transaction(conn, principal, workspace, task_id, body, trace, agent_source=agent_source)
+
+    def dispatch_in_transaction(self, conn, principal: Principal, workspace: str, task_id: str, body: TaskDispatch, trace: str, *, agent_source=None):
+        """Use one existing transaction for envelope/plan/controlled-handoff composition."""
         if len(body.model_dump_json().encode("utf-8")) > 1_048_576:
             raise CoreError("payload_too_large", "Execution plan must not exceed 1 MiB", 422)
         request = agent_source["request"] if agent_source else body.model_dump()
         operation = "task.agent-dispatch:" if agent_source else "task.dispatch:"
-        with self.store.transaction() as conn:
-            receipt_id, cached = self.store._receipt(
-                conn, principal, workspace, operation + task_id, body.idempotency_key, request
-            )
-            if cached is not None and not body.dry_run:
-                return cached
-            task = self.store._get(conn, principal, workspace, "tasks", task_id)
-            criteria = _validate_dispatch_request(task, body)
-            bindings = Agents(self.store).bindings(conn, principal, workspace, body.nodes)
-            _validate_agent_bindings(self.store, conn, principal, workspace, bindings, agent_source)
-            current_workspace = self.store._get(conn, principal, "", "workspaces", workspace)
-            target_snapshot = None
-            if body.target_device_id or body.target_basis:
-                target_snapshot = select_execution_plan_target(self.store, getattr(self.repository, "execution", None),
-                                                                principal, workspace, body, bindings, conn)
-            if body.target_device_id:
-                _validate_remote_target(self.store, conn, principal, workspace, body, agent_source)
-            if body.isolation == "git_worktree":
-                self.repository.validate_base(current_workspace["data"]["root"], body.base_commit)
-            elif body.base_commit:
-                raise CoreError("invalid_isolation", "A base commit requires Git worktree isolation", 422)
-            source = {
-                "task_id": task_id,
-                "task_version": task["version"],
-                "title": task["data"]["title"],
-                "acceptance_criteria": criteria,
-                "assigned_agent": task["data"].get("assigned_agent", ""),
-                "dispatched_by": principal.actor,
-            }
-            run_data = {
-                "title": task["data"]["title"],
-                "nodes": [node.model_dump() for node in body.nodes],
-                "workspace_root": current_workspace["data"]["root"],
-                "workspace_version": current_workspace["version"],
-                "task_source": source,
-                "isolation": body.isolation,
-                "base_commit": body.base_commit,
-            }
-            if bindings:
-                run_data["agent_bindings"] = bindings
-            if body.target_device_id:
-                run_data["target_device_id"] = body.target_device_id
-            if target_snapshot:
-                run_data["target_snapshot"] = target_snapshot
-            if agent_source:
-                run_data["agent_source"] = {key: value for key, value in agent_source.items() if key != "request"}
-            if body.dry_run:
-                return {"id": task_id, "task": task, "plan": run_data, "dry_run": True}
-            run = dict(
-                id=uuid.uuid4().hex,
-                kind="runs",
-                tenant=principal.tenant,
-                business=principal.business,
-                workspace=workspace,
-                version=1,
-                status="planned",
-                data=run_data,
-                created_at=now(),
-                updated_at=now(),
-            )
-            conn.execute(insert(self.store.entities).values(**run))
-            self.store._record(conn, principal, workspace, run, "task.run_planned", trace, source)
-            changed = self._update_task(
-                conn,
-                principal,
-                workspace,
-                task,
-                {**task["data"], "delivery": {"run_id": run["id"], "phase": "executing", "source": source}},
-                "in_progress",
-                "task.dispatched",
-                trace,
-            )
-            result = {"id": task_id, "task": changed, "run": run, "phase": "planned", "dry_run": False}
-            self._save_receipt(conn, receipt_id, request, result)
-            return result
+        receipt_id, cached = self.store._receipt(
+            conn, principal, workspace, operation + task_id, body.idempotency_key, request
+        )
+        if cached is not None and not body.dry_run:
+            return cached
+        # Match Agent/Squad dispatch and scheduling before holding any Task or
+        # Agent-profile lock. A workspace serializes its competing new plans.
+        current_workspace = self.store._get(conn, principal, "", "workspaces", workspace)
+        task = self.store._get(conn, principal, workspace, "tasks", task_id)
+        criteria = _validate_dispatch_request(task, body)
+        bindings = Agents(self.store).bindings(conn, principal, workspace, body.nodes)
+        _validate_agent_bindings(self.store, conn, principal, workspace, bindings, agent_source)
+        target_snapshot = None
+        if body.target_device_id or body.target_basis:
+            target_snapshot = select_execution_plan_target(self.store, getattr(self.repository, "execution", None),
+                                                            principal, workspace, body, bindings, conn)
+        if body.target_device_id:
+            _validate_remote_target(self.store, conn, principal, workspace, body, agent_source)
+        if body.isolation == "git_worktree":
+            self.repository.validate_base(current_workspace["data"]["root"], body.base_commit)
+        elif body.base_commit:
+            raise CoreError("invalid_isolation", "A base commit requires Git worktree isolation", 422)
+        source = {
+            "task_id": task_id,
+            "task_version": task["version"],
+            "title": task["data"]["title"],
+            "acceptance_criteria": criteria,
+            "assigned_agent": task["data"].get("assigned_agent", ""),
+            "dispatched_by": principal.actor,
+        }
+        run_data = {
+            "title": task["data"]["title"],
+            "nodes": [node.model_dump() for node in body.nodes],
+            "workspace_root": current_workspace["data"]["root"],
+            "workspace_version": current_workspace["version"],
+            "task_source": source,
+            "isolation": body.isolation,
+            "base_commit": body.base_commit,
+        }
+        if bindings:
+            run_data["agent_bindings"] = bindings
+        if body.target_device_id:
+            run_data["target_device_id"] = body.target_device_id
+        if target_snapshot:
+            run_data["target_snapshot"] = target_snapshot
+        if agent_source:
+            run_data["agent_source"] = {key: value for key, value in agent_source.items() if key != "request"}
+        if body.dry_run:
+            return {"id": task_id, "task": task, "plan": run_data, "dry_run": True}
+        run = dict(
+            id=uuid.uuid4().hex,
+            kind="runs",
+            tenant=principal.tenant,
+            business=principal.business,
+            workspace=workspace,
+            version=1,
+            status="planned",
+            data=run_data,
+            created_at=now(),
+            updated_at=now(),
+        )
+        conn.execute(insert(self.store.entities).values(**run))
+        self.store._record(conn, principal, workspace, run, "task.run_planned", trace, source)
+        changed = self._update_task(
+            conn,
+            principal,
+            workspace,
+            task,
+            {**task["data"], "delivery": {"run_id": run["id"], "phase": "executing", "source": source}},
+            "in_progress",
+            "task.dispatched",
+            trace,
+        )
+        result = {"id": task_id, "task": changed, "run": run, "phase": "planned", "dry_run": False}
+        self._save_receipt(conn, receipt_id, request, result)
+        return result
 
     def review(self, principal: Principal, workspace: str, task_id: str, body: TaskReview, trace: str):
         request = body.model_dump()

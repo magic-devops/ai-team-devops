@@ -17,6 +17,11 @@ const execution: CanonicalAgentExecution = { id: "E-intent", task_id: "T-task", 
 const context = { project_id: "P", project: { id: "P" }, version: 8, query_generation: 4, query_state: { status: "ready" }, permissions: { write: true, approve: false, configure: false } } as any;
 const page = () => ({ project_id: "P", version: 8, query_generation: 4, as_of: "now", items: [{ id: execution.id, kind: "execution", label: execution.id, task_count: 0, data: { ...execution } }], total: 21, next_cursor: "opaque-server-token", limit: 20 });
 const runtime = () => ({ project_id: "P", execution_id: "E-intent", run_id: "R-provider", run_version: 3, attempt: 2, status: "interrupted", runtime_status: "interrupted", stale: false, active_node_id: null, observed_at: "now", recovery_requires_review: false, stop: null, approval: null, nodes: [], controls: Object.fromEntries(["start", "retry", "cancel", "approval", "approval_reject"].map((key) => [key, { allowed: false, reasons: [] }])) });
+const handoff = () => ({
+  id: "H-one", execution_id: execution.id, task_id: execution.task_id, workspace_id: execution.workspace_id,
+  state: "accepted" as const, revision: 1, attempt: 0, accepted_at: "2026-10-20T00:00:00Z",
+  updated_at: "2026-10-20T00:00:00Z", next_attempt_at: null, error: null, run_id: null, runtime_task_id: null,
+});
 beforeEach(() => {
   vi.clearAllMocks();
   const data = new Map<string, string>();
@@ -85,6 +90,29 @@ describe("canonical AgentOps routes and bounded reads (definitions; execution de
     expect(fetchDeliveryReferences).toHaveBeenCalledWith("P", "execution", { limit: 20, sort: "created_desc", cursor: "opaque+cursor" }, undefined, 4);
     expect(value.next_cursor).toBe("opaque-server-token");
     expect(value.items).toEqual([execution]);
+  });
+  it("keeps accepted background work separate from runtime and lists blocked handoffs for attention", () => {
+    const rows = ["accepted", "dispatching", "retry_wait", "blocked"].map((state) => ({
+      ...execution, id: state, status: "pending_dispatch", run_id: "", handoff: { ...handoff(), state } as any,
+    }));
+    expect(filterAgentRuns(rows, { tab: "heartbeat", q: "", status: "" })).toEqual([]);
+    expect(filterAgentRuns(rows, { tab: "retry", q: "", status: "" }).map((row) => row.id)).toEqual(["retry_wait", "blocked"]);
+  });
+  it("preserves live canonical handoff facts in the bounded execution page", async () => {
+    const value = page();
+    value.items[0].data = { ...execution, handoff_id: "H-one", handoff: handoff() } as any;
+    vi.mocked(fetchDeliveryReferences).mockResolvedValue(value as any);
+    expect((await readAgentRuns("P", projectSessionKey(), context, "")).items[0].handoff).toEqual(handoff());
+  });
+  it.each([
+    { execution_id: "foreign" }, { task_id: "another-task" }, { workspace_id: "another-workspace" },
+    { id: "another-handoff" }, { revision: 0 }, { state: "running" },
+    { state: "planned", run_id: null }, { run_id: "R-invented" },
+  ])("rejects a mixed or invalid canonical handoff summary: %j", async (patch) => {
+    const value = page();
+    value.items[0].data = { ...execution, handoff_id: "H-one", handoff: { ...handoff(), ...patch } } as any;
+    vi.mocked(fetchDeliveryReferences).mockResolvedValue(value as any);
+    await expect(readAgentRuns("P", projectSessionKey(), context, "")).rejects.toThrow("agentResponseInvalid");
   });
   it("rejects mixed-generation and foreign-project pages", async () => {
     vi.mocked(fetchDeliveryReferences).mockResolvedValueOnce({ ...page(), query_generation: 5 } as any);

@@ -22,7 +22,7 @@ const h = vi.hoisted(() => ({ frames: {} as Record<string, any[]>, frame: "", ne
   effects: {} as Record<string, Array<{ run: () => void | (() => void); deps?: unknown[] }>>,
   stored: new Map<string, string>(), local: new Map<string, string>(), sent: [] as any[],
   mode: "unknown" as "unknown" | "success" | "pending" | "refused" | "badAck",
-  storageFail: "none" as "none" | "all" | "confirmed", failure: "HTTP 422: dispatch rejected after possible envelope creation",
+  storageFail: "none" as "none" | "all" | "confirmed", failure: "HTTP 422: observation synchronization refused",
   resolve: null as ((value: unknown) => void) | null, detailError: null as Error | null, detailReady: false, invalidations: [] as unknown[],
   taskHost: false, readFailure: null as "task" | "execution" | null, historyFailure: false, historyOmit: false,
 }));
@@ -132,7 +132,7 @@ async function settle() { for (let index = 0; index < 24; index++) await Promise
 beforeEach(() => {
   h.frames = {}; h.effects = {}; h.frame = ""; h.next = 0; h.stored.clear(); h.local.clear(); h.sent = []; h.mode = "unknown";
   h.taskHost = false; h.readFailure = null; h.historyFailure = false; h.historyOmit = false;
-  h.storageFail = "none"; h.failure = "HTTP 422: dispatch rejected after possible envelope creation"; h.resolve = null; h.detailError = null; h.detailReady = false; h.invalidations = [];
+  h.storageFail = "none"; h.failure = "HTTP 422: observation synchronization refused"; h.resolve = null; h.detailError = null; h.detailReady = false; h.invalidations = [];
   saved.mockReset(); observed.mockReset().mockResolvedValue(undefined); unresolved.mockReset();
   vi.stubGlobal("localStorage", { getItem: (key: string) => h.local.get(key) || null, setItem: (key: string, raw: string) => h.local.set(key, raw), removeItem: (key: string) => h.local.delete(key) });
   vi.stubGlobal("sessionStorage", { getItem: (key: string) => h.stored.get(key) || null, setItem: (key: string, raw: string) => {
@@ -169,10 +169,13 @@ describe("actual sync original recovery", () => {
     expect(find(sync(), Alert, (props) => props.title === "deliveryExecutionRuntime.retainedOriginalUnavailable")).toBeDefined();
   });
 
-  it("keeps a first explicit 422 unknown and rejects a replacement from the old fresh callback", async () => {
+  it("dismisses a first definite observation refusal locally and invalidates the old fresh callback", async () => {
     const start = action(sync(), "sync-execution"); h.mode = "refused"; await start.onClick();
     const original = structuredClone(h.sent[0]); await start.onClick();
-    expect(h.sent).toEqual([original]); expect(action(sync(), "retry-sync-original")).toBeDefined(); expect(saved).not.toHaveBeenCalled();
+    expect(h.sent).toEqual([original]); expect(action(sync(), "retry-sync-original")).toBeUndefined(); expect(saved).not.toHaveBeenCalled();
+    await action(sync(), "dismiss-sync-refused").onClick();
+    await start.onClick(); expect(h.sent).toHaveLength(1);
+    expect(executionDispatchRecoveryPending("P", "execution.sync", "E")).toBe(false);
   });
 
   it("recreates an unknown sync without fresh permission/version facts and replays exact transport bytes", async () => {

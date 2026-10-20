@@ -170,6 +170,43 @@ def event_write_scope(db, tenant_id, project_id):
     return _scope(db, tenant_id, project_id, "event")
 
 
+# T-durable-execution-handoff: exact internal technical capabilities only.
+def execution_handoff_write_scope(db, tenant_id, project_id, handoff_id):
+    return _scope(db, tenant_id, project_id, "execution_handoff_write:" + handoff_id)
+
+
+def execution_handoff_projection_scope(db, tenant_id, project_id, handoff_id):
+    return _scope(db, tenant_id, project_id, "execution_handoff_projection:" + handoff_id)
+
+
+def _handoff_permission(db, scope):
+    current = db.get_nested_transaction() or db.get_transaction()
+    prefix = "execution_handoff_projection:"
+    return next((token for token in reversed(db.info.get(_TOKENS, []))
+                 if token.transaction is current and (token.tenant_id, token.project_id) == scope
+                 and token.purpose.startswith(prefix)), None)
+
+
+def in_execution_handoff_projection_scope(db, tenant_id, project_id):
+    return _handoff_permission(db, (str(tenant_id), str(project_id))) is not None
+
+
+def _check_handoff_write(db, table, scope, operation, old, values):
+    from .routers.delivery_execution_handoff_model import valid_mutation, valid_projection
+
+    projection = _handoff_permission(db, scope)
+    if projection and table.name not in {"delivery_execution_handoffs", "delivery_workspaces"}:
+        _deny("handoff_technical_scope_only", "Handoff recovery cannot change business entities")
+    if table.name == "delivery_execution_handoffs":
+        handoff_id = values.get("id") if operation == "insert" else old["id"]
+        if not _permission(db, scope, "execution_handoff_write:" + str(handoff_id)) or not valid_mutation(operation, old, values):
+            _deny("handoff_service_required", "The fixed handoff original and technical state are service-owned")
+    if projection and table.name == "delivery_workspaces":
+        handoff_id = projection.purpose.split(":", 1)[1]
+        if operation != "update" or not valid_projection(db, scope, handoff_id, old, values):
+            _deny("handoff_projection_invalid", "Only proven references of this handoff may be projected")
+
+
 def issue_origin_rebuild_scope(db, tenant_id, project_id):
     """Derived-only origin maintenance, also permitted on archived projects."""
     return _scope(db, tenant_id, project_id, "issue_origin_rebuild")
@@ -448,6 +485,11 @@ def _flow_invalidation(original, changed):
 
 
 def _restricted_write(db, table, scope, operation, old, values):
+    if table.name == "delivery_execution_handoffs" and operation == "update":
+        return _permission(db, scope, "execution_handoff_write:" + old["id"]) is not None
+    if table.name == "delivery_workspaces" and _handoff_permission(db, scope):
+        # _check_handoff_write already proved the one-E technical whitelist.
+        return operation == "update"
     if (
         table.name == "issue_event_origins"
         and operation == "insert"
@@ -559,6 +601,7 @@ def _check_write(db, table, operation, old, values, *, user_cascade=False):
     scope = _scope_for_row(db, table, values if operation == "insert" else old)
     if scope is None:
         return
+    _check_handoff_write(db, table, scope, operation, old, values)
     _check_discussion_write(db, table, scope, operation, old, values)
     _check_event_write(db, table, scope, operation, old, values)
     if operation == "update":

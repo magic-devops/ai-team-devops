@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { DeliveryCommandAck } from "@/lib/delivery";
 import type { ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
 import { projectSessionKey } from "@/lib/projectPortfolio";
+import { executionHandoffCopy } from "@/i18n/execution-handoff";
 import "./delivery-runtime.css";
 
 /** One command owner supplies this view, including before current task/target reads succeed. */
@@ -15,7 +16,8 @@ export function ExecutionQueueRecovery({ command, projectId, taskId, onSaved, on
   onResolved?: () => void;
   isActive?: () => boolean;
 }) {
-  const { t } = useTranslation(), tr = (key: string) => t(`deliveryRuntime.${key}`);
+  const { t, i18n } = useTranslation(), tr = (key: string) => t(`deliveryRuntime.${key}`);
+  const handoffCopy = executionHandoffCopy(i18n.language);
   const origin = useRef(projectSessionKey()), mounted = useRef(true), pending = useRef(false);
   const confirmed = useRef(false);
   const identity = `${projectId}:${taskId}`, liveIdentity = useRef(identity);
@@ -60,7 +62,7 @@ export function ExecutionQueueRecovery({ command, projectId, taskId, onSaved, on
   const errorText = state.error === "retainedOriginalUnavailable" ? tr("queueStorageUnavailable") :
     state.error === "retainedOriginalInvalid" ? tr("queueOriginalUnavailable") : state.error;
   if (state.phase === "idle") return <Alert role="status" type={confirmed.current ? "info" : "warning"}
-    title={tr(confirmed.current ? "queueConfirmed" : "queueRecoveryTitle")} description={feedback || errorText} />;
+    title={confirmed.current ? handoffCopy.received : tr("queueRecoveryTitle")} description={feedback || errorText} />;
   const field = (key: string) => {
     const value = original?.payload[key];
     return typeof value === "string" || typeof value === "number" ? String(value) : "—";
@@ -68,8 +70,8 @@ export function ExecutionQueueRecovery({ command, projectId, taskId, onSaved, on
   const nodes = [original?.payload.nodes, original?.payload.test_nodes].flatMap((value) => Array.isArray(value) ? value : []);
   return <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4" aria-label={tr("queueRecoveryTitle")}>
     <Alert role="status" showIcon type={state.phase === "succeeded" ? "success" : "warning"}
-      title={tr(state.phase === "sending" ? "queueSending" : state.phase === "succeeded" ? "queueConfirmed" : state.phase === "refused" ? "queueRefused" : "queueUnknown")}
-      description={tr("queueRequestOnly")} />
+      title={state.phase === "succeeded" ? handoffCopy.received : tr(state.phase === "sending" ? "queueSending" : state.phase === "refused" ? "queueRefused" : "queueUnknown")}
+      description={state.phase === "succeeded" ? handoffCopy.receivedHint : tr("queueRequestOnly")} />
     <Space wrap>
       {state.phase === "unknown" && <Button type="primary" disabled={!original || busy} loading={busy} onClick={() => act("replay")}>{tr("queueRetryOriginal")}</Button>}
       {state.phase === "succeeded" && <Button type="primary" disabled={busy || !state.ack} loading={busy} onClick={() => act("finish")}>{tr("queueFinishConfirmed")}</Button>}

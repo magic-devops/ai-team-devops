@@ -349,14 +349,14 @@ def _before_commit(db):
         for tenant_id, project_id in sorted(scopes):
             from contextlib import nullcontext
 
-            from sop_manager.project_write_guard import identity_capture_scope, in_lifecycle_scope
+            from sop_manager.project_write_guard import identity_capture_scope, in_lifecycle_scope, in_execution_handoff_projection_scope
 
             project = db.get(Project, project_id)
             if not project or project.tenant_id != tenant_id:
                 continue
             identity_scopes = set().union(*db.info.get(_TRUSTED_SCOPES, {}).values()) if db.info.get(_TRUSTED_SCOPES) else set()
             identity = (tenant_id, project_id) in identity_scopes
-            if in_lifecycle_scope(db, tenant_id, project_id) and not identity:
+            if (in_lifecycle_scope(db, tenant_id, project_id) and not identity) or in_execution_handoff_projection_scope(db, tenant_id, project_id):
                 from .delivery_progress_facts import evaluate_project
                 from .delivery_query_index import replace_from_evaluation
 
