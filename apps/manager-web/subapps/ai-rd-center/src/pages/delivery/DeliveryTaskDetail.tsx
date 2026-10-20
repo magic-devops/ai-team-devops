@@ -5,7 +5,7 @@ import {
 } from "@/lib/deliveryQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Select, Skeleton, Tag } from "antd";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   saveDelivery,
@@ -26,6 +26,9 @@ import "./task-acceptance.css";
 import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { useExecutionExitGuard } from "@/lib/executionExitGuard";
+import { executionDispatchRecoveryPending, useExecutionDispatchCommand, type ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
+import { ExecutionQueueRecovery } from "./ExecutionQueueRecovery";
+import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
 
 type TaskContentProps = {
   detail?: DeliveryTaskData;
@@ -41,6 +44,10 @@ type TaskContentProps = {
     payload: Record<string, unknown>,
   ) => Promise<void>;
   onUnresolvedChange?: (value: boolean) => void;
+  queueCommand?: ExecutionDispatchCommand;
+  isActive?: () => boolean;
+  canSubmitQueue?: () => boolean;
+  onExecutionRecovery?: (executionId: string) => void;
 };
 export function TaskDetailContent({
   detail,
@@ -53,6 +60,10 @@ export function TaskDetailContent({
   onEditingChange,
   onCommand,
   onUnresolvedChange,
+  queueCommand,
+  isActive,
+  canSubmitQueue,
+  onExecutionRecovery,
 }: TaskContentProps) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryTaskAcceptance.${key}`);
@@ -88,6 +99,10 @@ export function TaskDetailContent({
       onSaved={onSaved}
       onEditingChange={onEditingChange}
       onUnresolvedChange={onUnresolvedChange}
+      queueCommand={queueCommand}
+      isActive={isActive}
+      canSubmitQueue={canSubmitQueue}
+      onExecutionRecovery={onExecutionRecovery}
     />
   );
   return (
@@ -217,13 +232,39 @@ export function DeliveryTaskDetail({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const origin = useRef(projectSessionKey());
+  const mounted = useRef(true), identity = `${projectId}:${sessionId}:${taskId}`, activeIdentity = useRef(identity);
+  activeIdentity.current = identity;
+  const isActive = () => mounted.current && origin.current === projectSessionKey() && activeIdentity.current === identity;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const executionExit = useExecutionExitGuard();
   const [pinnedWorkspace, setPinnedWorkspace] = useState<DeliveryTaskData>();
   const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
     useState<DeliveryTaskData>();
   const [busy, setBusy] = useState(false);
+  const writePending = useRef(false);
   const [error, setError] = useState("");
   const latestWorkspace = useRef<DeliveryTaskData>();
+  const knownExecution = useRef("");
+  const knownExecutionIdentity = useRef(identity);
+  const [operationRecoveryId, setOperationRecoveryId] = useState("");
+  const operationRecoveryLive = useRef(operationRecoveryId);
+  const taskAccess = useRef({ error: false, write: false });
+  const canUseQueueEditor = () => isActive() && !writePending.current && !operationRecoveryLive.current &&
+    !taskAccess.current.error && taskAccess.current.write &&
+    !(knownExecution.current && executionOperationPending(projectId, knownExecution.current));
+  const queuePending = (value: boolean) => {
+    const pending = executionExit.setPending(`queue:${taskId}`, value || executionDispatchRecoveryPending(projectId, "execution.queue", taskId));
+    const latest = latestWorkspace.current;
+    if (pending && latest) setExecutionPinnedWorkspace((previous) => previous || structuredClone(latest));
+    else if (!pending) setExecutionPinnedWorkspace(undefined);
+    onUnresolvedChange?.(pending);
+  };
+  const queueCommand = useExecutionDispatchCommand(projectId, "execution.queue", taskId, sessionId, queuePending);
+  const queueLocked = !["idle", "refused"].includes(queueCommand.state.phase) || executionDispatchRecoveryPending(projectId, "execution.queue", taskId);
+  useEffect(() => {
+    queuePending(queueLocked);
+    return () => { executionExit.setPending(`queue:${taskId}`, false); };
+  }, [queueLocked]);
   const editingChanged = useCallback((editing: boolean) => {
     if (editing) {
       const current = latestWorkspace.current;
@@ -247,6 +288,17 @@ export function DeliveryTaskDetail({
     refetchInterval: pinnedWorkspace ? false : 5000,
   });
   latestWorkspace.current = query.data;
+  taskAccess.current = { error: Boolean(query.error), write: Boolean(query.data?.permissions.write) };
+  const sameExecutionHost = knownExecutionIdentity.current === identity;
+  const currentExecutionId = !query.error ? query.data?.task.execution_id : executionPinnedWorkspace?.task.execution_id;
+  if (sameExecutionHost && currentExecutionId && (!knownExecution.current || !executionOperationPending(projectId, knownExecution.current))) knownExecution.current = currentExecutionId;
+  const failedReadRecoveryId = query.error && sameExecutionHost && !queueLocked && knownExecution.current && executionOperationPending(projectId, knownExecution.current) ? knownExecution.current : "";
+  const displayedOperationRecovery = sameExecutionHost ? operationRecoveryId || failedReadRecoveryId : "";
+  operationRecoveryLive.current = displayedOperationRecovery;
+  useEffect(() => {
+    if (!sameExecutionHost) { knownExecutionIdentity.current = identity; knownExecution.current = ""; operationRecoveryLive.current = ""; setOperationRecoveryId(""); }
+  }, [identity, sameExecutionHost]);
+  useEffect(() => { if (failedReadRecoveryId && !operationRecoveryId) setOperationRecoveryId(failedReadRecoveryId); }, [failedReadRecoveryId, operationRecoveryId]);
   const saved = (workspace: DeliveryCommandAck) => {
     if (
       workspace.project_id !== projectId ||
@@ -273,12 +325,16 @@ export function DeliveryTaskDetail({
     const current = qc.getQueryData<DeliveryTaskData>(key);
     if (
       !current ||
-      busy ||
-      query.isError ||
-      executionExit.pending ||
-      origin.current !== projectSessionKey()
+      writePending.current || busy ||
+      query.isError || taskAccess.current.error || !taskAccess.current.write ||
+      !["idle", "refused"].includes(queueCommand.snapshot().phase) ||
+      executionDispatchRecoveryPending(projectId, "execution.queue", taskId) ||
+      Boolean(operationRecoveryLive.current) ||
+      Boolean(knownExecution.current && executionOperationPending(projectId, knownExecution.current)) ||
+      executionExit.pending || queueLocked || !executionExit.canNavigate() || !isActive()
     )
       throw new Error(t("deliveryTaskAcceptance.readonly"));
+    writePending.current = true;
     const signature = JSON.stringify([action, payload, current.version]);
     if (intent.current?.signature !== signature)
       intent.current = { signature, key: crypto.randomUUID() };
@@ -295,17 +351,27 @@ export function DeliveryTaskDetail({
         ),
       );
     } catch (failure) {
-      setError((failure as Error).message);
+      if (isActive()) setError((failure as Error).message);
       throw failure;
     } finally {
-      setBusy(false);
+      writePending.current = false;
+      if (isActive()) setBusy(false);
     }
   }
   return (
     <div className="delivery-task-detail">
+      <ExecutionQueueRecovery command={queueCommand} projectId={projectId} taskId={taskId} onSaved={saved} isActive={isActive} />
+      {displayedOperationRecovery && <ExecutionOperationRecovery key={`${projectId}:${sessionId}:${displayedOperationRecovery}`} projectId={projectId} executionId={displayedOperationRecovery} sessionId={sessionId}
+        isActive={() => isActive() && operationRecoveryLive.current === displayedOperationRecovery} onSaved={saved}
+        onUnresolvedChange={(value) => {
+          const retained = executionOperationPending(projectId, displayedOperationRecovery);
+          const pending = executionExit.setPending(`execution:${taskId}`, value || retained);
+          if (!value && !retained) { operationRecoveryLive.current = ""; setOperationRecoveryId(""); }
+          onUnresolvedChange?.(pending);
+        }} />}
       <EventReceiptReturn
         projectId={projectId}
-        disabled={executionExit.pending || busy}
+        disabled={executionExit.pending || queueLocked || busy}
       />
       {query.isPending && <Skeleton active paragraph={{ rows: 3 }} />}
       {query.error && (
@@ -321,8 +387,10 @@ export function DeliveryTaskDetail({
           }
         />
       )}
+      {query.error && <p className="runtime-help">{t("deliveryRuntime.queueCurrentReadFailed")}</p>}
       {error && <Alert type="error" role="alert" title={error} />}
       {expectedRequirementId &&
+        !query.error &&
         query.data &&
         query.data.task.req_id !== expectedRequirementId && (
           <Alert
@@ -349,8 +417,8 @@ export function DeliveryTaskDetail({
         />
       )}
       <TaskDetailContent
-        detail={query.data}
-        pinnedDetail={executionPinnedWorkspace || pinnedWorkspace}
+        detail={query.error || displayedOperationRecovery ? undefined : query.data}
+        pinnedDetail={query.error || displayedOperationRecovery ? undefined : executionPinnedWorkspace || pinnedWorkspace}
         taskId={taskId}
         sessionId={sessionId}
         onSaved={saved}
@@ -359,13 +427,18 @@ export function DeliveryTaskDetail({
           !query.isError &&
           !busy
         }
-        executionBlocked={executionExit.pending}
+        executionBlocked={executionExit.pending || queueLocked}
+        queueCommand={queueCommand}
+        isActive={() => isActive() && !writePending.current}
+        canSubmitQueue={canUseQueueEditor}
+        onExecutionRecovery={(executionId) => { if (isActive()) knownExecution.current = executionId; }}
         onEditingChange={editingChanged}
         onCommand={command}
         onUnresolvedChange={(value) => {
+          const retained = Boolean(knownExecution.current && executionOperationPending(projectId, knownExecution.current));
           const pending = executionExit.setPending(
             `execution:${taskId}`,
-            value,
+            value || retained,
           );
           const latest = latestWorkspace.current;
           if (pending && latest)
@@ -381,7 +454,7 @@ export function DeliveryTaskDetail({
         projectId={projectId}
         sessionId={sessionId}
         taskId={taskId}
-        disabled={executionExit.pending || busy}
+        disabled={executionExit.pending || queueLocked || Boolean(displayedOperationRecovery) || busy || query.isError}
         onSaved={saved}
         onEditingChange={editingChanged}
         onUnresolvedChange={(value) => {

@@ -12,11 +12,10 @@ import {
   Space,
   Tag,
 } from "antd";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
-  saveDelivery,
   type DeliveryTaskData,
   type DeliveryMember,
 } from "@/lib/delivery";
@@ -47,6 +46,9 @@ import {
   ExecutionExecutorFacts,
   RuntimeBindingFacts,
 } from "./ExecutionExecutorFacts";
+import { ExecutionQueueRecovery } from "./ExecutionQueueRecovery";
+import { executionQueueOriginal, validExecutionQueuePreview, type ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
+import { projectSessionKey } from "@/lib/projectPortfolio";
 
 export function ExecutionPlanEditor({
   initial,
@@ -56,6 +58,10 @@ export function ExecutionPlanEditor({
   onSaved,
   members,
   sessionId,
+  queueCommand,
+  isActive,
+  canSubmit,
+  onUnresolvedChange,
 }: {
   initial: ExecutionDraftSession;
   initialTargets: DeliveryTargets;
@@ -64,12 +70,28 @@ export function ExecutionPlanEditor({
   onSaved: (data: DeliveryCommandAck) => void;
   members: DeliveryMember[];
   sessionId: string;
+  queueCommand: ExecutionDispatchCommand;
+  isActive?: () => boolean;
+  canSubmit?: () => boolean;
+  onUnresolvedChange?: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryRuntime.${key}`);
   const tm = (key: string) => t(`deliveryTeamRuntime.${key}`);
   const qc = useQueryClient();
-  const [draft, setDraft] = useState(initial);
+  const [draft, setDraftState] = useState(initial);
+  const draftRef = useRef(draft); draftRef.current = draft;
+  const setDraft = (next: ExecutionDraftSession | ((value: ExecutionDraftSession) => ExecutionDraftSession)) => {
+    const value = typeof next === "function" ? next(draftRef.current) : next;
+    draftRef.current = value; setDraftState(value);
+  };
+  const origin = useRef(projectSessionKey()), mounted = useRef(true), pending = useRef(false);
+  const confirmed = useRef(false);
+  const [finished, setFinished] = useState(false);
+  const identity = `${initial.projectId}:${initial.taskId}:${sessionId}`, liveIdentity = useRef(identity);
+  liveIdentity.current = identity;
+  const access = useRef({ queueCommand, isActive, canSubmit }); access.current = { queueCommand, isActive, canSubmit };
+  const notify = useRef(onUnresolvedChange); notify.current = onUnresolvedChange;
   const [targets, setTargets] = useState(initialTargets);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -81,19 +103,39 @@ export function ExecutionPlanEditor({
     adopted?: ExecutionDraftSession;
     recoveryError?: string;
   }>();
+  const commandLocked = !["idle", "refused"].includes(queueCommand.state.phase);
+  const locked = busy || commandLocked;
+  const isLocked = () => !["idle", "refused"].includes(queueCommand.snapshot().phase);
+  const current = () => {
+    if (!mounted.current || origin.current !== projectSessionKey() || liveIdentity.current !== identity ||
+      !queueCommand.current() || access.current.queueCommand.snapshot !== queueCommand.snapshot || access.current.isActive?.() === false)
+      throw new Error("noScope");
+  };
+  const canChange = () => {
+    if (pending.current || confirmed.current || isLocked() || access.current.canSubmit?.() === false) return false;
+    try { current(); return true; } catch { return false; }
+  };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    notify.current?.(["sending", "unknown", "succeeded"].includes(queueCommand.state.phase));
+    return () => notify.current?.(false);
+  }, [queueCommand.state.phase]);
   const teamKey = ["delivery-team-runtime", draft.projectId, sessionId];
   const team = useQuery({
     queryKey: teamKey,
     queryFn: ({ signal }) => fetchTeamRuntimeBindings(draft.projectId, signal),
-    enabled: draft.mode === "agent",
+    enabled: draft.mode === "agent" && !commandLocked,
     retry: false,
     gcTime: 0,
   });
-  const [policyTarget, setPolicyTarget] = useState<ExecutionTarget>();
+  const [policyTarget, setPolicyTargetState] = useState<ExecutionTarget>();
+  const policyRef = useRef(policyTarget); policyRef.current = policyTarget;
+  const setPolicyTarget = (value: ExecutionTarget | undefined) => { policyRef.current = value; setPolicyTargetState(value); };
   const workspace = targets.workspaces.find(
     (item) => item.id === draft.workspaceId,
   );
   const change = (values: Partial<ExecutionDraftSession>) => {
+    if (!canChange()) return;
     setDraft((current) => ({ ...current, ...values, preview: null }));
     setCandidate(undefined);
   };
@@ -105,62 +147,74 @@ export function ExecutionPlanEditor({
         ? `reasons.${parsed.code}`
         : parsed.message,
     );
-    if (message.includes("409")) setConflict(true);
+    if (parsed.conflict || /^HTTP 409\b/.test(message)) setConflict(true);
     setCandidate(undefined);
   };
   async function preview() {
+    if (!canChange() || policyRef.current) return;
+    pending.current = true;
     setBusy(true);
     setError("");
     try {
-      const prepared = prepareExecution(draft);
+      current();
+      const value = { ...draftRef.current, preview: null };
+      setDraft(value);
+      if (queueCommand.snapshot().phase === "refused") {
+        queueCommand.reset();
+        if (queueCommand.snapshot().phase !== "idle") throw new Error("queueStorageUnavailable");
+      }
+      const prepared = prepareExecution(value);
       setDraft(prepared.session);
       const result = await previewDeliveryExecution(
-        draft.projectId,
+        value.projectId,
         prepared.payload,
       );
-      if (
-        result.version !== draft.intent.version ||
-        result.task_basis !== draft.taskBasis ||
-        result.target.basis !== draft.target?.basis ||
-        (result.executor_snapshot?.member_id || "") !==
-          draft.executorMemberId ||
-        (result.executor_snapshot?.binding_basis || "") !==
-          draft.executorBindingBasis
-      )
-        throw new Error("409: basis changed");
+      current();
+      if (access.current.canSubmit?.() === false) throw new Error("queueCurrentReadFailed");
+      if (!validExecutionQueuePreview(value.projectId, prepared, result)) { setConflict(true); throw new Error("queuePreviewInvalid"); }
       setDraft({ ...prepared.session, preview: result });
     } catch (failure) {
-      fail(failure);
+      if (mounted.current) fail(failure);
     } finally {
-      setBusy(false);
+      pending.current = false;
+      if (mounted.current) setBusy(false);
     }
   }
   async function save() {
-    if (!draft.preview) return;
+    if (!canChange() || !draftRef.current.preview || conflict || policyRef.current || executorInvalid) return;
+    pending.current = true;
     setBusy(true);
     setError("");
     try {
-      const prepared = prepareExecution(draft);
-      const result = await saveDelivery(
-        draft.projectId,
-        "execution.queue",
-        prepared.payload,
-        prepared.version,
-        prepared.key,
-      );
-      onSaved(result);
-      onClose();
+      current();
+      const prepared = prepareExecution(draftRef.current);
+      const result = await queueCommand.run(executionQueueOriginal(prepared));
+      current();
+      if (queueCommand.snapshot().phase === "refused") { setConflict(true); fail(new Error(queueCommand.snapshot().error || "")); }
+      if (result) {
+        confirmed.current = true; setFinished(true);
+        queueCommand.reset();
+        if (queueCommand.snapshot().phase !== "idle") { setError("queueCleanupFailed"); notify.current?.(true); return; }
+        notify.current?.(false);
+        try { onSaved(result); } catch { setError("queueRefreshAfterSaveFailed"); }
+        onClose();
+      }
     } catch (failure) {
-      fail(failure);
+      if (mounted.current) fail(failure);
     } finally {
-      setBusy(false);
+      pending.current = false;
+      if (mounted.current) setBusy(false);
     }
   }
   async function readLatest() {
+    if (!canChange() || policyRef.current) return;
+    pending.current = true;
     setCandidate(undefined);
     setBusy(true);
     setError("");
     try {
+      current();
+      setDraft({ ...draftRef.current, preview: null });
       const [latestWorkspace, latestTargets] = await Promise.all([
         fetchDeliveryTaskEditData(draft.projectId, draft.taskId),
         fetchDeliveryTargets(draft.projectId),
@@ -168,6 +222,7 @@ export function ExecutionPlanEditor({
       const latestBindings = draft.executorMemberId
         ? await fetchTeamRuntimeBindings(draft.projectId)
         : undefined;
+      current();
       let adopted: ExecutionDraftSession | undefined;
       let recoveryError = "";
       try {
@@ -189,10 +244,10 @@ export function ExecutionPlanEditor({
         recoveryError,
       });
     } catch (failure) {
-      setCandidate(undefined);
-      setError(`${tr("retryRead")} ${(failure as Error).message}`);
+      if (mounted.current) { setCandidate(undefined); setError(`${tr("retryRead")} ${(failure as Error).message}`); }
     } finally {
-      setBusy(false);
+      pending.current = false;
+      if (mounted.current) setBusy(false);
     }
   }
   const allTargets = workspace ? [workspace.local, ...workspace.devices] : [];
@@ -209,7 +264,8 @@ export function ExecutionPlanEditor({
     : [];
   const latestTask = candidate?.workspace.task;
   const latestRequirement = candidate?.workspace.requirement;
-  const selectedMember = team.data?.members.find(
+  const teamData = team.isError ? undefined : team.data;
+  const selectedMember = teamData?.members.find(
     (item) => item.member_id === draft.executorMemberId,
   );
   const executorInvalid = Boolean(
@@ -228,7 +284,7 @@ export function ExecutionPlanEditor({
   );
   const memberOptions = [
     { value: "", label: tm("direct"), disabled: false },
-    ...(team.data?.members || []).map((item) => ({
+    ...(teamData?.members || []).map((item) => ({
       value: item.member_id,
       label: `${members.find((member) => member.id === item.member_id)?.name || item.member_id} · ${item.member_id} · ${tm(`states.${item.status}`)}`,
       disabled: item.status !== "current" || !item.binding,
@@ -244,6 +300,15 @@ export function ExecutionPlanEditor({
       disabled: true,
     });
 
+  const close = () => {
+    if (confirmed.current && !pending.current && queueCommand.snapshot().phase === "idle") {
+      try { current(); onClose(); } catch { setError("queueRefreshAfterSaveFailed"); }
+      return;
+    }
+    if (!canChange() || policyRef.current) return;
+    if (queueCommand.snapshot().phase === "refused") { queueCommand.reset(); if (queueCommand.snapshot().phase !== "idle") return; }
+    onClose();
+  };
   return (
     <>
       <Modal
@@ -251,19 +316,19 @@ export function ExecutionPlanEditor({
         title={tr("planTitle")}
         width={760}
         className="delivery-editor runtime-editor"
-        onCancel={() => !busy && !policyTarget && onClose()}
-        closable={!busy}
-        keyboard={!busy}
-        maskClosable={!busy}
+        onCancel={close}
+        closable={!locked}
+        keyboard={!locked}
+        maskClosable={!locked}
         footer={
           <Space wrap>
-            <Button disabled={busy} onClick={onClose}>
-              {t("common.cancel")}
+            <Button disabled={locked} onClick={close}>
+              {t(finished ? "common.close" : "common.cancel")}
             </Button>
-            <Button
+            {!commandLocked && !finished && <Button
               loading={busy}
               disabled={
-                conflict ||
+                busy || conflict ||
                 Boolean(policyTarget) ||
                 !draft.target ||
                 executorInvalid ||
@@ -272,12 +337,12 @@ export function ExecutionPlanEditor({
               onClick={preview}
             >
               {tr("preview")}
-            </Button>
-            <Button
+            </Button>}
+            {!commandLocked && !finished && <Button
               type="primary"
               loading={busy}
               disabled={
-                !draft.preview ||
+                busy || !draft.preview ||
                 conflict ||
                 Boolean(policyTarget) ||
                 executorInvalid
@@ -285,11 +350,15 @@ export function ExecutionPlanEditor({
               onClick={save}
             >
               {tr("save")}
-            </Button>
+            </Button>}
           </Space>
         }
       >
+        {commandLocked ? <ExecutionQueueRecovery command={queueCommand} projectId={initial.projectId} taskId={initial.taskId}
+          isActive={isActive} onSaved={onSaved} onResolved={() => { confirmed.current = true; setFinished(true); notify.current?.(false); onClose(); }} /> : finished ?
+          <Alert type="success" title={tr("queueConfirmed")} description={error ? tr(error) : tr("planReady")} /> : <>
         <p className="runtime-help">{tr("selectFirst")}</p>
+        {queueCommand.state.error && <Alert type="error" role="alert" title={queueCommand.state.error === "retainedOriginalUnavailable" ? tr("queueStorageUnavailable") : queueCommand.state.error === "retainedOriginalInvalid" ? tr("queueOriginalUnavailable") : queueCommand.state.error} />}
         {error && (
           <Alert
             role="alert"
@@ -314,16 +383,17 @@ export function ExecutionPlanEditor({
               <Select
                 aria-label={tm("optional")}
                 loading={team.isFetching}
-                disabled={busy || (!team.data && !draft.executorMemberId)}
+                disabled={locked || (!teamData && !draft.executorMemberId)}
                 value={draft.executorMemberId}
                 showSearch
                 optionFilterProp="label"
                 options={memberOptions}
                 onChange={(id) => {
+                  if (!canChange()) return;
                   try {
                     if (!id) setDraft(useDirectExecution(draft));
                     else {
-                      const row = team.data?.members.find(
+                      const row = teamData?.members.find(
                         (item) => item.member_id === id,
                       );
                       if (!row) throw new Error("executorUnavailable");
@@ -355,8 +425,9 @@ export function ExecutionPlanEditor({
                 <p className="runtime-help">{tm("boundHint")}</p>
                 <Button
                   size="small"
-                  disabled={busy}
+                  disabled={locked}
                   onClick={() => {
+                    if (!canChange()) return;
                     setDraft(useDirectExecution(draft));
                     setCandidate(undefined);
                   }}
@@ -376,7 +447,7 @@ export function ExecutionPlanEditor({
             {tr("workspace")}
             <Select
               aria-label={tr("workspace")}
-              disabled={busy || Boolean(draft.executorMemberId)}
+              disabled={locked || Boolean(draft.executorMemberId)}
               value={draft.workspaceId || undefined}
               options={targets.workspaces.map((item) => ({
                 value: item.id,
@@ -396,7 +467,7 @@ export function ExecutionPlanEditor({
             {tr("mode")}
             <Select
               aria-label={tr("mode")}
-              disabled={busy}
+              disabled={locked}
               value={draft.mode}
               options={[
                 { value: "agent", label: tr("agent") },
@@ -424,7 +495,7 @@ export function ExecutionPlanEditor({
               {tr("agentProfile")}
               <Select
                 aria-label={tr("agentProfile")}
-                disabled={busy || !workspace || Boolean(draft.executorMemberId)}
+                disabled={locked || !workspace || Boolean(draft.executorMemberId)}
                 value={draft.agentId || undefined}
                 options={
                   draft.executorMemberId
@@ -456,7 +527,7 @@ export function ExecutionPlanEditor({
             <Select
               aria-label={tr("target")}
               disabled={
-                busy || !workspace || (draft.mode === "agent" && !draft.agentId)
+                locked || !workspace || (draft.mode === "agent" && !draft.agentId)
               }
               value={
                 draft.target
@@ -501,10 +572,10 @@ export function ExecutionPlanEditor({
                         <Button
                           size="small"
                           disabled={
-                            busy ||
+                            locked ||
                             device.reason_codes.includes("device_revoked")
                           }
-                          onClick={() => setPolicyTarget(device)}
+                          onClick={() => { if (canChange()) setPolicyTarget(device); }}
                         >
                           {tr("policy")}
                         </Button>
@@ -521,7 +592,7 @@ export function ExecutionPlanEditor({
             <Checkbox
               checked={draft.approvalBeforeRun}
               disabled={
-                busy ||
+                locked ||
                 (!draft.approvalBeforeRun && draft.commands.length >= 32)
               }
               onChange={(event) =>
@@ -543,7 +614,7 @@ export function ExecutionPlanEditor({
         <ExecutionCommandEditor
           rows={draft.commands}
           agent={draft.mode === "agent"}
-          disabled={busy}
+          disabled={locked}
           maxCommands={
             draft.mode === "command" && draft.approvalBeforeRun ? 31 : 32
           }
@@ -642,9 +713,10 @@ export function ExecutionPlanEditor({
                   />
                 )}
                 <Button
-                  disabled={busy || !candidate.adopted}
+                  disabled={locked || !candidate.adopted}
                   onClick={() => {
-                    if (!candidate.adopted) return;
+                    if (!candidate.adopted || !canChange()) return;
+                    if (queueCommand.snapshot().phase === "refused") { queueCommand.reset(); if (queueCommand.snapshot().phase !== "idle") return; }
                     setDraft(candidate.adopted);
                     setTargets(candidate.targets);
                     if (candidate.bindings)
@@ -660,6 +732,7 @@ export function ExecutionPlanEditor({
             )}
           </section>
         )}
+        </>}
       </Modal>
       {policyTarget && workspace && (
         <ExecutionPolicyEditor
@@ -669,10 +742,11 @@ export function ExecutionPlanEditor({
           target={policyTarget}
           onClose={() => setPolicyTarget(undefined)}
           onSaved={() => {
+            if (!canChange()) return;
             change({ target: null });
             setConflict(false);
             void fetchDeliveryTargets(draft.projectId)
-              .then(setTargets)
+              .then((value) => { current(); setTargets(value); })
               .catch(fail);
           }}
         />

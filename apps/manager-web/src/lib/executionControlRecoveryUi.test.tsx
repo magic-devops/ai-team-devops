@@ -6,6 +6,8 @@ import { ExecutionRuntimeControl, type ExecutionRuntimeControlProps } from "../.
 import { ExecutionRuntimePanel } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionRuntimePanel";
 import { DeliveryExecutionInspector } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryExecutionInspector";
 import { ExecutionObservationCard } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionObservationCard";
+import { ExecutionSyncControl } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionSyncControl";
+import { ExecutionOperationRecovery } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionOperationRecovery";
 import { executionControlRecoveryPending, executionControlStorageKey } from "./executionControlCommand";
 import { setSession, USER_KEY } from "./authStorage";
 import { request } from "./http";
@@ -70,7 +72,7 @@ function ack(body: any) {
   const launches = ["execution.start", "execution.retry"].includes(body.action) || body.action === "execution.approval" && body.payload.decision === "approve";
   return { project_id: "P", action: body.action, resource: { kind: "execution", id: "E" }, applied_version: body.expected_version + 1, version: body.expected_version + 1,
     query_generation: 2, replayed: false, affected_refs: [{ kind: "execution", id: "E" }],
-    result: { run_id: "R", run_version: 10, replayed_runtime: false,
+    result: body.action === "execution.sync" ? null : { run_id: "R", run_version: 10, replayed_runtime: false,
       ...(launches ? { start_run: { workspace_id: "W", run_id: "R", attempt: body.payload.attempt + (body.action === "execution.retry" ? 1 : 0), resume: null } } : {}) } };
 }
 function frame<T>(name: string, callback: () => T): T { h.frame = name; h.next = 0; h.effects[name] = []; return callback(); }
@@ -111,7 +113,9 @@ async function cardControlChain(onCommand: Parameters<typeof ExecutionObservatio
   const renderControl = () => frame("control", () => ExecutionRuntimeControl(retained.props));
   button(renderControl(), "cancelRun").onClick(); reason(renderControl()).onChange({ target: { value: "Stop original attempt" } });
   await button(renderControl(), "preview").onClick();
-  return { card, renderControl };
+  const sync = nodes(card).find((node) => node.type === ExecutionSyncControl)!;
+  const renderSync = (patch: Partial<Parameters<typeof ExecutionSyncControl>[0]> = {}) => frame("sync", () => ExecutionSyncControl({ ...sync.props, ...patch }));
+  return { card, renderControl, renderSync };
 }
 function recreate() { h.frames = {}; h.effects = {}; }
 async function settle() { for (let index = 0; index < 24; index++) await Promise.resolve(); }
@@ -325,18 +329,20 @@ describe("actual execution runtime control recovery", () => {
 
   it("keeps the same real inspector fallback host when an in-flight detail GET finishes during replay", async () => {
     await button(await ready(), "confirm").onClick(); recreate();
-    const first = inspector(), retained = nodes(first).find((node) => node.type === ExecutionRuntimeControl)!;
+    const first = inspector(), retained = nodes(first).find((node) => node.type === ExecutionOperationRecovery)!;
     expect(retained).toBeDefined(); expect(nodes(first).filter((node) => node.type === ExecutionObservationCard)).toHaveLength(0);
-    const recovery = frame("control", () => ExecutionRuntimeControl(retained.props));
+    const gate = frame("operation-recovery", () => ExecutionOperationRecovery(retained.props));
+    const runtimeControl = nodes(gate).find((node) => node.type === ExecutionRuntimeControl)!;
+    const recovery = frame("control", () => ExecutionRuntimeControl(runtimeControl.props));
     h.mode = "pending"; const replay = action(recovery, "retry-original").onClick(); await settle();
     h.detailReady = true;
-    const completedRead = inspector(), sameHost = nodes(completedRead).filter((node) => node.type === ExecutionRuntimeControl);
+    const completedRead = inspector(), sameHost = nodes(completedRead).filter((node) => node.type === ExecutionOperationRecovery);
     expect(sameHost).toHaveLength(1); expect(sameHost[0].key).toBe(retained.key);
     expect(nodes(completedRead).filter((node) => node.type === ExecutionObservationCard)).toHaveLength(0);
     expect(find(completedRead, Drawer).closable).toBe(false);
     h.resolve!(ack(h.sent[1])); await replay;
     expect(h.sent[1]).toEqual(h.sent[0]); expect(saved).toHaveBeenCalledTimes(1);
-    expect(nodes(inspector()).filter((node) => node.type === ExecutionRuntimeControl)).toHaveLength(0);
+    expect(nodes(inspector()).filter((node) => node.type === ExecutionOperationRecovery)).toHaveLength(0);
     expect(nodes(inspector()).filter((node) => node.type === ExecutionObservationCard)).toHaveLength(1);
   });
 
@@ -361,7 +367,7 @@ describe("actual execution runtime control recovery", () => {
 
   it("blocks old card sync and review callbacks while control is sending, unknown or confirmed but awaiting local cleanup", async () => {
     const onCommand = vi.fn(async () => {}), chain = await cardControlChain(onCommand);
-    const sync = find(chain.card, Button, (props) => props.children === "deliveryRuntime.sync");
+    const sync = action(chain.renderSync(), "sync-execution");
     const review = find(chain.card, Button, (props) => props.children === "deliveryRuntime.reject");
     expect(sync.disabled).toBe(false); expect(review.disabled).toBe(false);
     h.mode = "pending"; const sending = button(chain.renderControl(), "confirm").onClick();
@@ -376,20 +382,21 @@ describe("actual execution runtime control recovery", () => {
     expect(action(chain.renderControl(), "finish-confirmed")).toBeDefined();
     expect(onCommand).not.toHaveBeenCalled(); expect(saved).not.toHaveBeenCalled(); expect(h.sent).toHaveLength(2);
     h.storageFail = "none"; await action(chain.renderControl(), "finish-confirmed").onClick();
-    sync.onClick(); await settle(); review.onClick(); await settle();
-    expect(onCommand.mock.calls).toEqual([["execution.sync", { id: "E" }], ["execution.review", { id: "E", decision: "request_changes", comment: "Review the fixed execution", run_version: 9 }]]);
-    expect(saved).toHaveBeenCalledTimes(1); expect(h.sent).toHaveLength(2);
+    chain.renderSync({ workspaceVersion: 8 });
+    await sync.onClick(); review.onClick(); await settle();
+    expect(onCommand.mock.calls).toEqual([["execution.review", { id: "E", decision: "request_changes", comment: "Review the fixed execution", run_version: 9 }]]);
+    expect(h.sent[2]).toMatchObject({ action: "execution.sync", payload: { id: "E" } });
+    expect(saved).toHaveBeenCalledTimes(2); expect(h.sent).toHaveLength(3);
   });
 
   it("blocks an old control confirmation synchronously while a real card sync is in flight", async () => {
-    let finish!: () => void;
-    const onCommand = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const onCommand = vi.fn(async () => {});
     const chain = await cardControlChain(onCommand), confirm = button(chain.renderControl(), "confirm");
-    const sync = find(chain.card, Button, (props) => props.children === "deliveryRuntime.sync");
-    sync.onClick(); await confirm.onClick();
-    expect(onCommand).toHaveBeenCalledTimes(1); expect(onCommand.mock.calls[0]).toEqual(["execution.sync", { id: "E" }]);
-    expect(h.sent).toHaveLength(0); expect(saved).not.toHaveBeenCalled();
-    finish(); await settle(); await confirm.onClick();
-    expect(h.sent).toHaveLength(1); expect(action(chain.renderControl(), "retry-original")).toBeDefined();
+    const sync = action(chain.renderSync(), "sync-execution"); h.mode = "pending";
+    const sending = sync.onClick(); await confirm.onClick();
+    expect(onCommand).not.toHaveBeenCalled(); expect(h.sent).toHaveLength(1);
+    expect(h.sent[0]).toMatchObject({ action: "execution.sync", payload: { id: "E" } }); expect(saved).not.toHaveBeenCalled();
+    h.resolve!(ack(h.sent[0])); await sending; h.mode = "unknown"; await confirm.onClick();
+    expect(h.sent).toHaveLength(2); expect(h.sent[1].action).toBe("execution.cancel"); expect(action(chain.renderControl(), "retry-original")).toBeDefined();
   });
 });

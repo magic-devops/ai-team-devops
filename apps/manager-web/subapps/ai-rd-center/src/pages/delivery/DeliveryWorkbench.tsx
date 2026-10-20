@@ -121,6 +121,7 @@ import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { ProjectContextGate } from "@/components/ProjectContextGate";
 import { preserveProjectContext } from "@/lib/projectPortfolioRoute";
 import { DeliveryExecutionInspector } from "./DeliveryExecutionInspector";
+import { ExecutionRouteRecoveryGate } from "./ExecutionRouteRecoveryGate";
 import { useExecutionExitGuard } from "@/lib/executionExitGuard";
 import { parseExecutionSelection } from "@/lib/executionRuntime";
 import { DeliveryReleaseWorkbench } from "./DeliveryReleaseWorkbench";
@@ -151,7 +152,9 @@ export function DeliveryWorkbench() {
   const scope = useSyncExternalStore(subscribe, sessionSnapshot);
   return (
     <ProjectContextGate>
-      <ProjectDelivery key={scope} />
+      <ExecutionRouteRecoveryGate key={scope}>
+        <ProjectDelivery key={scope} />
+      </ExecutionRouteRecoveryGate>
     </ProjectContextGate>
   );
 }

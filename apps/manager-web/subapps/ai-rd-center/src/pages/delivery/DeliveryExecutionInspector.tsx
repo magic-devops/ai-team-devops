@@ -11,8 +11,7 @@ import type {
   DeliveryCommandAck,
 } from "@/lib/delivery";
 import { ExecutionObservationCard } from "./ExecutionObservationCard";
-import { ExecutionRuntimeControl } from "./ExecutionRuntimeControl";
-import { executionControlRecoveryPending } from "@/lib/executionControlCommand";
+import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
 export function DeliveryExecutionInspector({
   executionId,
   sessionId,
@@ -43,9 +42,9 @@ export function DeliveryExecutionInspector({
   const [locked, setLocked] = useState(false);
   const pending = useRef(false), requested = useRef(executionId);
   requested.current = executionId;
-  const [recoveryId, setRecoveryId] = useState(() => executionControlRecoveryPending(workspace.project.id, executionId) ? executionId : "");
+  const [recoveryId, setRecoveryId] = useState(() => executionOperationPending(workspace.project.id, executionId) ? executionId : "");
   const unresolved = (value: boolean) => {
-    const retained = executionControlRecoveryPending(workspace.project.id, identity.displayId);
+    const retained = executionOperationPending(workspace.project.id, identity.displayId);
     pending.current = value || retained;
     setLocked(value || retained);
     if (!value && !retained) setRecoveryId("");
@@ -56,7 +55,7 @@ export function DeliveryExecutionInspector({
     executionId,
   );
   useEffect(() => {
-    setRecoveryId(executionControlRecoveryPending(workspace.project.id, identity.displayId) ? identity.displayId : "");
+    setRecoveryId(executionOperationPending(workspace.project.id, identity.displayId) ? identity.displayId : "");
   }, [workspace.project.id, sessionId, identity.displayId]);
   const query = useQuery({
     queryKey: [
@@ -72,35 +71,36 @@ export function DeliveryExecutionInspector({
     gcTime: 0,
   });
   const entry = query.data?.execution;
+  const failedReadRecoveryId = query.error && executionOperationPending(workspace.project.id, identity.displayId) ? identity.displayId : "";
+  const displayedRecoveryId = recoveryId || failedReadRecoveryId;
+  useEffect(() => { if (failedReadRecoveryId && !recoveryId) setRecoveryId(failedReadRecoveryId); }, [failedReadRecoveryId, recoveryId]);
   return (
     <Drawer
       open={Boolean(executionId)}
       title={t("deliveryRuntime.title")}
       width="min(760px, 100vw)"
       className="delivery-inspector"
-      closable={!locked && !executionControlRecoveryPending(workspace.project.id, identity.displayId)}
-      maskClosable={!locked && !executionControlRecoveryPending(workspace.project.id, identity.displayId)}
-      keyboard={!locked && !executionControlRecoveryPending(workspace.project.id, identity.displayId)}
+      closable={!locked && !executionOperationPending(workspace.project.id, identity.displayId)}
+      maskClosable={!locked && !executionOperationPending(workspace.project.id, identity.displayId)}
+      keyboard={!locked && !executionOperationPending(workspace.project.id, identity.displayId)}
       onClose={() => {
-        if (!pending.current && requested.current === executionId && !executionControlRecoveryPending(workspace.project.id, identity.displayId)) onClose();
+        if (!pending.current && requested.current === executionId && !executionOperationPending(workspace.project.id, identity.displayId)) onClose();
       }}
       afterOpenChange={identity.afterOpenChange}
       destroyOnHidden
     >
-      {identity.displayId && recoveryId === identity.displayId && (
-        <ExecutionRuntimeControl
+      {identity.displayId && displayedRecoveryId === identity.displayId && (
+        <ExecutionOperationRecovery
           key={`${workspace.project.id}:${sessionId}:${identity.displayId}`}
           projectId={workspace.project.id}
           executionId={identity.displayId}
           sessionId={sessionId}
-          disabled
           isActive={() => Boolean(requested.current) && requested.current === identity.displayId}
           onSaved={onSaved}
-          onObserved={() => void query.refetch()}
           onUnresolvedChange={unresolved}
         />
       )}
-      {identity.displayId && recoveryId !== identity.displayId &&
+      {identity.displayId && displayedRecoveryId !== identity.displayId &&
         (query.isPending ? (
           <Skeleton active />
         ) : query.error ? (

@@ -1,4 +1,12 @@
 const en = {
+  recoveryEntry: "Continue the original execution operation",
+  recoveryEntryHint: "Resolve the retained request and finish local recovery first. The business page will then read current project facts.",
+  syncTitle: "Dispatch and evidence synchronization",
+  syncProjectVersion: "Original project version",
+  syncSending: "The original synchronization request is being processed.",
+  syncUnknown: "Synchronization is not yet confirmed",
+  syncUnknownHint: "A runtime plan may already exist, including after a refused response. Keep the original request. Retry the same request to recover its receipt; a status read cannot confirm it. If the project version has advanced, retain this record for reconciliation.",
+  syncConsequence: "The first synchronization can create a runtime plan. It does not start a process or accept delivery.",
   approvalBeforeRun: "Human confirmation before execution",
   approvalBeforeRunHint:
     "The local run waits at an approval gate before its first command. An authorized person must explicitly approve or reject it. With this gate, use at most 31 commands.",
@@ -150,6 +158,14 @@ const en = {
   },
 };
 const zh: typeof en = {
+  recoveryEntry: "继续处理原执行操作",
+  recoveryEntryHint: "请先核对保留的原请求并完成本地恢复，业务页面随后再读取当前项目事实。",
+  syncTitle: "派发与业务证据同步",
+  syncProjectVersion: "原项目版本",
+  syncSending: "正在处理原同步请求。",
+  syncUnknown: "同步结果尚未确认",
+  syncUnknownHint: "底层运行计划可能已经存在，即使本次返回拒绝也不能排除。请保留原请求，重试同一请求核对回执；查询状态不能代替确认。若项目版本已推进，请保留原件进行对账。",
+  syncConsequence: "首次同步可能创建运行计划，不会启动进程，也不代表交付已验收。",
   approvalBeforeRun: "执行前人工确认",
   approvalBeforeRunHint:
     "本地运行在首条命令前等待审批，需授权人员明确批准或拒绝。启用后最多可配置31条命令。",
@@ -286,6 +302,14 @@ const zh: typeof en = {
   },
 };
 const ja: typeof en = {
+  recoveryEntry: "元の実行操作を復旧",
+  recoveryEntryHint: "保持した要求を確認し、ローカルの復旧を完了してください。その後、業務画面で現在の情報を取得します。",
+  syncTitle: "実行割当と業務証拠の同期",
+  syncProjectVersion: "元のプロジェクトバージョン",
+  syncSending: "元の同期要求を処理しています。",
+  syncUnknown: "同期結果は未確認です",
+  syncUnknownHint: "拒否応答の場合でも実行計画がすでに存在する可能性があります。元の要求を保持し、同じ要求を再試行して受領を確認してください。状態の読み取りでは確認できません。プロジェクトのバージョンが進んだ場合は照合のため原本を保持してください。",
+  syncConsequence: "初回同期は実行計画を作成する場合があります。プロセスの開始や受入の完了ではありません。",
   approvalBeforeRun: "実行前に人が確認",
   approvalBeforeRunHint:
     "最初のコマンドの前で承認を待ちます。権限のある人が明示的に承認または拒否してください。有効な場合、コマンドは最大31件です。",

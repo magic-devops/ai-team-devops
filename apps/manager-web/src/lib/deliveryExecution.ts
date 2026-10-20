@@ -111,7 +111,7 @@ export type ExecutionPreview = {
       acceptance_criteria: string[];
       criteria_indices: number[];
     };
-    owner: null | { id: string; name: string; kind: string; active: boolean };
+    owner: null | { id: string; name: string | null; kind: "human" | "agent" | "tool" | null; active: boolean };
     dependency_basis: Record<string, string>;
     acceptance_criteria: string[];
   };

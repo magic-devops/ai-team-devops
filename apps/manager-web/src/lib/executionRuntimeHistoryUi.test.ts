@@ -19,7 +19,7 @@ vi.mock("react", async () => ({
   },
   useState: (initial: unknown) => {
     const index = hooks.index++;
-    if (!(index in hooks.values)) hooks.values[index] = initial;
+    if (!(index in hooks.values)) hooks.values[index] = typeof initial === "function" ? initial() : initial;
     return [
       hooks.values[index],
       (next: any) => {

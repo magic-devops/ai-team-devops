@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-20T13:15:38.215296+00:00",
+  "updated_at": "2026-10-20T14:01:01.291478+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-20T13:15:38.215296+00:00",
-    "status": "canonical_agent_entry_source_stage_runtime_pending",
+    "updated_at": "2026-10-20T14:01:01.291478+00:00",
+    "status": "execution_dispatch_recovery_source_stage_runtime_pending",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/canonical-agent-entry/",
-    "verification_status": "current_scope_interaction_project_editor_and_agent_entry_runtime_unverified",
-    "next_step": "a2a_ops_consumers_queue_sync_recovery_precise_design_and_project_create_then_runtime_validation",
+    "evidence": ".sop-runtime/delivery-evidence/execution-dispatch-recovery/",
+    "verification_status": "current_scope_interaction_project_agent_and_dispatch_runtime_unverified",
+    "next_step": "positive_reconciliation_protocol_task_pending_locator_review_handoff_a2a_ops_and_full_validation",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -193,7 +193,8 @@
     "runtime_verification_deferred_by_user": true,
     "interaction_design": "docs/INTERACTION_USABILITY.md",
     "project_editor_design": "docs/PROJECT_EDITOR_USABILITY.md",
-    "canonical_agent_entry_design": "docs/CANONICAL_AGENT_ENTRY_DESIGN.md"
+    "canonical_agent_entry_design": "docs/CANONICAL_AGENT_ENTRY_DESIGN.md",
+    "execution_dispatch_recovery_design": "docs/EXECUTION_DISPATCH_RECOVERY_DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -648,7 +649,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-canonical-agent-entry源码阶段：运行中心和门户读取正式项目执行事实，精确执行/任务/成员导航与原位置返回，运行干预持久原请求、严格实际回执和稳定恢复宿主。测试/类型/构建/视觉按用户要求后置；A2A、相邻queue/sync恢复及完整全流程目标继续进行。",
+  "current": "T-execution-dispatch-recovery源码阶段：队列/同步固定原请求、真实回执、任务详情及读取失败恢复、同步/运行互斥。测试、类型、构建和视觉按用户要求后置；跨存储对账、冷任务定位及完整全流程目标继续。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -688,6 +689,21 @@
     "typecheck_build_browser_executed_this_stage": false,
     "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
     "next_step": "a2a_ops_consumers_queue_sync_recovery_precise_design_and_project_create_then_runtime_validation",
+    "full_lifecycle_complete": false
+  },
+  "execution_dispatch_recovery": {
+    "task_id": "T-execution-dispatch-recovery",
+    "updated_at": "2026-10-20T14:01:01.291478+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/EXECUTION_DISPATCH_RECOVERY_DESIGN.md",
+    "record": "memory/execution-dispatch-recovery-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/execution-dispatch-recovery/",
+    "base_commit": "b67f609f92b8d259158be8ba147cc6da228b1822",
+    "runtime_tests_executed_this_stage": false,
+    "typecheck_build_browser_executed_this_stage": false,
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "next_step": "positive_reconciliation_protocol_task_pending_locator_review_handoff_a2a_ops_and_full_validation",
+    "cross_store_reconciliation_implemented": false,
     "full_lifecycle_complete": false
   }
 }

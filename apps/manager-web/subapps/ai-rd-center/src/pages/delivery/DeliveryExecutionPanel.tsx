@@ -22,6 +22,9 @@ import {
 import { ExecutionPlanEditor } from "./ExecutionPlanEditor";
 import { ExecutionObservationCard } from "./ExecutionObservationCard";
 import "./delivery-runtime.css";
+import type { ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
+import { projectSessionKey } from "@/lib/projectPortfolio";
+import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
 
 type Props = {
   sessionId: string;
@@ -35,6 +38,10 @@ type Props = {
   onEditingChange?: (editing: boolean) => void;
   disabled?: boolean;
   onUnresolvedChange?: (value: boolean) => void;
+  queueCommand?: ExecutionDispatchCommand;
+  isActive?: () => boolean;
+  canSubmitQueue?: () => boolean;
+  onExecutionRecovery?: (executionId: string) => void;
 };
 const closed = ["accepted", "changes_requested", "cancelled"];
 
@@ -47,9 +54,22 @@ export function DeliveryExecutionPanel({
   onEditingChange,
   disabled = false,
   onUnresolvedChange,
+  queueCommand,
+  isActive,
+  canSubmitQueue,
+  onExecutionRecovery,
 }: Props) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryRuntime.${key}`);
+  const origin = useRef(projectSessionKey());
+  const identity = `${data.project.id}:${sessionId}:${task.id}`, live = useRef({ identity, executionId: task.execution_id || "", isActive });
+  live.current = { identity, executionId: task.execution_id || "", isActive };
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const activeTask = () => mounted.current && origin.current === projectSessionKey() && live.current.identity === identity && live.current.isActive?.() !== false;
+  const [recoveryId, setRecoveryId] = useState(() => task.execution_id && executionOperationPending(data.project.id, task.execution_id) ? task.execution_id : "");
+  const recoveryIdentity = useRef(identity), recoveryLive = useRef(recoveryId);
+  recoveryLive.current = recoveryIdentity.current === identity ? recoveryId : "";
   const targets = useQuery({
     queryKey: ["delivery-targets", data.project.id, sessionId],
     queryFn: ({ signal }) => fetchDeliveryTargets(data.project.id, signal),
@@ -60,8 +80,15 @@ export function DeliveryExecutionPanel({
   const [historyId, setHistoryId] = useState("");
   const [controlLocked, setControlLocked] = useState(false);
   const pendingControls = useRef(new Set<string>());
+  const knownPendingExecution = useRef("");
   const controlPending = (id: string, value: boolean) => {
-    if (value) pendingControls.current.add(id);
+    if (!activeTask()) return;
+    const retained = value || id !== "queue" && executionOperationPending(data.project.id, id);
+    if (retained && id !== "queue") {
+      knownPendingExecution.current = id;
+      onExecutionRecovery?.(id);
+    } else if (knownPendingExecution.current === id) knownPendingExecution.current = "";
+    if (retained) pendingControls.current.add(id);
     else pendingControls.current.delete(id);
     const pending = pendingControls.current.size > 0;
     setControlLocked(pending);
@@ -76,11 +103,21 @@ export function DeliveryExecutionPanel({
     ],
     queryFn: ({ signal }) =>
       fetchExecutionDetail(data.project.id, task.execution_id!, signal),
-    enabled: Boolean(task.execution_id),
+    enabled: Boolean(task.execution_id) && !recoveryId,
     retry: false,
     gcTime: 0,
     refetchInterval: controlLocked ? false : 5000,
   });
+  useEffect(() => {
+    if (recoveryIdentity.current !== identity) {
+      recoveryIdentity.current = identity;
+      knownPendingExecution.current = "";
+      pendingControls.current.clear();
+      setHistoryId("");
+      setControlLocked(false);
+      setRecoveryId(task.execution_id && executionOperationPending(data.project.id, task.execution_id) ? task.execution_id : "");
+    }
+  }, [identity, task.execution_id]);
   const history = useInfiniteQuery({
     queryKey: ["delivery-task-executions", data.project.id, sessionId, task.id],
     initialPageParam: "",
@@ -103,10 +140,23 @@ export function DeliveryExecutionPanel({
     gcTime: 0,
   });
   const executions =
-    history.data?.pages
+    !history.error && history.data?.pages
       .flatMap((page) => page.items.map((item) => item.data))
       .filter((entry) => entry.id !== task.execution_id) || [];
-  const current = currentQuery.data?.execution;
+  const current = currentQuery.error ? undefined : currentQuery.data?.execution;
+  // Keep only an execution actually selected or reported by a mounted card.
+  // A refresh may remove its row even when the list request itself succeeds.
+  const knownExecutionId = recoveryIdentity.current === identity ? knownPendingExecution.current || historyId : "";
+  const knownExecutionVisible = current?.id === knownExecutionId ||
+    historyId === knownExecutionId && executions.some((entry) => entry.id === knownExecutionId);
+  const missingKnownRecovery = knownExecutionId && !knownExecutionVisible &&
+    executionOperationPending(data.project.id, knownExecutionId) ? knownExecutionId : "";
+  const readFailureRecovery = currentQuery.error && task.execution_id &&
+    executionOperationPending(data.project.id, task.execution_id) ? task.execution_id : "";
+  const recoveryCandidate = missingKnownRecovery || readFailureRecovery;
+  const retainedExecutionId = recoveryLive.current || recoveryCandidate;
+  recoveryLive.current = retainedExecutionId;
+  useEffect(() => { if (recoveryCandidate && !recoveryId) setRecoveryId(recoveryCandidate); }, [recoveryCandidate, recoveryId]);
   const gateReasons = task.execution_gate.reasons.map((reason) =>
     !task.req_id && reason.code === "task_dispatch_stage_blocked"
       ? t("deliveryTaskAcceptance.standaloneStageBlocked")
@@ -124,7 +174,9 @@ export function DeliveryExecutionPanel({
     );
   const canDispatch =
     !disabled &&
-    !controlLocked &&
+    !controlLocked && !retainedExecutionId &&
+    Boolean(queueCommand) &&
+    !queueCommand?.locked &&
     data.permissions.write &&
     targets.data?.can_execute &&
     !targets.isError &&
@@ -147,9 +199,12 @@ export function DeliveryExecutionPanel({
           size="small"
           icon={<Send size={14} />}
           disabled={!canDispatch}
-          onClick={() =>
-            setDraft(openExecutionDraft(data, task.id, crypto.randomUUID()))
-          }
+          onClick={() => {
+            if (!canDispatch || pendingControls.current.size || origin.current !== projectSessionKey() || isActive?.() === false || canSubmitQueue?.() === false || !queueCommand?.current()) return;
+            if (queueCommand.snapshot().phase === "refused") { queueCommand.reset(); if (queueCommand.snapshot().phase !== "idle") return; }
+            if (queueCommand.snapshot().phase !== "idle") return;
+            setDraft(openExecutionDraft(data, task.id, crypto.randomUUID()));
+          }}
         >
           {tr(current ? "redispatch" : "dispatch")}
         </Button>
@@ -169,18 +224,25 @@ export function DeliveryExecutionPanel({
           }
         />
       )}
-      {targets.data && !targets.data.runtime_configured && (
+      {!targets.error && targets.data && !targets.data.runtime_configured && (
         <Alert type="info" title={tr("notConfigured")} />
       )}
-      {targets.data?.runtime_configured && !targets.data.can_execute && (
+      {!targets.error && targets.data?.runtime_configured && !targets.data.can_execute && (
         <p className="runtime-help">{tr("noPermission")}</p>
       )}
-      {targets.data && !targets.data.workspaces.length && (
+      {!targets.error && targets.data && !targets.data.workspaces.length && (
         <p>
           {tr("noTargets")} · <a href="#/workspace">{tr("configure")}</a>
         </p>
       )}
-      {!current && <p className="runtime-help">{tr("empty")}</p>}
+      {!current && !retainedExecutionId && <p className="runtime-help">{tr("empty")}</p>}
+      {retainedExecutionId && <ExecutionOperationRecovery key={`${identity}:${retainedExecutionId}`} projectId={data.project.id} executionId={retainedExecutionId} sessionId={sessionId}
+        isActive={() => activeTask() && recoveryLive.current === retainedExecutionId} onSaved={onSaved}
+        onUnresolvedChange={(value) => {
+          const retained = executionOperationPending(data.project.id, retainedExecutionId);
+          controlPending(retainedExecutionId, value || retained);
+          if (!value && !retained) { recoveryLive.current = ""; setRecoveryId(""); }
+        }} />}
       {currentQuery.error && (
         <Alert
           type="error"
@@ -218,7 +280,7 @@ export function DeliveryExecutionPanel({
           }
         />
       )}
-      {current && (
+      {current && !retainedExecutionId && (
         <>
           <h4>{tr("current")}</h4>
           <ExecutionObservationCard
@@ -231,6 +293,7 @@ export function DeliveryExecutionPanel({
             disabled={disabled || controlLocked}
             onUnresolvedChange={(value) => controlPending(current.id, value)}
             active
+            isActive={() => activeTask() && live.current.executionId === current.id}
             onCommand={onCommand}
           />
         </>
@@ -268,18 +331,17 @@ export function DeliveryExecutionPanel({
                         <Button
                           size="small"
                           disabled={controlLocked}
-                          onClick={() =>
-                            setHistoryId((selected) =>
-                              selected === entry.id ? "" : entry.id,
-                            )
-                          }
+                          onClick={() => {
+                            if (!activeTask() || pendingControls.current.size || queueCommand && !["idle", "refused"].includes(queueCommand.snapshot().phase)) return;
+                            setHistoryId((selected) => selected === entry.id ? "" : entry.id);
+                          }}
                         >
                           {t(
                             `deliveryExecutionRuntime.${historyId === entry.id ? "closeHistory" : "openHistory"}`,
                           )}
                         </Button>
                       </div>
-                      {historyId === entry.id && (
+                      {historyId === entry.id && !retainedExecutionId && (
                         <ExactExecutionCard
                           id={entry.id}
                           projectId={data.project.id}
@@ -288,6 +350,7 @@ export function DeliveryExecutionPanel({
                           onSaved={onSaved}
                           onCommand={onCommand}
                           disabled={disabled || controlLocked}
+                          isActive={activeTask}
                           onUnresolvedChange={(value) =>
                             controlPending(entry.id, value)
                           }
@@ -309,8 +372,13 @@ export function DeliveryExecutionPanel({
           ]}
         />
       )}
-      {draft && targets.data && (
+      {draft && targets.data && queueCommand && (
         <ExecutionPlanEditor
+          key={`${identity}:${draft.intent.key}`}
+          queueCommand={queueCommand}
+          isActive={activeTask}
+          canSubmit={canSubmitQueue}
+          onUnresolvedChange={(value) => controlPending("queue", value)}
           members={data.members}
           sessionId={sessionId}
           initial={draft}
@@ -320,7 +388,7 @@ export function DeliveryExecutionPanel({
             data.permissions.configure &&
             targets.data.can_configure_policy
           }
-          onClose={() => setDraft(undefined)}
+          onClose={() => { if (["idle", "refused"].includes(queueCommand.snapshot().phase)) setDraft(undefined); }}
           onSaved={onSaved}
         />
       )}
@@ -334,6 +402,10 @@ function ExactExecutionCard({
 }: Omit<Parameters<typeof ExecutionObservationCard>[0], "entry" | "active"> & {
   id: string;
 }) {
+  const origin = useRef(projectSessionKey()), liveId = useRef(id); liveId.current = id;
+  const [recovering, setRecovering] = useState(() => executionOperationPending(props.projectId, id));
+  const recoveryLive = useRef(recovering); recoveryLive.current = recovering;
+  const active = () => origin.current === projectSessionKey() && liveId.current === id && props.isActive?.() !== false;
   const query = useQuery({
     queryKey: [
       "delivery-execution-exact",
@@ -344,12 +416,24 @@ function ExactExecutionCard({
     queryFn: ({ signal }) => fetchExecutionDetail(props.projectId, id, signal),
     retry: false,
     gcTime: 0,
+    enabled: !recovering,
   });
-  return query.data ? (
+  const readFailureRecovery = Boolean(query.error && executionOperationPending(props.projectId, id));
+  recoveryLive.current = recovering || readFailureRecovery;
+  useEffect(() => { if (readFailureRecovery) setRecovering(true); }, [readFailureRecovery]);
+  if (recovering || readFailureRecovery) return <ExecutionOperationRecovery projectId={props.projectId} executionId={id} sessionId={props.sessionId}
+    isActive={() => active() && recoveryLive.current} onSaved={props.onSaved}
+    onUnresolvedChange={(value) => {
+      const retained = executionOperationPending(props.projectId, id);
+      props.onUnresolvedChange?.(value || retained);
+      if (!value && !retained) { recoveryLive.current = false; setRecovering(false); }
+    }} />;
+  return !query.error && query.data ? (
     <ExecutionObservationCard
       {...props}
       entry={query.data.execution}
       active={false}
+      isActive={active}
     />
   ) : query.error ? (
     <Alert

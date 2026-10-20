@@ -27,6 +27,10 @@ import { ExecutionTargetFacts } from "./ExecutionTargetFacts";
 import { ExecutionAcceptanceSnapshot } from "./ExecutionAcceptanceSnapshot";
 import { ExecutionRuntimePanel } from "./ExecutionRuntimePanel";
 import { projectSessionKey } from "@/lib/projectPortfolio";
+import { ExecutionSyncControl } from "./ExecutionSyncControl";
+import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
+import { executionControlRecoveryPending } from "@/lib/executionControlCommand";
+import { executionDispatchRecoveryPending } from "@/lib/executionDispatchCommand";
 
 export function ExecutionStageFacts({
   observation,
@@ -87,6 +91,7 @@ export function ExecutionObservationCard({
   active,
   onCommand,
   sessionId,
+  workspaceVersion,
   onSaved,
   onUnresolvedChange,
   initialNodeId,
@@ -122,8 +127,18 @@ export function ExecutionObservationCard({
   const [busy, setBusy] = useState(false);
   const [paused, setPaused] = useState(false);
   const [comment, setComment] = useState("");
-  const [controlLocked, setControlLocked] = useState(false);
+  const [controlLocked, setControlLocked] = useState(() => executionOperationPending(projectId, entry.id));
+  const [recovering, setRecovering] = useState(() => executionOperationPending(projectId, entry.id));
   const actionPending = useRef(false), controlPending = useRef(false);
+  const runtimePending = useRef(executionControlRecoveryPending(projectId, entry.id)), syncPending = useRef(executionDispatchRecoveryPending(projectId, "execution.sync", entry.id));
+  controlPending.current = runtimePending.current || syncPending.current;
+  const unresolved = (kind: "runtime" | "sync", value: boolean) => {
+    (kind === "runtime" ? runtimePending : syncPending).current = value;
+    const pending = runtimePending.current || syncPending.current;
+    controlPending.current = pending;
+    setControlLocked(pending);
+    onUnresolvedChange?.(pending);
+  };
   const origin = useRef(projectSessionKey()), access = useRef({ disabled, isActive });
   access.current = { disabled, isActive };
   const cursor = useRef<string>();
@@ -178,7 +193,7 @@ export function ExecutionObservationCard({
     return () => clearInterval(timer);
   }, [active, paused, terminal, observe, observation?.more]);
   async function act(action: () => Promise<void>) {
-    if (actionPending.current || controlPending.current || access.current.disabled || access.current.isActive?.() === false || origin.current !== projectSessionKey()) return;
+    if (actionPending.current || controlPending.current || executionOperationPending(projectId, entry.id) || access.current.disabled || access.current.isActive?.() === false || origin.current !== projectSessionKey()) return;
     actionPending.current = true;
     setBusy(true);
     setActionError("");
@@ -318,18 +333,6 @@ export function ExecutionObservationCard({
             {tr(paused ? "resume" : "pause")}
           </Button>
         )}
-        {permissions?.can_sync && (
-          <Button
-            size="small"
-            disabled={busy || controlLocked || disabled || Boolean(readError)}
-            loading={busy}
-            onClick={() =>
-              void act(() => onCommand("execution.sync", { id: entry.id }))
-            }
-          >
-            {tr("sync")}
-          </Button>
-        )}
         {entry.issue_id && (
           <Button
             size="small"
@@ -339,11 +342,33 @@ export function ExecutionObservationCard({
           </Button>
         )}
       </Space>
+      {recovering ? <ExecutionOperationRecovery projectId={projectId} executionId={entry.id} sessionId={sessionId}
+        isActive={() => access.current.isActive?.() !== false} onSaved={onSaved} onUnresolvedChange={(value) => {
+          const retained = executionOperationPending(projectId, entry.id);
+          runtimePending.current = executionControlRecoveryPending(projectId, entry.id);
+          syncPending.current = executionDispatchRecoveryPending(projectId, "execution.sync", entry.id);
+          controlPending.current = value || retained;
+          setControlLocked(value || retained);
+          onUnresolvedChange?.(value || retained);
+          if (!value && !retained) setRecovering(false);
+        }} /> : <>
+      <ExecutionSyncControl
+        projectId={projectId}
+        executionId={entry.id}
+        sessionId={sessionId}
+        workspaceVersion={workspaceVersion}
+        canSync={Boolean(permissions?.can_sync)}
+        disabled={disabled || busy || Boolean(readError) || runtimePending.current}
+        isActive={() => !actionPending.current && !runtimePending.current && !executionControlRecoveryPending(projectId, entry.id) && access.current.isActive?.() !== false}
+        onSaved={onSaved}
+        onObserved={observe}
+        onUnresolvedChange={(value) => unresolved("sync", value)}
+      />
       <ExecutionRuntimePanel
         projectId={projectId}
         executionId={entry.id}
         workspaceId={entry.workspace_id}
-        isActive={() => !actionPending.current && access.current.isActive?.() !== false}
+        isActive={() => !actionPending.current && !syncPending.current && !executionDispatchRecoveryPending(projectId, "execution.sync", entry.id) && access.current.isActive?.() !== false}
         sessionId={sessionId}
         active={active}
         paused={paused}
@@ -353,11 +378,10 @@ export function ExecutionObservationCard({
         initialAttempt={initialAttempt}
         initialStream={initialStream}
         onUnresolvedChange={(value) => {
-          controlPending.current = value;
-          setControlLocked(value);
-          onUnresolvedChange?.(value);
+          unresolved("runtime", value);
         }}
       />
+      </>}
       <Collapse
         size="small"
         ghost
