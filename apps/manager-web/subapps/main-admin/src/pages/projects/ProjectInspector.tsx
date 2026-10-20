@@ -1,91 +1,127 @@
-import { Alert, Button, Drawer, Empty, Form, Input, Select, Skeleton, Switch, Tag } from "antd";
+import { Alert, Button, Drawer, Empty, Select, Skeleton, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { prepareDeliveryIntent, type DeliveryIntent } from "@/lib/delivery";
-import { activeRiskCategories, enterPortfolioProject, fetchProjectPortfolioDetail, projectSessionKey, submitProjectCommand, type ProjectPortfolioDetail } from "@/lib/projectPortfolio";
+import { activeRiskCategories, enterPortfolioProject, fetchProjectPortfolioDetail, projectSessionKey, type ProjectPortfolioDetail } from "@/lib/projectPortfolio";
+import { projectEditorRecoverySlots, type ProjectEditorAction } from "@/lib/projectEditorCommand";
+import { installExecutionExitGuard } from "@/lib/executionExitGuard";
 import { type PortfolioRiskCode } from "@/lib/projectPortfolioRoute";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { ProjectPortfolioFacts } from "./ProjectPortfolioFacts";
 import { ProjectLifecycleEditor } from "./ProjectLifecycleEditor";
-type Metadata = { name: string; description: string; business_id: string | null; project_path: string; vector_db: string; is_template: boolean };
-type MetadataDraft = { values: Metadata; intent: DeliveryIntent };
-export function ProjectInspector({ projectId, background, businesses, onClose, onSaved, sessionKey }: { projectId: string; background: string; businesses: { id: string; name: string }[]; onClose: () => void; onSaved: () => void; sessionKey: string }) {
+import { ProjectSettingsEditor } from "./ProjectSettingsEditor";
+import { ProjectCommandRecovery } from "./ProjectCommandRecovery";
+
+export function ProjectInspector({ projectId, background, businesses, onClose, onSaved, sessionKey, navigationGuard }: {
+  projectId: string; background: string; businesses: { id: string; name: string }[];
+  onClose: () => void; onSaved: () => void; sessionKey: string; navigationGuard?: { current: () => boolean };
+}) {
   const inspector = useDrawerIdentity(sessionKey, projectId);
+  const requested = useRef(projectId); requested.current = projectId;
+  const displayedId = inspector.displayId;
   const { t } = useTranslation();
-  return <Drawer open={Boolean(projectId)} title={t("projectPortfolio.details")} width={640} className="project-portfolio-drawer" onClose={onClose} afterOpenChange={inspector.afterOpenChange} destroyOnHidden>
-    {inspector.displayId && <InspectorBody key={`${sessionKey}:${inspector.displayId}`} projectId={inspector.displayId} background={background} businesses={businesses} onSaved={onSaved} />}
+  const pending = useRef(new Set<string>());
+  const [, redraw] = useState(0);
+  const [blocked, setBlocked] = useState(false);
+  const unresolved = () => sessionKey === projectSessionKey() && (
+    [...pending.current].some((key) => key.startsWith(`${sessionKey}:`)) || Boolean(projectId && projectEditorRecoverySlots(projectId).length)
+  );
+  const canLeave = () => {
+    if (sessionKey !== projectSessionKey()) return false;
+    if (unresolved()) { setBlocked(true); return false; }
+    setBlocked(false); return true;
+  };
+  if (navigationGuard) navigationGuard.current = canLeave;
+  useEffect(() => () => { if (navigationGuard) navigationGuard.current = () => true; }, [navigationGuard]);
+  const onPending = (identity: string, value: boolean) => {
+    const key = `${sessionKey}:${identity}`;
+    if (value) pending.current.add(key); else pending.current.delete(key);
+    if (!pending.current.size) setBlocked(false);
+    redraw((version) => version + 1);
+  };
+  useEffect(() => installExecutionExitGuard(window, unresolved, () => setBlocked(true)), [sessionKey, projectId]);
+  const locked = unresolved();
+  return <Drawer open={Boolean(projectId)} title={t("projectPortfolio.details")} width={640} className="project-portfolio-drawer"
+    onClose={() => { if (canLeave()) onClose(); }} closable={!locked} maskClosable={!locked} keyboard={!locked}
+    afterOpenChange={inspector.afterOpenChange} destroyOnHidden>
+    {blocked && <Alert className="mb-3" type="warning" showIcon title={t("projectPortfolio.confirmBeforeLeave")} />}
+    {inspector.displayId && <InspectorBody key={`${sessionKey}:${inspector.displayId}`} projectId={inspector.displayId} background={background}
+      businesses={businesses} onSaved={onSaved} onPending={onPending} canLeave={canLeave}
+      isActive={() => requested.current === displayedId && sessionKey === projectSessionKey()} />}
   </Drawer>;
 }
-function InspectorBody({ projectId, background, businesses, onSaved }: { projectId: string; background: string; businesses: { id: string; name: string }[]; onSaved: () => void }) {
+function InspectorBody({ projectId, background, businesses, onSaved, onPending, canLeave, isActive }: {
+  projectId: string; background: string; businesses: { id: string; name: string }[]; onSaved: () => void;
+  onPending: (identity: string, value: boolean) => void; canLeave: () => boolean; isActive: () => boolean;
+}) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`projectPortfolio.${key}`);
   const origin = useRef(projectSessionKey());
-  const query = useQuery({ queryKey: ["projectPortfolioDetail", origin.current, projectId], queryFn: ({ signal }) => fetchProjectPortfolioDetail(projectId, signal), refetchInterval: 10000 });
-  const [edit, setEdit] = useState<MetadataDraft | null>(null);
-  const [latest, setLatest] = useState<ProjectPortfolioDetail | null>(null);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [conflict, setConflict] = useState(false);
+  const query = useQuery({ queryKey: ["projectPortfolioDetail", origin.current, projectId], queryFn: ({ signal }) => {
+    if (!isActive() || origin.current !== projectSessionKey()) throw new Error(tr("scopeChanged"));
+    return fetchProjectPortfolioDetail(projectId, signal);
+  }, enabled: isActive(), refetchInterval: 10000 });
+  const activeEditor = useRef<"settings" | "lifecycle" | ProjectEditorAction | null>(null);
+  const [settings, setSettings] = useState<ProjectPortfolioDetail | null>(null);
   const [lifecycle, setLifecycle] = useState<ProjectPortfolioDetail | null>(null);
+  const [recovery, setRecovery] = useState<ProjectEditorAction | null>(null);
   const [category, setCategory] = useState<PortfolioRiskCode | "all">("all");
-  const current = () => { if (origin.current !== projectSessionKey()) throw new Error(tr("scopeChanged")); };
+  const [notice, setNotice] = useState("");
+  const current = () => isActive() && origin.current === projectSessionKey();
+  const slots = projectEditorRecoverySlots(projectId);
+  const busy = slots.length > 0;
+  const changed = () => { if (current()) { onSaved(); void query.refetch(); } };
+  const open = (kind: "settings" | "lifecycle", value: ProjectPortfolioDetail) => {
+    if (!current() || activeEditor.current || !canLeave() || projectEditorRecoverySlots(projectId).length) return;
+    if (kind === "settings" && value.project.permissions.can_configure) { activeEditor.current = kind; setSettings(structuredClone(value)); }
+    if (kind === "lifecycle" && value.project.permissions.can_transition) { activeEditor.current = kind; setLifecycle(structuredClone(value)); }
+  };
+  const enter = (data: ProjectPortfolioDetail, target?: Parameters<typeof enterPortfolioProject>[1]) => {
+    if (current() && canLeave()) window.location.hash = enterPortfolioProject(data.project, target, background);
+  };
+  const editing = <>
+    {settings && <ProjectSettingsEditor initial={settings} businesses={businesses}
+      onClose={() => { if (current() && canLeave()) { activeEditor.current = null; setSettings(null); } }} onSaved={changed}
+      onUnresolvedChange={(value) => onPending(`settings:${projectId}`, value)} />}
+    {lifecycle && <ProjectLifecycleEditor initial={lifecycle} background={background}
+      onClose={() => { if (current() && canLeave()) { activeEditor.current = null; setLifecycle(null); } }} onSaved={changed}
+      onUnresolvedChange={(value) => onPending(`lifecycle:${projectId}`, value)} />}
+  </>;
+  const restoring = <>
+    {notice && <Alert className="mb-3" type="info" title={tr("saved")} description={notice} closable onClose={() => setNotice("")} />}
+    {!settings && !lifecycle && slots.length > 0 && <Alert className="mb-3" type="warning" showIcon title={tr("recovery")} description={tr("unknownHint")}
+      action={<div className="flex flex-wrap gap-2">{slots.map((action) => <Button key={action} data-action={`recover-${action}`} disabled={Boolean(recovery) && recovery !== action}
+        onClick={() => { if (current() && !activeEditor.current && projectEditorRecoverySlots(projectId).includes(action)) { activeEditor.current = action; setRecovery(action); } }}>{tr(action === "project.lifecycle" ? "lifecycle" : "configure")}</Button>)}</div>} />}
+    {recovery && !settings && !lifecycle && <ProjectCommandRecovery key={`${projectId}:${recovery}`} projectId={projectId} action={recovery}
+      onPending={(value) => onPending(`recovery:${projectId}:${recovery}`, value)} onSaved={changed} onWarning={setNotice} onResolved={() => { if (current()) { activeEditor.current = null; setRecovery(null); } }} />}
+  </>;
   const data = query.data;
-  const startEdit = () => {
-    if (!data?.project.permissions.can_configure) return;
-    const { name, description, business_id, project_path, vector_db, is_template } = data.project;
-    setEdit({ values: { name, description, business_id, project_path, vector_db, is_template }, intent: { version: data.project.version, key: crypto.randomUUID() } });
-    setLatest(null); setError(""); setConflict(false);
-  };
-  const save = async () => {
-    if (!edit || pending || conflict) return;
-    setPending(true); setError("");
-    try {
-      current();
-      const payload = { ...edit.values };
-      const intent = prepareDeliveryIntent(edit.intent, "project.update", payload);
-      setEdit({ ...edit, intent });
-      await submitProjectCommand(projectId, "project.update", payload, intent);
-      current(); setEdit(null); onSaved(); void query.refetch();
-    } catch (problem) { const message = problem instanceof Error ? problem.message : tr("saveFailed"); setError(message); setConflict(message.includes("409")); }
-    finally { setPending(false); }
-  };
-  const readLatest = async () => {
-    setLatest(null); setPending(true);
-    try { current(); const result = await query.refetch({ throwOnError: true }); current(); if (result.data) setLatest(result.data); }
-    catch (problem) { setError(problem instanceof Error ? problem.message : tr("refreshFailed")); }
-    finally { setPending(false); }
-  };
-  if (query.isLoading && !data) return <Skeleton active />;
-  if (!data || data.project.id !== projectId) return <Alert type="warning" title={tr("unavailableProject")} description={<><span className="project-portfolio-id">{projectId}</span><Button onClick={() => void query.refetch()}>{tr("refresh")}</Button></>} />;
+  if (query.isLoading && !data) return <>{restoring}<Skeleton active />{editing}</>;
+  if (query.error || !data || data.project.id !== projectId) return <>{restoring}
+    <Alert type="warning" showIcon title={tr("unavailableProject")} description={query.error?.message}
+      action={<Button onClick={() => { if (current()) void query.refetch(); }}>{tr("refresh")}</Button>} />{editing}</>;
   const archived = data.project.status === "archived";
   const risks = data.risks.filter((risk) => category === "all" || risk.categories.includes(category));
   const archive = data.lifecycle.last_archive;
   return <div className="project-portfolio-detail">
-    {query.isError && <Alert type="warning" title={tr("refreshFailed")} />}
+    {restoring}
     <header><div><h2>{data.project.name}</h2><span className="project-portfolio-id">{data.project.id}</span><p>{data.project.business_name || tr("noBusiness")}</p></div><Tag>{tr(data.project.status)}</Tag></header>
     <p>{data.project.description}</p>
     {archived && <Alert type="info" title={tr("archivedReadOnly")} description={tr("archivedHint")} />}
     {!archived && data.project.status !== "active" && <Alert type="info" title={tr("pausedHint")} />}
-    <div className="project-portfolio-actions"><Button type="primary" disabled={!data.project.permissions.can_enter} onClick={() => { current(); window.location.hash = enterPortfolioProject(data.project, undefined, background); }}>{tr("enter")}</Button><Button onClick={() => void query.refetch()}>{tr("refresh")}</Button></div>
+    <div className="project-portfolio-actions">
+      <Button type="primary" disabled={busy || !data.project.permissions.can_enter} onClick={() => enter(data)}>{tr("enter")}</Button>
+      <Button data-action="open-settings" disabled={busy || !data.project.permissions.can_configure} onClick={() => open("settings", data)}>{tr("configure")}</Button>
+      <Button data-action="open-lifecycle" disabled={busy || !data.project.permissions.can_transition} onClick={() => open("lifecycle", data)}>{tr(archived ? "restore" : "lifecycle")}</Button>
+      <Button onClick={() => { if (current()) void query.refetch(); }}>{tr("refresh")}</Button>
+    </div>
     <section><h3>{tr("liveFacts")}</h3><ProjectPortfolioFacts row={data} /></section>
     <section><h3>{tr("risks")} · {data.risk_counts.total_items}</h3>
       <Select aria-label={tr("risks")} value={category} onChange={setCategory} options={[{ value: "all", label: tr("risks") }, ...activeRiskCategories(data.risk_counts).map((code) => ({ value: code, label: `${tr(`risk.${code}`)} ${data.risk_counts[code]}` }))]} />
-      {!risks.length ? <Empty description={tr("noRisks")} /> : risks.map((risk) => <article className="project-portfolio-risk" key={risk.id}><strong>{risk.title}</strong><span className="project-portfolio-id">{risk.entity_id}</span><div className="project-portfolio-risk-tags">{risk.categories.map((code) => <Tag key={code}>{tr(`risk.${code}`)}</Tag>)}</div>{risk.due_on && <small>{risk.due_on}</small>}<Button disabled={!data.project.permissions.can_enter} onClick={() => { current(); window.location.hash = enterPortfolioProject(data.project, risk.target, background); }}>{tr("openTarget")}</Button></article>)}
+      {!risks.length ? <Empty description={tr("noRisks")} /> : risks.map((risk) => <article className="project-portfolio-risk" key={risk.id}><strong>{risk.title}</strong><span className="project-portfolio-id">{risk.entity_id}</span><div className="project-portfolio-risk-tags">{risk.categories.map((code) => <Tag key={code}>{tr(`risk.${code}`)}</Tag>)}</div>{risk.due_on && <small>{risk.due_on}</small>}<Button disabled={busy || !data.project.permissions.can_enter} onClick={() => enter(data, risk.target)}>{tr("openTarget")}</Button></article>)}
     </section>
-    {data.nearest_milestone && <section><h3>{tr("milestone")}</h3><strong>{data.nearest_milestone.title}</strong><small>{data.nearest_milestone.ends_on}</small><Button onClick={() => { current(); window.location.hash = enterPortfolioProject(data.project, data.nearest_milestone!.target, background); }} disabled={!data.project.permissions.can_enter}>{tr("openTarget")}</Button></section>}
-    <section><h3>{tr("configure")}</h3>
-      {error && <Alert type="error" title={tr(conflict ? "conflict" : "saveFailed")} description={error} />}
-      {!edit ? <Button onClick={startEdit} disabled={!data.project.permissions.can_configure || query.isError}>{tr("configure")}</Button> : <Form layout="vertical">
-        {(["name", "description", "project_path"] as const).map((key) => <Form.Item key={key} label={tr(key === "project_path" ? "path" : key)}><Input value={edit.values[key]} disabled={pending || !data.project.permissions.can_configure} onChange={(event) => setEdit({ ...edit, values: { ...edit.values, [key]: event.target.value } })} /></Form.Item>)}
-        <Form.Item label={tr("business")}><Select value={edit.values.business_id || ""} disabled={pending || !data.project.permissions.can_configure} options={[{ value: "", label: tr("noBusiness") }, ...businesses.map((business) => ({ value: business.id, label: business.name }))]} onChange={(business_id) => setEdit({ ...edit, values: { ...edit.values, business_id: business_id || null } })} /></Form.Item>
-        <Form.Item label={tr("vector")}><Select value={edit.values.vector_db} disabled={pending || !data.project.permissions.can_configure} options={["lance", "milvus", "qdrant", "oceanbase"].map((value) => ({ value, label: value }))} onChange={(vector_db) => setEdit({ ...edit, values: { ...edit.values, vector_db } })} /></Form.Item>
-        <Form.Item label={tr("template")}><Switch checked={edit.values.is_template} disabled={pending || !data.project.permissions.can_configure} onChange={(is_template) => setEdit({ ...edit, values: { ...edit.values, is_template } })} /></Form.Item>
-        <div className="project-portfolio-actions"><Button type="primary" loading={pending} onClick={save} disabled={pending || conflict || !edit.values.name.trim() || !data.project.permissions.can_configure}>{tr("save")}</Button><Button onClick={() => setEdit(null)} disabled={pending}>{tr("cancel")}</Button>{conflict && <Button onClick={readLatest} disabled={pending}>{tr("readLatest")}</Button>}{latest && <Button disabled={pending || !latest.project.permissions.can_configure} onClick={() => { setEdit({ ...edit, intent: { version: latest.project.version, key: crypto.randomUUID() } }); setConflict(false); setLatest(null); setError(""); }}>{tr("adopt")} · v{latest.project.version}</Button>}</div>
-      </Form>}
-    </section>
-    <section><h3>{tr("lifecycle")}</h3><Button onClick={() => setLifecycle(structuredClone(data))} disabled={query.isError || !data.project.permissions.can_transition}>{tr(archived ? "restore" : "lifecycle")}</Button></section>
+    {data.nearest_milestone && <section><h3>{tr("milestone")}</h3><strong>{data.nearest_milestone.title}</strong><small>{data.nearest_milestone.ends_on}</small><Button onClick={() => enter(data, data.nearest_milestone!.target)} disabled={busy || !data.project.permissions.can_enter}>{tr("openTarget")}</Button></section>}
     <section className="project-portfolio-history"><h3>{tr("archiveHistory")}</h3>{archive ? <><small>{archive.at} · {archive.actor_name} · {archive.actor_id}</small><p>{archive.reason}</p><Alert type="info" title={tr("historyHint")} /><ProjectPortfolioFacts row={{ ...archive.facts, facts_as_of: archive.facts.as_of }} /></> : <p>{tr("noArchiveHistory")}</p>}</section>
-    {lifecycle && <ProjectLifecycleEditor initial={lifecycle} background={background} onClose={() => setLifecycle(null)} onSaved={() => { setEdit(null); onSaved(); void query.refetch(); }} />}
+    {editing}
   </div>;
 }

@@ -275,24 +275,46 @@ describe("actual task-plan editor unknown command recovery", () => {
     expect(originalBody(2)).toBe(submitted);
   });
 
-  it.each([403, 409, 422])("releases an unknown manual command after an explicit HTTP %s rejection", async (status) => {
+  it.each([403, 409, 422])("retains the unknown original when a later replay receives HTTP %s", async (status) => {
     const tree = manual();
     vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown"));
     button(tree, "delivery.taskPlan.create").onClick();
     await settle();
+    const submitted = originalBody();
     const retry = button(renderEditor(), "deliveryDiscussion.retryOriginal");
-    vi.mocked(request).mockRejectedValueOnce(new Error(`HTTP ${status}: explicit command rejection`));
+    vi.mocked(request).mockRejectedValueOnce(new Error(`HTTP ${status}: replay rejected after the original reply was lost`));
     retry.onClick();
     await settle();
     expect(onSaved).not.toHaveBeenCalled();
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
-    const resolved = renderEditor();
-    expect(button(resolved, "deliveryDiscussion.retryOriginal")).toBeUndefined();
-    resolved.props.onCancel();
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onUnresolvedChange).toHaveBeenLastCalledWith(true);
+    const unresolved = renderEditor();
+    expect(button(unresolved, "deliveryDiscussion.retryOriginal")).toBeDefined();
+    unresolved.props.onCancel();
+    button(tree, "delivery.taskPlan.create").onClick();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(commandCalls()).toHaveLength(2);
+    expect(originalBody(1)).toBe(submitted);
+    vi.mocked(request).mockResolvedValueOnce(ack);
     retry.onClick();
     await settle();
-    expect(commandCalls()).toHaveLength(2);
+    expect(commandCalls()).toHaveLength(3);
+    expect(originalBody(2)).toBe(submitted);
+    expect(onSaved).toHaveBeenCalledWith(ack);
+    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it.each([403, 409, 422])("unlocks a first submission explicitly refused with HTTP %s", async (status) => {
+    const tree = manual();
+    vi.mocked(request).mockRejectedValueOnce(new Error(`HTTP ${status}: first submission refused`));
+    button(tree, "delivery.taskPlan.create").onClick();
+    await settle();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
+    const refused = renderEditor();
+    expect(button(refused, "deliveryDiscussion.retryOriginal")).toBeUndefined();
+    refused.props.onCancel();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(commandCalls()).toHaveLength(1);
   });
 
   it.each(["Network retry result unknown", "HTTP 500: retry result unknown", "HTTP 503: retry result unknown"])("keeps the same pending original after another uncertain replay: %s", async (message) => {

@@ -300,7 +300,8 @@ export function DeliveryTaskPlanEditor({
         }
       } catch (error) {
         const problem = discussionFailure(error);
-        const unresolved = problem.unknown;
+        // A later refusal cannot prove that the original lost-response write failed.
+        const unresolved = retry || problem.unknown;
         unknownRef.current = unresolved;
         setUnknown(unresolved);
         if (!unresolved) {

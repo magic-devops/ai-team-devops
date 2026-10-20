@@ -19,6 +19,7 @@ export function PortfolioModule() {
   const { t } = useTranslation();
   const tr = (key: string) => t(`projectPortfolio.${key}`);
   const session = projectSessionKey();
+  const inspectorNavigation = useRef<() => boolean>(() => true);
   const route = parsePortfolioRoute(window.location.hash);
   const { projectId, ...filters } = route;
   const query = useQuery({ queryKey: ["projectPortfolio", session, filters], queryFn: ({ signal }) => fetchProjectPortfolio(filters, signal), enabled: Boolean(getToken()), refetchInterval: 15000 });
@@ -29,7 +30,7 @@ export function PortfolioModule() {
   const [createPending, setCreatePending] = useState(false);
   const [createError, setCreateError] = useState("");
   const createOrigin = useRef(session);
-  const changeRoute = (patch: Partial<PortfolioRoute>, resetCursor = true) => { window.location.hash = portfolioHash({ ...route, ...(resetCursor ? { cursor: "" } : {}), ...patch }); };
+  const changeRoute = (patch: Partial<PortfolioRoute>, resetCursor = true) => { if (session !== projectSessionKey() || !inspectorNavigation.current()) return; window.location.hash = portfolioHash({ ...route, ...(resetCursor ? { cursor: "" } : {}), ...patch }); };
   const refresh = () => { void qc.invalidateQueries({ queryKey: ["projectPortfolio"] }); void qc.invalidateQueries({ queryKey: ["projectPortfolioDetail"] }); void qc.invalidateQueries({ queryKey: ["projects"] }); void qc.invalidateQueries({ queryKey: ["projectsSummary"] }); void qc.invalidateQueries({ queryKey: ["projectsHub"] }); void qc.invalidateQueries({ queryKey: ["projectTemplates"] }); };
   const create = async () => {
     if (createPending || !draft.name.trim() || !query.data?.permissions.can_create) return;
@@ -52,7 +53,7 @@ export function PortfolioModule() {
       <Select mode="multiple" aria-label={tr("status")} placeholder={tr("status")} value={route.statuses} onChange={(statuses) => changeRoute({ statuses })} options={projectStatuses.map((value) => ({ value, label: tr(value) }))} />
       <Select mode="multiple" aria-label={tr("risks")} placeholder={tr("risks")} value={route.risks} onChange={(risks) => changeRoute({ risks })} options={portfolioRiskCodes.map((value) => ({ value, label: tr(`risk.${value}`) }))} />
       <Button onClick={() => void query.refetch()} loading={query.isFetching}>{tr("refresh")}</Button>
-      <Button type="primary" disabled={!data?.permissions.can_create || query.isError} onClick={() => { createOrigin.current = projectSessionKey(); setCreateError(""); setCreateOpen(true); }}>{tr("create")}</Button>
+      <Button type="primary" disabled={!data?.permissions.can_create || query.isError} onClick={() => { if (session !== projectSessionKey() || !inspectorNavigation.current()) return; createOrigin.current = projectSessionKey(); setCreateError(""); setCreateOpen(true); }}>{tr("create")}</Button>
     </div>
     {query.isError && <Alert type="warning" showIcon title={tr("refreshFailed")} description={query.error.message} action={<Button onClick={() => void query.refetch()}>{tr("refresh")}</Button>} />}
     {businesses.isError && <Alert type="warning" title={tr("selectorFailed")} />}
@@ -60,16 +61,16 @@ export function PortfolioModule() {
     {data && <>
       <div className="project-portfolio-summary">{[["title", data.summary.projects_total], ["verified", data.summary.metrics.verified_completed], ["recorded", data.summary.metrics.recorded_completed], ["risks", data.summary.risk_counts.total_items]].map(([key, value]) => <article key={key}><strong>{value}</strong><small>{tr(String(key))}</small></article>)}</div>
       <small>{tr("filteredScope")} · {tr("asOf")} {data.as_of}</small>
-      {!data.rows.length && <Empty description={tr(filtered ? "noMatches" : "empty")}>{filtered && <Button onClick={() => { window.location.hash = portfolioHash({ projectId }); }}>{tr("clearFilters")}</Button>}</Empty>}
+      {!data.rows.length && <Empty description={tr(filtered ? "noMatches" : "empty")}>{filtered && <Button onClick={() => changeRoute({ query: "", businessId: "", statuses: [], risks: [], cursor: "" })}>{tr("clearFilters")}</Button>}</Empty>}
       <div className="project-portfolio-list">{data.rows.map((row) => <article key={row.project.id} className="project-portfolio-row" aria-current={projectId === row.project.id ? "true" : undefined}>
         <div><button type="button" className="project-portfolio-name" onClick={() => changeRoute({ projectId: row.project.id }, false)}>{row.project.name}<span className="project-portfolio-id">{row.project.id}</span></button><div className="project-portfolio-risk-tags"><Tag>{tr(row.project.status)}</Tag>{getProjectId() === row.project.id && <Tag color="blue">{tr("current")}</Tag>}</div><small>{row.project.business_name || tr("noBusiness")}</small></div>
         <div><small>{tr("verified")} {row.metrics.verified_completed}/{row.metrics.tasks_total}</small><Progress size="small" percent={row.metrics.tasks_total ? Math.round(row.metrics.verified_completed / row.metrics.tasks_total * 100) : 0} showInfo={false} /><small>{tr("recorded")} {row.metrics.recorded_completed}</small></div>
         <div className="project-portfolio-risk-tags">{activeRiskCategories(row.risk_counts).map((code) => <Button size="small" key={code} onClick={() => changeRoute({ projectId: row.project.id, risks: [code] })}>{tr(`risk.${code}`)} {row.risk_counts[code]}</Button>)}{!row.risk_counts.total_items && <small>{tr("noRisks")}</small>}</div>
-        <div className="project-portfolio-actions"><Button onClick={() => changeRoute({ projectId: row.project.id }, false)}>{tr("inspect")}</Button><Button disabled={!row.project.permissions.can_enter} onClick={() => { window.location.hash = enterPortfolioProject(row.project, undefined, portfolioHash({ ...route, projectId: row.project.id })); }}>{tr("enter")}</Button></div>
+        <div className="project-portfolio-actions"><Button onClick={() => changeRoute({ projectId: row.project.id }, false)}>{tr("inspect")}</Button><Button disabled={!row.project.permissions.can_enter} onClick={() => { if (session !== projectSessionKey() || !inspectorNavigation.current()) return; window.location.hash = enterPortfolioProject(row.project, undefined, portfolioHash({ ...route, projectId: row.project.id })); }}>{tr("enter")}</Button></div>
       </article>)}</div>
       <div className="project-portfolio-actions">{route.cursor && <Button onClick={() => changeRoute({ cursor: "" }, false)}>{tr("first")}</Button>}{data.next_cursor && <Button onClick={() => changeRoute({ cursor: data.next_cursor! }, false)}>{tr("next")}</Button>}</div>
     </>}
-    <ProjectInspector projectId={projectId} background={portfolioHash(route)} sessionKey={session} businesses={businesses.data || []} onClose={() => changeRoute({ projectId: "" }, false)} onSaved={refresh} />
+    <ProjectInspector navigationGuard={inspectorNavigation} projectId={projectId} background={portfolioHash(route)} sessionKey={session} businesses={businesses.data || []} onClose={() => changeRoute({ projectId: "" }, false)} onSaved={refresh} />
     <Modal open={createOpen} title={tr("create")} className="project-portfolio-modal" onCancel={() => setCreateOpen(false)} closable={!createPending} maskClosable={!createPending} keyboard={!createPending} okText={tr("create")} cancelText={tr("cancel")} okButtonProps={{ disabled: !draft.name.trim(), loading: createPending }} cancelButtonProps={{ disabled: createPending }} onOk={create} destroyOnHidden>
       {createError && <Alert type="error" title={tr("saveFailed")} description={createError} />}
       <Form layout="vertical">

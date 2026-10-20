@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-20T11:46:27.689124+00:00",
+  "updated_at": "2026-10-20T12:20:12.660060+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-20T11:46:27.689124+00:00",
-    "status": "interaction_source_stage_runtime_pending",
+    "updated_at": "2026-10-20T12:20:12.660060+00:00",
+    "status": "project_editor_source_stage_runtime_pending",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/interaction-usability/",
-    "verification_status": "current_scope_and_interaction_runtime_unverified",
-    "next_step": "project_lifecycle_unknown_result_ux_then_fresh_source_pinned_runtime_window",
+    "evidence": ".sop-runtime/delivery-evidence/project-editor-usability/",
+    "verification_status": "current_scope_interaction_and_project_editor_runtime_unverified",
+    "next_step": "precise_design_adoption_canonical_agent_ops_and_project_create_recovery_then_runtime_validation",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -191,7 +191,8 @@
       "goal_complete": false
     },
     "runtime_verification_deferred_by_user": true,
-    "interaction_design": "docs/INTERACTION_USABILITY.md"
+    "interaction_design": "docs/INTERACTION_USABILITY.md",
+    "project_editor_design": "docs/PROJECT_EDITOR_USABILITY.md"
   },
   "tasks": {
     "completed": [
@@ -646,7 +647,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-interaction-usability源码阶段：统一需求正式拆解与返回、需求/搜索读取恢复、任务快捷反馈和看板筛选、计划未知回执原件锁；包含项目范围源码修复。用户要求运行测试后置，本阶段无运行GREEN；独立静态审查与源码摘要已留档。整体全流程目标保持active。",
+  "current": "T-project-editor-usability源码阶段：项目配置独立弹窗、并发差异对照、生命周期/配置持久原件及真实回执、宿主退出与组合入口保护、确认后本地清理恢复；同步修正计划未知重试后的4xx语义。运行按用户要求后置，无新增GREEN；整体目标active，设计采纳/并行执行入口/项目创建及完整联调仍待推进。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -658,6 +659,20 @@
     "typecheck_build_browser_executed_this_stage": false,
     "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
     "next_step": "project_lifecycle_unknown_result_ux_then_fresh_source_pinned_runtime_window",
+    "full_lifecycle_complete": false
+  },
+  "project_editor_usability": {
+    "task_id": "T-project-editor-usability",
+    "updated_at": "2026-10-20T12:20:12.660060+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/PROJECT_EDITOR_USABILITY.md",
+    "record": "memory/project-editor-usability-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/project-editor-usability/",
+    "runtime_tests_executed_this_stage": false,
+    "typecheck_build_browser_executed_this_stage": false,
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "previous_source_commit": "14c1dff9eba395190c251ac4de7508d430897921",
+    "next_step": "precise_design_adoption_canonical_agent_ops_and_project_create_recovery_then_runtime_validation",
     "full_lifecycle_complete": false
   }
 }

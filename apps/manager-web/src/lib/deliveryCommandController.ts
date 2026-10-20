@@ -120,8 +120,12 @@ export function createDeliveryCommandController<T extends DeliveryOriginal>(
         state = { phase: "idle" };
       }
     }
-  } catch {
-    state = { phase: "unknown", error: "retainedOriginalInvalid" };
+  } catch (error) {
+    // Clearing a validated receipt may fail; the confirmed result stays known.
+    state = state.phase === "succeeded"
+      ? { ...state, error: "retainedOriginalUnavailable" }
+      : { phase: "unknown", error: error instanceof Error && error.message === "retainedOriginalUnavailable"
+        ? "retainedOriginalUnavailable" : "retainedOriginalInvalid" };
   }
   const listeners = new Set<() => void>(),
     gate = createEventGate();
