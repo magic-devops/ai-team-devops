@@ -5,20 +5,28 @@
 from __future__ import annotations
 
 import json
-from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
-
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 
-from sop_manager.path_config import resolved_ai_memory_root, resolved_business_code, resolved_project_id, resolved_project_path, resolved_tenant_id
+from sop_manager.path_config import (
+    resolved_ai_memory_root,
+    resolved_business_code,
+    resolved_project_id,
+    resolved_project_path,
+    resolved_tenant_id,
+)
 from sop_manager.routers.productization_contract import summarize_items, unified_payload
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
+from .business_access import require_business_access
 from .db_sql_compat import rows
 
-router = APIRouter(prefix="/api/v1/dev-flow", tags=["dev-flow"])
+router = APIRouter(
+    prefix="/api/v1/dev-flow", tags=["dev-flow"], dependencies=[Depends(require_business_access)]
+)
 
 
 class DevFlowOpsTasksIn(TaskOwnerInput):

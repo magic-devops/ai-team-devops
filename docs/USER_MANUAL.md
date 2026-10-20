@@ -19,9 +19,9 @@ PORT=9000 PROJECT_PATH=/path/to/app bash ai-sop-ops/start-manager.sh
 
 浏览器访问：
 
-- **仅 API / OpenAPI**：`http://127.0.0.1:8765`（根路径为 JSON 说明，`/docs` 为 Swagger）。
-- **推荐：前后端分离开发**：另开终端 `cd apps/manager-web && pnpm dev`，Vite 默认在浏览器打开 **`http://127.0.0.1:5173/console.html`**（完整管理台；`/api` 反代到 8765）。轻量 React 壳为 **`http://127.0.0.1:5173/?shell=1`** 或任意带 hash 的路径（如 **`http://127.0.0.1:5173/#/settings`**）；根路径无 hash 时会自动进入完整台，详见 `apps/manager-web/README.md`。
-- **完整管理台（主产品）**：`http://127.0.0.1:5173/console.html`；顶栏含「轻量扩展坞」入口。未登录时走 **`http://127.0.0.1:5173/login.html`**（与手册中 `sop-token` / `X-Project-Id` 约定一致）。
+- **API / OpenAPI**：`http://127.0.0.1:8765/docs`；若已构建管理台，8765 根路径也可显示管理台，未构建时返回启动说明。
+- **推荐：前后端分离开发**：另开终端 `cd apps/manager-web && pnpm dev`，默认打开 **`http://127.0.0.1:5173/`**（React 管理台；`/api` 反代到 8765）。无需 `shell=1` 或入口环境变量。
+- **研发全流程**：`http://127.0.0.1:5173/#/dev-flow?view=overview`。未登录时先登录，进入后在顶栏明确选择项目；没有项目时进入项目管理创建或选择项目。`console.html` 中的研发入口也会进入此正式工作台。
 
 **环境变量**
 

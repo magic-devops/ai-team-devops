@@ -940,9 +940,14 @@ function ProjectDelivery() {
           showIcon
           title={query.error?.message || tr("empty")}
           action={
-            <Button onClick={() => void query.refetch()}>
-              {tr("refresh")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => void query.refetch()}>
+                {tr("refresh")}
+              </Button>
+              <Button href="#/projects/portfolio">
+                {tr("chooseProject")}
+              </Button>
+            </div>
           }
         />
         {requirementRecovery}
