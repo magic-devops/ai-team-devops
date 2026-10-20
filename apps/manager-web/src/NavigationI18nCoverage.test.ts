@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { canonicalAgentRunsCopy } from "./i18n/canonical-agent-runs";
+import { agentRunsTabs, agentRunStatuses } from "./lib/canonicalAgentRuns";
 
 const root = resolve(__dirname, "..");
 const navigationSource = readFileSync(resolve(root, "src/navigation.tsx"), "utf8");
@@ -199,12 +201,13 @@ describe("navigation i18n coverage", () => {
       expect(messages.page.opsCenter.modules.alerts.output).toBeTruthy();
       expect(messages.page.opsCenter.modules["self-heal"].focus).toBeTruthy();
     }
-    expect(agentRunsSource).toContain("page.agentRuns.tabs.${id}");
-    expect(agentRunsSource).toContain('t("page.agentRuns.emptyRetry")');
-    expect(agentRunsSource).toContain('t("page.agentRuns.workbenchTitle")');
-    expect(agentRunsSource).toContain('t("page.agentRuns.focusedHint")');
-    expect(agentRunsSource).toContain("page.agentRuns.modules.");
-    expect(agentRunsSource).toContain("page.agentRuns.metrics.");
+    for (const locale of ["zh-CN", "en-US", "ja-JP"]) {
+      const copy = canonicalAgentRunsCopy(locale);
+      for (const tab of agentRunsTabs) { expect(copy.tabs[tab]).toBeTruthy(); expect(copy.descriptions[tab]).toBeTruthy(); }
+      for (const status of agentRunStatuses) expect(copy.states[status]).toBeTruthy();
+      for (const key of ["title", "windowHint", "scopeHint", "retryHint", "retryRecords", "retryBindings", "retryRuntime", "nextLabel", "empty", "independent", "configure", "scopeChanged"] as const) expect(copy[key]).toBeTruthy();
+    }
+    expect(agentRunsSource).toContain("canonicalAgentRunsCopy(i18n.language)");
     expect(opsCenterSource).toContain('t("page.opsCenter.workbenchTitle")');
     expect(opsCenterSource).toContain("page.opsCenter.modules.");
     expect(opsCenterSource).toContain("page.opsCenter.metrics.");

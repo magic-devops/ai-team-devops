@@ -4,6 +4,7 @@ import {
   commandNodes,
   executionIssueHref,
   safeExecutionReturn,
+  agentExecutionReturn,
 } from "./executionCommands";
 
 describe("explicit external execution drafts", () => {
@@ -66,5 +67,22 @@ describe("explicit external execution drafts", () => {
     expect(params.get("return_to")).toBe(task);
     expect(safeExecutionReturn(task)).toBe(task);
     expect(safeExecutionReturn(`#/tasks/execution?task_id=T-one&return_to=${encodeURIComponent("https://example.test")}`)).toBeNull();
+  });
+  it.each(["runs", "heartbeat", "profiles", "retry"])("returns to the same project AgentOps %s window", (tab) => {
+    const background = `#/ai/agent-ops/${tab}?project_id=P&q=original&status=failed&cursor=opaque%2Btoken&inspect=E`;
+    const href = `#/dev-flow?project_id=P&execution_id=E&return_to=${encodeURIComponent(background)}`;
+    expect(safeExecutionReturn(background)).toBe(background);
+    expect(agentExecutionReturn(href, "P")).toBe(background);
+    expect(agentExecutionReturn(href, "Q")).toBeNull();
+  });
+  it.each([
+    "https://example.test/#/ai/agent-ops/runs?project_id=P",
+    "#/ai/agent-ops/runs-extra?project_id=P",
+    "#/ai/agent-ops/runs?project_id=P&project_id=Q",
+    "#/ai/agent-ops/runs?project_id=P&return_to=https%3A%2F%2Fexample.test",
+    "#/ai/agent-ops/runs?project_id=P&cursor=%0dblocked",
+    "#/ai/agent-ops/runs?project_id=P#second",
+  ])("refuses unsafe or ambiguous AgentOps return %s", (background) => {
+    expect(agentExecutionReturn(`#/dev-flow?return_to=${encodeURIComponent(background)}`, "P")).toBeNull();
   });
 });

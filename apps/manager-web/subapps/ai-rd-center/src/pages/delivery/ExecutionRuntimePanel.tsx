@@ -14,10 +14,12 @@ import { ExecutionRuntimeControl } from "./ExecutionRuntimeControl";
 type Props = {
   projectId: string;
   executionId: string;
+  workspaceId: string;
   sessionId: string;
   active: boolean;
   paused: boolean;
   disabled: boolean;
+  isActive?: () => boolean;
   onSaved: (data: DeliveryCommandAck) => void;
   onUnresolvedChange: (value: boolean) => void;
   initialNodeId?: string;
@@ -27,10 +29,12 @@ type Props = {
 export function ExecutionRuntimePanel({
   projectId,
   executionId,
+  workspaceId,
   sessionId,
   active,
   paused,
   disabled,
+  isActive,
   onSaved,
   onUnresolvedChange,
   initialNodeId,
@@ -69,7 +73,7 @@ export function ExecutionRuntimePanel({
       if (mounted.current && !controller.signal.aborted) {
         const info = executionRuntimeProblem(failure);
         setError(info.message);
-        if (info.message === "scopeChanged") setRuntime(undefined);
+        setRuntime(undefined);
       }
     } finally {
       pending.current = false;
@@ -112,7 +116,20 @@ export function ExecutionRuntimePanel({
           }
         />
       )}
-      {runtime && (
+      <ExecutionRuntimeControl
+        key={`${projectId}:${sessionId}:${executionId}`}
+        projectId={projectId}
+        executionId={executionId}
+        workspaceId={workspaceId}
+        isActive={isActive}
+        sessionId={sessionId}
+        runtime={error ? undefined : runtime}
+        disabled={disabled || Boolean(error) || !runtime}
+        onSaved={onSaved}
+        onObserved={setRuntime}
+        onUnresolvedChange={unresolved}
+      />
+      {runtime && !error && (
         <>
           <div className="execution-runtime-facts">
             <Space wrap>
@@ -159,17 +176,6 @@ export function ExecutionRuntimePanel({
               }
             />
           )}
-          <ExecutionRuntimeControl
-            key={`${projectId}:${sessionId}:${executionId}`}
-            projectId={projectId}
-            executionId={executionId}
-            sessionId={sessionId}
-            runtime={runtime}
-            disabled={disabled || Boolean(error)}
-            onSaved={onSaved}
-            onObserved={setRuntime}
-            onUnresolvedChange={unresolved}
-          />
           <ExecutionNodeOutput
             key={`${projectId}:${sessionId}:${executionId}`}
             projectId={projectId}

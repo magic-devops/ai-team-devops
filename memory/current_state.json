@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-20T12:20:12.660060+00:00",
+  "updated_at": "2026-10-20T13:15:38.215296+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-20T12:20:12.660060+00:00",
-    "status": "project_editor_source_stage_runtime_pending",
+    "updated_at": "2026-10-20T13:15:38.215296+00:00",
+    "status": "canonical_agent_entry_source_stage_runtime_pending",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/project-editor-usability/",
-    "verification_status": "current_scope_interaction_and_project_editor_runtime_unverified",
-    "next_step": "precise_design_adoption_canonical_agent_ops_and_project_create_recovery_then_runtime_validation",
+    "evidence": ".sop-runtime/delivery-evidence/canonical-agent-entry/",
+    "verification_status": "current_scope_interaction_project_editor_and_agent_entry_runtime_unverified",
+    "next_step": "a2a_ops_consumers_queue_sync_recovery_precise_design_and_project_create_then_runtime_validation",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -192,7 +192,8 @@
     },
     "runtime_verification_deferred_by_user": true,
     "interaction_design": "docs/INTERACTION_USABILITY.md",
-    "project_editor_design": "docs/PROJECT_EDITOR_USABILITY.md"
+    "project_editor_design": "docs/PROJECT_EDITOR_USABILITY.md",
+    "canonical_agent_entry_design": "docs/CANONICAL_AGENT_ENTRY_DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -647,7 +648,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-project-editor-usability源码阶段：项目配置独立弹窗、并发差异对照、生命周期/配置持久原件及真实回执、宿主退出与组合入口保护、确认后本地清理恢复；同步修正计划未知重试后的4xx语义。运行按用户要求后置，无新增GREEN；整体目标active，设计采纳/并行执行入口/项目创建及完整联调仍待推进。",
+  "current": "T-canonical-agent-entry源码阶段：运行中心和门户读取正式项目执行事实，精确执行/任务/成员导航与原位置返回，运行干预持久原请求、严格实际回执和稳定恢复宿主。测试/类型/构建/视觉按用户要求后置；A2A、相邻queue/sync恢复及完整全流程目标继续进行。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -673,6 +674,20 @@
     "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
     "previous_source_commit": "14c1dff9eba395190c251ac4de7508d430897921",
     "next_step": "precise_design_adoption_canonical_agent_ops_and_project_create_recovery_then_runtime_validation",
+    "full_lifecycle_complete": false
+  },
+  "canonical_agent_entry": {
+    "task_id": "T-canonical-agent-entry",
+    "updated_at": "2026-10-20T13:15:38.215296+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/CANONICAL_AGENT_ENTRY_DESIGN.md",
+    "record": "memory/canonical-agent-entry-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/canonical-agent-entry/",
+    "base_commit": "6c8f59d2d6debb5a1578687fc9277a08bc548a31",
+    "runtime_tests_executed_this_stage": false,
+    "typecheck_build_browser_executed_this_stage": false,
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "next_step": "a2a_ops_consumers_queue_sync_recovery_precise_design_and_project_create_then_runtime_validation",
     "full_lifecycle_complete": false
   }
 }

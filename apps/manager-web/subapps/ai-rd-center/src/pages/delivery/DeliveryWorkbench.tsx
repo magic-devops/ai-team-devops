@@ -46,6 +46,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { agentExecutionReturn } from "@/lib/executionCommands";
 import { getProjectId, getToken } from "@/lib/authStorage";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
@@ -554,6 +555,7 @@ function ProjectDelivery() {
     onOpen: openTarget,
   });
   const releaseReturn = releaseReturnFromHash(location.hash);
+  const agentReturn = agentExecutionReturn(location.hash, projectId);
   const requirementReturn = requirementPlanningReturn(location.hash, projectId);
   const returnToRequirements = bindRequirementPlanningBack(executionExit.canNavigate);
   const requirementBack = requirementReturn ? (
@@ -1107,6 +1109,11 @@ function ProjectDelivery() {
           </div>
         ))}
       </div>
+      {agentReturn && (
+        <Button disabled={executionExit.pending} onClick={() => {
+          if (executionExit.canNavigate()) location.hash = agentReturn;
+        }}>{t("deliveryExecutionRuntime.backAgentOps")}</Button>
+      )}
       {releaseReturn && (
         <Button href={releaseReturn}>
           {t(
@@ -1417,6 +1424,7 @@ function ProjectDelivery() {
         onCommand={(action, payload) => commit(action, payload, false)}
         onClose={() => {
           if (!executionExit.canNavigate()) return;
+          if (agentReturn) { location.hash = agentReturn; return; }
           if (collaborationReturn) {
             collaborationNavigate(collaborationReturn);
             return;

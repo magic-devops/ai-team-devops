@@ -71,7 +71,7 @@ export function commandNodes(
 export function safeExecutionReturn(value: string, depth = 0): string | null {
   const unsafeCharacters = (target: string) => /[\u0000-\u001f\u007f]/.test(target) || /%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(target) || target.indexOf("#", 1) >= 0;
   if (
-    !/^#\/(dev-flow|tasks\/(?:execution|board))(?:\?|$)/.test(value) ||
+    !/^#\/(dev-flow|tasks\/(?:execution|board)|ai\/agent-ops\/(?:runs|heartbeat|profiles|retry))(?:\?|$)/.test(value) ||
     unsafeCharacters(value) ||
     value.length > 4000 ||
     depth > 2
@@ -90,4 +90,12 @@ export function executionIssueHref(issueId: string, background: string, projectI
   const safe = safeExecutionReturn(background);
   if (safe) params.set("return_to", safe);
   return `#/dev-flow?${params}`;
+}
+export function agentExecutionReturn(hash: string, projectId: string): string | null {
+  const params = new URLSearchParams(hash.split("?")[1]);
+  if (!projectId || params.getAll("return_to").length !== 1) return null;
+  const value = params.get("return_to") || "";
+  if (!safeExecutionReturn(value) || !/^#\/ai\/agent-ops\/(?:runs|heartbeat|profiles|retry)(?:\?|$)/.test(value)) return null;
+  const target = new URLSearchParams(value.split("?")[1]);
+  return target.getAll("project_id").length === 1 && target.get("project_id") === projectId ? value : null;
 }

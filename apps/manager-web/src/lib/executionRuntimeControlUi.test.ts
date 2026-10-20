@@ -1,6 +1,6 @@
 import { isValidElement, type ReactNode } from "react";
 import { Button, Input, Modal } from "antd";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExecutionRuntimeControl } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionRuntimeControl";
 import type { ExecutionRuntime } from "./executionRuntime";
 import { request } from "./http";
@@ -9,6 +9,8 @@ const hooks = vi.hoisted(() => ({
   refs: [] as any[],
   index: 0,
   refIndex: 0,
+  memos: [] as any[], memoIndex: 0,
+  retained: new Map<string, string>(),
   scope: "session-one",
 }));
 vi.mock("react", async () => ({
@@ -31,6 +33,12 @@ vi.mock("react", async () => ({
   },
   useEffect: () => {},
   useCallback: (fn: unknown) => fn,
+  useMemo: (factory: () => unknown, deps: unknown[]) => {
+    const index = hooks.memoIndex++;
+    if (!(index in hooks.memos) || deps.some((dependency, i) => !Object.is(dependency, hooks.memos[index].deps[i]))) hooks.memos[index] = { deps, value: factory() };
+    return hooks.memos[index].value;
+  },
+  useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -73,10 +81,12 @@ const saved = vi.fn(),
 const render = () => {
   hooks.index = 0;
   hooks.refIndex = 0;
+  hooks.memoIndex = 0;
   return ExecutionRuntimeControl({
     projectId: "P",
     executionId: "E",
     sessionId: "one",
+    workspaceId: "W",
     runtime,
     onSaved: saved,
     onObserved: observed,
@@ -116,6 +126,7 @@ const draft = async () => {
 beforeEach(() => {
   hooks.values = [];
   hooks.refs = [];
+  hooks.memos = []; hooks.retained.clear();
   hooks.scope = "session-one";
   version = 7;
   basis = "a".repeat(64);
@@ -124,6 +135,8 @@ beforeEach(() => {
   saved.mockReset();
   unresolved.mockReset();
   observed.mockReset();
+  vi.stubGlobal("localStorage", { getItem: (key: string) => key === "sop-user" ? JSON.stringify({ id: "operator", tenant_id: "tenant" }) : key === "sop-session-revision" ? "fixture-login" : null });
+  vi.stubGlobal("sessionStorage", { getItem: (key: string) => hooks.retained.get(key) || null, setItem: (key: string, value: string) => hooks.retained.set(key, value) });
   runtime.status = "running";
   runtime.runtime_status = "running";
   runtime.stale = false;
@@ -162,9 +175,14 @@ beforeEach(() => {
       if (path.endsWith("/runtime")) return runtime;
       sent.push(JSON.parse(String(init?.body)));
       if (fail) throw new Error(fail);
-      return { project_id: "P", action: sent.at(-1).action, resource: { kind: "execution", id: "E" }, result: null, affected_refs: [], applied_version: version + 1, version: version + 1, query_generation: 2, replayed: false };
+      const body = sent.at(-1), starts = ["execution.start", "execution.retry"].includes(body.action) || body.action === "execution.approval" && body.payload.decision === "approve";
+      return { project_id: "P", action: body.action, resource: { kind: "execution", id: "E" },
+        result: { run_id: "R", run_version: 10, replayed_runtime: false,
+          ...(starts ? { start_run: { workspace_id: "W", run_id: "R", attempt: body.payload.attempt + (body.action === "execution.retry" ? 1 : 0), resume: null } } : {}) },
+        affected_refs: [{ kind: "execution", id: "E" }], applied_version: version + 1, version: version + 1, query_generation: 2, replayed: false };
     });
 });
+afterEach(() => vi.unstubAllGlobals());
 describe("operator callbacks retain the exact execution intent", () => {
   it.each([
     { stale: true, code: "execution_stale" },
@@ -272,7 +290,7 @@ describe("operator callbacks retain the exact execution intent", () => {
     await button("confirm").onClick();
     expect(find(render(), Modal, () => true).closable).toBe(false);
     find(render(), Modal, () => true).onCancel();
-    expect(button("confirm").disabled).toBe(true);
+    expect(button("confirm")).toBeUndefined();
     await button("queryOriginal").onClick();
     expect(sent).toHaveLength(1);
     expect(observed).toHaveBeenCalledWith(runtime);
@@ -288,7 +306,7 @@ describe("operator callbacks retain the exact execution intent", () => {
     version = 8;
     basis = "b".repeat(64);
     await button("readLatest").onClick();
-    expect(button("confirm").disabled).toBe(true);
+    expect(button("confirm")).toBeUndefined();
     expect(sent).toHaveLength(1);
     button("adopt").onClick();
     fail = "";

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { agentRunsHash, agentRunsTabs, parseAgentRunsRoute } from "./lib/canonicalAgentRuns";
 
 const root = resolve(__dirname, "..");
 
@@ -81,16 +82,17 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('key: "agentOpsHeartbeat", path: "#/ai/agent-ops/heartbeat", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "heartbeat" })');
     expect(navigationSource).toContain('key: "agentOpsProfiles", path: "#/ai/agent-ops/profiles", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "profiles" })');
     expect(navigationSource).toContain('key: "agentOpsRetry", path: "#/ai/agent-ops/retry", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "retry" })');
-    expect(agentRunsSource).toContain('type AgentRunsTab = "runs" | "heartbeat" | "profiles" | "retry"');
-    expect(agentRunsSource).toContain("const TAB_KEYS: AgentRunsTab[]");
-    expect(agentRunsSource).toContain('tab === "heartbeat"');
-    expect(agentRunsSource).toContain('tab === "retry"');
+    expect(agentRunsTabs).toEqual(["runs", "heartbeat", "profiles", "retry"]);
+    for (const tab of agentRunsTabs) {
+      const route = parseAgentRunsRoute(`#/ai/agent-ops/${tab}?project_id=P&q=T&cursor=opaque`);
+      expect(route).toMatchObject({ tab, projectId: "P", q: "T", cursor: "opaque" });
+      expect(parseAgentRunsRoute(agentRunsHash(route))).toEqual(route);
+    }
     expect(agentRunsSource).toContain('export function AgentRunsWorkbench({ focused = false');
-    expect(agentRunsSource).toContain('t("page.agentRuns.focusedHint")');
-    expect(agentRunsSource).toContain('t("page.agentRuns.focusedTag")');
-    expect(agentRunsSource).toContain('t("page.agentRuns.workbenchTitle")');
-    expect(agentRunsSource).toContain("page.agentRuns.modules.");
-    expect(agentRunsSource).toContain("focused ? (");
+    expect(agentRunsSource).toContain("canonicalAgentRunsCopy(i18n.language)");
+    expect(agentRunsSource).toContain("focused ? copy.tabs[route.tab] : copy.title");
+    expect(agentRunsSource).toContain("ProjectContextGate requireSelection");
+    expect(agentRunsSource).not.toContain("api.agentRun");
     expect(agentRunsSource).not.toContain("focused: _focused");
     expect(navigationSource).toContain('key: "evidence", path: "#/tasks/agent-feed"');
     expect(navigationSource).toContain('key: "slo_rebalance", path: "#/platforms/agent-runs"');

@@ -26,6 +26,7 @@ import { executionIssueHref } from "@/lib/executionCommands";
 import { ExecutionTargetFacts } from "./ExecutionTargetFacts";
 import { ExecutionAcceptanceSnapshot } from "./ExecutionAcceptanceSnapshot";
 import { ExecutionRuntimePanel } from "./ExecutionRuntimePanel";
+import { projectSessionKey } from "@/lib/projectPortfolio";
 
 export function ExecutionStageFacts({
   observation,
@@ -92,6 +93,7 @@ export function ExecutionObservationCard({
   initialAttempt,
   initialStream,
   disabled = false,
+  isActive,
 }: {
   entry: DeliveryExecution;
   projectId: string;
@@ -104,6 +106,7 @@ export function ExecutionObservationCard({
   initialAttempt?: number;
   initialStream?: string;
   disabled?: boolean;
+  isActive?: () => boolean;
   onCommand: (
     action: DeliveryAction,
     payload: Record<string, unknown>,
@@ -120,6 +123,9 @@ export function ExecutionObservationCard({
   const [paused, setPaused] = useState(false);
   const [comment, setComment] = useState("");
   const [controlLocked, setControlLocked] = useState(false);
+  const actionPending = useRef(false), controlPending = useRef(false);
+  const origin = useRef(projectSessionKey()), access = useRef({ disabled, isActive });
+  access.current = { disabled, isActive };
   const cursor = useRef<string>();
   const controller = useRef<AbortController>();
   const readingRef = useRef(false);
@@ -172,6 +178,8 @@ export function ExecutionObservationCard({
     return () => clearInterval(timer);
   }, [active, paused, terminal, observe, observation?.more]);
   async function act(action: () => Promise<void>) {
+    if (actionPending.current || controlPending.current || access.current.disabled || access.current.isActive?.() === false || origin.current !== projectSessionKey()) return;
+    actionPending.current = true;
     setBusy(true);
     setActionError("");
     try {
@@ -180,6 +188,7 @@ export function ExecutionObservationCard({
     } catch (failure) {
       setActionError((failure as Error).message);
     } finally {
+      actionPending.current = false;
       setBusy(false);
     }
   }
@@ -333,6 +342,8 @@ export function ExecutionObservationCard({
       <ExecutionRuntimePanel
         projectId={projectId}
         executionId={entry.id}
+        workspaceId={entry.workspace_id}
+        isActive={() => !actionPending.current && access.current.isActive?.() !== false}
         sessionId={sessionId}
         active={active}
         paused={paused}
@@ -342,6 +353,7 @@ export function ExecutionObservationCard({
         initialAttempt={initialAttempt}
         initialStream={initialStream}
         onUnresolvedChange={(value) => {
+          controlPending.current = value;
           setControlLocked(value);
           onUnresolvedChange?.(value);
         }}

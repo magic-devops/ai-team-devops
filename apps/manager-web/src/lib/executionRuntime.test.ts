@@ -25,7 +25,7 @@ const preview = (): ExecutionControlPreview => ({
     run_id: "R",
     run_version: 9,
     attempt: 2,
-    control_basis: "fixed-basis",
+    control_basis: "a".repeat(64),
     reason: "Stop the original run",
   },
 });
@@ -41,7 +41,7 @@ describe("fixed execution controls and exact output", () => {
     captured.payload.reason = "different operation";
     vi.mocked(request)
       .mockRejectedValueOnce(new Error("network lost"))
-      .mockResolvedValue({ project_id: "P", action: "execution.cancel", resource: { kind: "execution", id: "E" }, result: null, affected_refs: [], applied_version: 8, version: 8, query_generation: 2, replayed: false });
+      .mockResolvedValue({ project_id: "P", action: "execution.cancel", resource: { kind: "execution", id: "E" }, result: { run_id: "R", run_version: 10, replayed_runtime: false }, affected_refs: [{ kind: "execution", id: "E" }], applied_version: 8, version: 8, query_generation: 2, replayed: false });
     await expect(submitExecutionControl(intent)).rejects.toThrow(
       "network lost",
     );
@@ -60,7 +60,7 @@ describe("fixed execution controls and exact output", () => {
         run_id: "R",
         run_version: 9,
         attempt: 2,
-        control_basis: "fixed-basis",
+        control_basis: "a".repeat(64),
         reason: "Stop the original run",
       },
     });
@@ -75,7 +75,7 @@ describe("fixed execution controls and exact output", () => {
     context.scope = "session-one";
     vi.mocked(request).mockImplementationOnce(async () => {
       context.scope = "session-two";
-      return { project_id: "P", action: "execution.cancel", resource: { kind: "execution", id: "E" }, result: null, affected_refs: [], applied_version: 8, version: 8, query_generation: 2, replayed: false };
+      return { project_id: "P", action: "execution.cancel", resource: { kind: "execution", id: "E" }, result: { run_id: "R", run_version: 10, replayed_runtime: false }, affected_refs: [{ kind: "execution", id: "E" }], applied_version: 8, version: 8, query_generation: 2, replayed: false };
     });
     await expect(submitExecutionControl(intent)).rejects.toThrow(
       "scopeChanged",
