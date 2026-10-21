@@ -1,7 +1,7 @@
-import { useRef } from "react";
 import type { DeliveryCommandAck, DeliveryIntent } from "./delivery";
 import type { ExecutionPreview } from "./deliveryExecution";
-import { createDeliveryCommandController, useDeliveryCommand, validDeliveryCommandAck, type DeliveryControllerOptions } from "./deliveryCommandController";
+import { createDeliveryCommandController, validDeliveryCommandAck, type DeliveryControllerOptions } from "./deliveryCommandController";
+import { discoverTaskExternalRecovery, useTaskExternalCommand } from "./taskExternalCommand";
 import { eventRetryDraftKey } from "./eventReceipts";
 import { bindSessionRequest } from "./http";
 import { getSessionRevision } from "./authStorage";
@@ -162,19 +162,20 @@ export function externalDeliveryRecoveryPending(projectId: string, taskId: strin
   try { const raw = sessionStorage.getItem(key); if (!raw) return false; if (raw.length > 160000) return true; const value: unknown = JSON.parse(raw); return !record(value) || value.phase !== "refused" || !validSubmissionOriginal(value.original, taskId); } catch { return true; }
 }
 export function createSubmissionController(options: Omit<DeliveryControllerOptions<SubmissionOriginal>, "validateOriginal" | "validateAck"> & { taskId: string }) {
-  return createDeliveryCommandController({ ...options,
+  return createDeliveryCommandController({ ...options, retainSucceededOnRestore: true,
     load: () => { const raw = options.load(); if (raw !== null && raw.length > 160000) throw new Error("retainedOriginalInvalid"); return raw; },
     save: (raw) => { if (raw.length > 160000) throw new Error("retainedOriginalUnavailable"); options.save(raw); },
     validateOriginal: (value) => validSubmissionOriginal(value, options.taskId), validateAck: (original, value) => validSubmissionAck(options.projectId, options.taskId, original, value),
   });
 }
-export function useSubmissionCommand(projectId: string, taskId: string, sessionId: string, onPending?: (value: boolean) => void) {
-  const identity = JSON.stringify([projectId, taskId, sessionId]), active = useRef(identity); active.current = identity;
-  return useDeliveryCommand<SubmissionOriginal>({ projectId, identity: `${sessionId}:${taskId}`, storageKey: () => submissionStorageKey(projectId, taskId), onPending,
+export function discoverSubmissionRecovery(projectId: string, includeRefused = false) {
+  return discoverTaskExternalRecovery(projectId, { prefix: "sop.task-submission.v1:", receiptPrefix: "external-submission:", key: submissionStorageKey, identity: submissionIdentity, pending: externalDeliveryRecoveryPending, includeRefused });
+}
+export function useSubmissionCommand(projectId: string, taskId: string, _sessionId: string, onPending?: (value: boolean) => void) {
+  return useTaskExternalCommand<SubmissionOriginal>({ projectId, taskId, kind: "submission", storageKey: () => submissionStorageKey(projectId, taskId), onPending,
     create: (options) => { const read = bindSessionRequest({ projectId, revision: getSessionRevision() || "" }); return createSubmissionController({ ...options, taskId,
-      scope: `${options.scope}\n${identity}`, currentScope: () => `${options.currentScope()}\n${active.current}`,
-      load: () => { if (!submissionStorageKey(projectId, taskId)) throw new Error("retainedOriginalUnavailable"); return options.load(); },
       send: (original) => read("/api/v1/delivery/commands", { method: "POST", headers: { "X-Project-Id": projectId }, body: JSON.stringify({ action: original.action, payload: original.payload, expected_version: original.intent.version, idempotency_key: original.intent.key }) }),
     }); },
   });
 }
+export type SubmissionCommand = ReturnType<typeof useSubmissionCommand>;

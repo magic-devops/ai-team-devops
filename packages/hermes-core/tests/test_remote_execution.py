@@ -555,10 +555,16 @@ def test_failed_remote_node_retry_new_claim_can_supersede_failed_result(remote_s
         "owner": first["owner"],
         "node_id": "one",
         "idempotency_key": "retry-result-fail",
-        "result": {"exit_code": 1, "stdout": "first failed", "duration_ms": 1},
+        "result": {"exit_code": 1, "stdout": "first failed", "duration_ms": 1,
+                   "evidence_binding": {"run_id": "forged", "attempt": 99}},
     }, auth)["items"][0]
     assert failed["status"] == "failed"
     assert failed["data"]["node_results"]["one"]["execution_owner"] == first["owner"]
+    from hermes_core.transactional import digest
+
+    assert failed["data"]["node_results"]["one"]["evidence_binding"] == {
+        "run_id": planned["id"], "node_id": "one", "attempt": 1,
+        "command_sha256": digest(failed["data"]["nodes"][0])}
     retried = _json("POST", base + f"/runs/{planned['id']}/retry", {
         "expected_version": failed["version"],
         "idempotency_key": "retry-action",

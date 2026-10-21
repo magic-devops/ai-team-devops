@@ -35,6 +35,11 @@ def test_real_tdd_approval_export_and_replay(live_executor):
     assert interrupted["status"] == "interrupted", interrupted
     assert not (root / "delivery.txt").exists()
     assert interrupted["data"]["node_results"]["red"]["exit_code"] == 1
+    from hermes_core.transactional import digest
+
+    red = interrupted["data"]["nodes"][0]
+    assert interrupted["data"]["node_results"]["red"]["evidence_binding"] == {
+        "run_id": run["id"], "node_id": "red", "command_sha256": digest(red), "attempt": 1}
     approval = client.get("/api/hermes/v1/approvals").json()["items"][0]
     decision = {"expected_version": approval["version"], "idempotency_key": "decision", "decision": "approve"}
     assert client.post(f"/api/hermes/v1/approvals/{approval['id']}/decision", json=decision).status_code == 200
@@ -71,3 +76,5 @@ def test_retry_only_failed_unit(live_executor):
     completed = client.get(f"/api/hermes/v1/runs/{run['id']}").json()["items"][0]
     assert completed["status"] == "completed", completed
     assert (root / "count").read_text() == "1"
+    assert completed["data"]["node_results"]["once"]["evidence_binding"]["attempt"] == 1
+    assert completed["data"]["node_results"]["unstable"]["evidence_binding"]["attempt"] == 2

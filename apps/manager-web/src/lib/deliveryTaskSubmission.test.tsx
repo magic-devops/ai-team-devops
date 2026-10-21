@@ -10,6 +10,7 @@ import { createSubmissionController, externalDeliveryRecoveryPending, parseSubmi
 import { adoptSubmissionDraft, DeliveryTaskSubmissionPanel, SubmissionFacts } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskSubmissionPanel";
 import { DeliveryTaskDetail } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskDetail";
 import { DeliveryManualReviewPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryManualReviewPanel";
+import { TaskExternalRecovery } from "../../subapps/ai-rd-center/src/pages/delivery/TaskExternalRecovery";
 import { taskSubmissionCopy, taskSubmissionReason } from "../i18n/task-submission";
 import { eventTargetHref } from "./eventReceiptState";
 import { issueEvidenceHref } from "./deliveryIssue";
@@ -53,7 +54,7 @@ function ack(value: SubmissionOriginal, issue: string | null = null) {
     applied_version: value.intent.version + 1, version: value.intent.version + 1, query_generation: null, replayed: false };
 }
 function frame<T>(name: string, callback: () => T) { h.frame = name; h.next = 0; return callback(); }
-function nodes(node: ReactNode): any[] { if (Array.isArray(node)) return node.flatMap(nodes); if (!isValidElement<any>(node)) return []; return [node, ...["children", "footer", "action", "description"].flatMap((key) => nodes(node.props[key]))]; }
+function nodes(node: ReactNode): any[] { if (Array.isArray(node)) return node.flatMap(nodes); if (!isValidElement<any>(node)) return []; if (node.type === TaskExternalRecovery) return [node, ...nodes(frame("original-recovery", () => TaskExternalRecovery(node.props)))]; return [node, ...["children", "footer", "action", "description"].flatMap((key) => nodes(node.props[key]))]; }
 const find = (tree: ReactNode, type: unknown, predicate: (props: any) => boolean = () => true) => nodes(tree).find((node) => node.type === type && predicate(node.props))?.props;
 const button = (tree: ReactNode, text: string) => find(tree, Button, (props) => props.children === text);
 const panel = () => frame("panel", () => DeliveryTaskSubmissionPanel({ projectId: "P", taskId: "T", sessionId: "session", canSubmit: () => h.canWrite, onSaved: h.saved, onUnresolvedChange: h.pending, onEditingChange: h.editing }));
@@ -235,7 +236,7 @@ describe("external submit/review exact receipt and durable originals", () => {
   it.each([false, true])("retains and replays identical original for review=%s", async (review) => {
     let raw: string | null = null; const sent: string[] = []; const value = original(review);
     const create = () => createSubmissionController({ projectId: "P", taskId: "T", scope: "scope", currentScope: () => "scope", load: () => raw, save: (text) => { raw = text; }, send: async (captured) => { sent.push(JSON.stringify(captured)); if (sent.length === 1) throw new TypeError("Lost reply"); return ack(captured); } });
-    await create().run(value); value.intent.version = 99; await create().replay(); expect(sent).toHaveLength(2); expect(sent[1]).toBe(sent[0]); expect(create().snapshot().phase).toBe("idle");
+    await create().run(value); value.intent.version = 99; await create().replay(); expect(sent).toHaveLength(2); expect(sent[1]).toBe(sent[0]); expect(create().snapshot().phase).toBe("succeeded");
   });
   it.each(["project", "version", "resource", "extra-result", "duplicate-ref", "missing-issue", "wrong-original"])("rejects malformed review ACK %s", (change) => {
     const value = original(true), answer: any = ack(value, "I1"); if (change === "project") answer.project_id = "Q"; if (change === "version") answer.applied_version++;
@@ -268,7 +269,7 @@ describe("actual external delivery interaction definitions", () => {
   });
   it("retains a confirmed ACK through cleanup failure and never repeats its write", async () => {
     const tree = await ready(); h.storageFail = true; await button(tree, copy.confirm).onClick(); expect(h.sent).toHaveLength(1); expect(h.saved).not.toHaveBeenCalled();
-    const finish = find(panel(), Button, (props) => props["data-action"] === "finish-submission"); expect(finish).toBeDefined(); h.storageFail = false; await finish.onClick();
+    const finish = find(panel(), Button, (props) => props["data-action"] === "finish-submission-original"); expect(finish).toBeDefined(); h.storageFail = false; await finish.onClick();
     expect(h.sent).toHaveLength(1); expect(h.saved).toHaveBeenCalledTimes(1); expect(externalDeliveryRecoveryPending("P", "T")).toBe(false);
   });
   it("requires explicit adoption after a native boundary or criterion changes", async () => {

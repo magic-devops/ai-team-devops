@@ -27,6 +27,7 @@ function draft(): ExecutionDraftSession {
 }
 function preview(prepared = prepareExecution(draft())): ExecutionPreview {
   return { project_id: "P", version: 7, task_basis: "a".repeat(64), plan_basis: "c".repeat(64), executor_snapshot: null,
+    test_plan: { schema: "manager.execution-test-plan.v1", node_ids: [...prepared.payload.test_node_ids], command_sha256: {} },
     workspace_id: "W", workspace_version: 1, target: structuredClone(target), agent: null,
     nodes: prepared.payload.nodes.map((node) => ({ ...node, argv: [...node.argv], expected_exit_code: "expected_exit_code" in node ? node.expected_exit_code : 0,
       timeout_seconds: "timeout_seconds" in node ? node.timeout_seconds : 60, agent_id: "", prompt: "" })),

@@ -172,6 +172,41 @@ class ExecutionSnapshot(ExecutionInput):
     requirement: ExecutionRequirementSnapshot | None
 
 
+class ExecutionTestPlan(ExecutionInput):
+    schema: Literal["manager.execution-test-plan.v1"]
+    node_ids: list[str]
+    command_sha256: dict[str, str]
+
+
+class ExecutionQualityTest(ExecutionInput):
+    node_id: str
+    status: Literal["pending", "passed", "failed", "invalid", "skipped"]
+    result_attempt: int | None
+    reused: bool
+
+
+class ExecutionQuality(ExecutionInput):
+    schema: Literal["manager.execution-quality.v1"]
+    status: Literal["not_configured", "pending", "passed", "failed", "invalid"]
+    reason_codes: list[str]
+    execution_id: str
+    run_id: str
+    run_version: int
+    attempt: int
+    test_node_ids: list[str]
+    test_plan_sha256: str | None
+    results_sha256: str | None
+    reused_node_ids: list[str]
+    tests: list[ExecutionQualityTest]
+
+
+class ExecutionEvidenceBinding(ExecutionInput):
+    run_id: str
+    node_id: str
+    command_sha256: str
+    attempt: int = Field(ge=1, strict=True)
+
+
 class ExecutionPreviewResponse(ExecutionInput):
     project_id: str
     version: int
@@ -185,6 +220,7 @@ class ExecutionPreviewResponse(ExecutionInput):
     executor_snapshot: ExecutorSnapshot | None
     nodes: list[Node]
     test_node_ids: list[str]
+    test_plan: ExecutionTestPlan
     feedback_context: dict | None = None
     feedback_context_sha256: FeedbackDigest | None = None
 
@@ -210,6 +246,7 @@ class ExecutionNodeResult(ExecutionInput):
     stderr: OutputText | None
     duration_ms: int | None
     attempt: int | None
+    evidence_binding: ExecutionEvidenceBinding | None
     skipped: bool
     stdout_truncated: bool
     stderr_truncated: bool
@@ -250,6 +287,7 @@ class ExecutionPermissions(ExecutionInput):
     can_start: bool
     can_cancel: bool
     can_review: bool
+    can_accept: bool
     can_sync: bool
 
 
@@ -269,5 +307,7 @@ class ExecutionObservationsResponse(ExecutionInput):
     more: bool
     nodes: list[ExecutionNodeObservation]
     tests: ExecutionTestSummary
+    quality: ExecutionQuality
+    review_verified: bool
     permissions: ExecutionPermissions
     log_streaming: Literal[False] = False

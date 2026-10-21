@@ -174,6 +174,18 @@ class Delivery:
             "isolation": body.isolation,
             "base_commit": body.base_commit,
         }
+        managed_source = task["data"].get("source", {})
+        if managed_source.get("kind") == "manager.delivery":
+            # Preserve the saved original exactly. Missing old plans are readable
+            # but cannot later acquire test acceptance by an implicit upgrade.
+            run_data["managed_execution_id"] = managed_source.get("execution_id", "")
+            if "test_plan" in managed_source:
+                from copy import deepcopy
+                from .managed_test_quality import valid_test_plan
+
+                if not valid_test_plan(managed_source["test_plan"], run_data["nodes"]):
+                    raise CoreError("invalid_test_plan", "Managed test identities must match the actual commands", 422)
+                run_data["managed_test_plan"] = deepcopy(managed_source["test_plan"])
         if bindings:
             run_data["agent_bindings"] = bindings
         if body.target_device_id:
@@ -234,6 +246,12 @@ class Delivery:
             if not body.comment.strip():
                 raise CoreError("review_required", "Record a review conclusion", 422)
             if body.decision == "accept":
+                if task["data"].get("source", {}).get("kind") == "manager.delivery" or run["data"].get("managed_execution_id"):
+                    from .managed_test_quality import managed_run_quality
+
+                    quality = managed_run_quality(task, run)
+                    if quality["status"] != "passed":
+                        raise CoreError("test_evidence_required", "Managed acceptance requires fixed successful command tests", 409)
                 if run["data"].get("isolation") == "git_worktree":
                     evidence = run["data"].get("code_evidence")
                     if not evidence or evidence.get("complete") is not True or evidence.get("truncated") or evidence.get("untracked"):
@@ -256,6 +274,10 @@ class Delivery:
                 "trace_id": trace,
                 "created_at": now(),
             }
+            if task["data"].get("source", {}).get("kind") == "manager.delivery" or run["data"].get("managed_execution_id"):
+                from .managed_test_quality import managed_run_quality
+
+                review["quality"] = managed_run_quality(task, run)
             phase = "accepted" if body.decision == "accept" else "changes_requested"
             if body.dry_run:
                 return {

@@ -3,6 +3,7 @@ import { Button, Input, Modal } from "antd";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExecutionRuntimeControl } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionRuntimeControl";
 import type { ExecutionRuntime } from "./executionRuntime";
+import { qualityFixture } from "./executionQualityFixtures";
 import { request } from "./http";
 import type { ExecutionControlOperationsRead } from "./executionControlOperations";
 const hooks = vi.hoisted(() => ({
@@ -50,6 +51,7 @@ vi.mock("./projectPortfolio", () => ({
 }));
 vi.mock("./http", () => ({ request: vi.fn() }));
 const runtime: ExecutionRuntime = {
+  review_verified: false, quality: qualityFixture({ execution_id: "E", run_id: "R", run_version: 9, attempt: 2 }), can_review: false, can_accept: false,
   project_id: "P",
   execution_id: "E",
   run_id: "R",

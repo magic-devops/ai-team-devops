@@ -896,7 +896,10 @@ def create_remote_router(store: Store, identity: Callable, execution=None):  # n
             if item["data"].get("target_device_id") != device["id"]:
                 raise CoreError("forbidden", "Run is assigned to a different device", 403)
             attempt = item["data"].get("attempt", 1)
-            owned_result = {**clean_result, "execution_owner": body.owner, "attempt": attempt}
+            from .managed_test_quality import evidence_binding
+
+            owned_result = {**clean_result, "execution_owner": body.owner, "attempt": attempt,
+                            "evidence_binding": evidence_binding(body.run_id, node.model_dump(), attempt)}
             fingerprint = digest(owned_result)
             existing = item["data"].get("node_results", {}).get(body.node_id)
             if existing is not None:

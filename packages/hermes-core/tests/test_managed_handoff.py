@@ -78,6 +78,50 @@ def test_one_commit_contains_envelope_planned_run_and_all_receipts_without_start
     assert receipts[result["plan_receipt_id"]]["run_id"] == result["run_id"]
 
 
+@pytest.mark.parametrize("test_ids", [None, [], ["check"]])
+def test_managed_review_requires_actual_fixed_tests_but_rework_is_always_available(setup, test_ids):
+    from hermes_core.managed_test_quality import evidence_binding, make_test_plan
+    from hermes_core.models import TaskReview
+
+    store, execution, actor, request, _ = setup
+    if test_ids is not None:
+        request["envelope"]["source"]["test_plan"] = make_test_plan(
+            [node.model_dump() for node in request["body"].nodes], test_ids)
+    service = ManagedHandoff(store, execution)
+    original = deepcopy(request["envelope"])
+    result = service.dispatch(actor, "W", **request)
+    run = store.get(actor, "W", "runs", result["run_id"])
+    run = store.mutate(actor, "W", "runs", run["id"], operation="test.terminal", key="terminal", request={}, trace="test",
+        expected=run["version"], transform=lambda item: {"status": "completed", "data": {**item["data"], "node_results": {
+            "check": {"succeeded": True, "exit_code": 0, "expected_exit_code": 0, "attempt": 1,
+                      "evidence_binding": evidence_binding(item["id"], item["data"]["nodes"][0], 1)}}}})
+    task = store.get(actor, "W", "tasks", result["runtime_task_id"])
+    body = TaskReview(expected_version=task["version"], idempotency_key="review", dry_run=True,
+                      run_id=run["id"], run_version=run["version"], decision="accept", comment="Actual evidence inspected")
+    if test_ids:
+        assert service.delivery.review(actor, "W", task["id"], body, "review")["review"]["quality"]["status"] == "passed"
+    else:
+        with pytest.raises(CoreError) as failure:
+            service.delivery.review(actor, "W", task["id"], body, "review")
+        assert failure.value.code == "test_evidence_required"
+    assert service.delivery.review(actor, "W", task["id"], body.model_copy(update={"decision": "request_changes"}), "rework")["phase"] == "changes_requested"
+    assert probe(service, actor, request)["run_id"] == run["id"]
+    assert task["data"]["source"] == original["source"]
+
+
+def test_test_selection_is_bound_to_handoff_original_and_cannot_silently_change(setup):
+    from hermes_core.managed_test_quality import make_test_plan
+
+    store, execution, actor, request, _ = setup
+    nodes = [node.model_dump() for node in request["body"].nodes]
+    request["envelope"]["source"]["test_plan"] = make_test_plan(nodes, ["check"])
+    service = ManagedHandoff(store, execution)
+    service.dispatch(actor, "W", **request)
+    request["envelope"]["source"]["test_plan"] = make_test_plan(nodes, [])
+    with pytest.raises(CoreError):
+        probe(service, actor, request)
+
+
 def test_restart_recovers_committed_plan_without_current_execute_or_further_writes(setup):
     store, execution, actor, request, url = setup
     first = ManagedHandoff(store, execution).dispatch(actor, "W", **request)

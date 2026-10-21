@@ -17,6 +17,7 @@ import { request } from "./http";
 import { setSession, USER_KEY } from "./authStorage";
 import type { DeliveryContext, DeliveryExecution } from "./delivery";
 import { executionReviewCopy } from "@/i18n/execution-review";
+import { qualityFixture } from "./executionQualityFixtures";
 
 const h = vi.hoisted(() => ({ frames: {} as Record<string, any[]>, frame: "", next: 0,
   effects: {} as Record<string, Array<() => void | (() => void)>>, local: new Map<string, string>(), stored: new Map<string, string>(),
@@ -47,8 +48,9 @@ const original: ExecutionReviewOriginal = { action: "execution.review", payload:
 const entry = { id: "E", task_id: "T", workspace_id: "W", run_id: "R", run_version: 9, attempt: 1, status: "awaiting_review", stale: false,
   progress: 100, created_at: "2026-10-21T01:00:00Z", snapshot: { task_acceptance_criteria: [] }, test_node_ids: [], results: {} } as unknown as DeliveryExecution;
 const observation = { project_id: "P", execution_id: "E", run_id: "R", run_version: 9, attempt: 1, status: "awaiting_review", stale: false, observed_at: "2026-10-21T01:00:00Z",
-  events: [], next_cursor: null, more: false, nodes: [], tests: { total: 0, passed: 0, failed: 0, pending: 0, status: "not_configured" },
-  permissions: { can_start: false, can_cancel: false, can_review: true, can_sync: true }, log_streaming: false };
+  review_verified: false, quality: qualityFixture({ execution_id: "E", run_id: "R", run_version: 9, attempt: 1 }, "passed"),
+  events: [], next_cursor: null, more: false, nodes: [], tests: { total: 1, passed: 1, failed: 0, pending: 0, status: "passed" },
+  permissions: { can_start: false, can_cancel: false, can_review: true, can_accept: true, can_sync: true }, log_streaming: false };
 function ack(body: any) { return { project_id: "P", action: body.action, resource: { kind: "execution", id: body.payload.id }, result: null,
   applied_version: body.expected_version + 1, version: body.expected_version + 1, query_generation: 2, replayed: false,
   affected_refs: [{ kind: "execution", id: body.payload.id }] }; }

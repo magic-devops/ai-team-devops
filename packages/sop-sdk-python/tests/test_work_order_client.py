@@ -31,6 +31,19 @@ def packet_view():
         "request_digest": "a" * 64, "max_packet_bytes": 524288}
 
 
+def ack_for(body):
+    action, p = body["action"], body["payload"]
+    result = {"work_order_id": "work-order-1", "task_ids": ["任务 一"], "request_digest": "a" * 64,
+        "packet_digest": "b" * 64, "order_revision": 1 if action.endswith("create") else 3,
+        "state": {"create": "queued", "claim": "claimed", "progress": "claimed", "cancel": "cancel_requested", "release": "closed", "report": "reported"}[action.split(".")[-1]],
+        "submission_id": p["submission_id"] if action.endswith("report") else None}
+    resource = {"kind": "work_order", "id": "work-order-1"}
+    refs = [resource, {"kind": "task", "id": "任务 一"}]
+    if action.endswith("report"): refs.append({"kind": "task_submission", "id": p["submission_id"]})
+    return {"project_id": "P", "action": action, "resource": resource, "result": result,
+        "affected_refs": refs, "applied_version": 8, "version": 8, "query_generation": 1, "replayed": True}
+
+
 def test_exact_scope_filter_page_and_packet_remain_complete():
     calls = []
     def transport(request):
@@ -56,7 +69,7 @@ def test_unknown_write_replays_the_exact_same_version_key_payload(action):
     def transport(request):
         calls.append(request)
         if len(calls) == 1: raise httpx.ReadError("response lost", request=request)
-        return httpx.Response(200, json={"resource": {"kind": "work_order", "id": "work-order-1"}})
+        return httpx.Response(200, json=ack_for(body))
     with client_for(transport) as client:
         with pytest.raises(SopTransportError): client.delivery_work_order_command(body)
         client.delivery_work_order_command(deepcopy(body))

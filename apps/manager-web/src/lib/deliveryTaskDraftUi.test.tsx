@@ -8,6 +8,7 @@ import { DeliveryExecutionPanel } from "../../subapps/ai-rd-center/src/pages/del
 import { DeliveryTaskPlanMaintenance } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanMaintenance";
 import { DeliveryTaskPlanning } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanning";
 import { DeliveryTaskDefinitionHost, TaskDefinitionRecoveryOwner } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskDefinitionHost";
+import { TaskExternalRecoveryOwner } from "../../subapps/ai-rd-center/src/pages/delivery/TaskExternalRecovery";
 import { DeliveryCollaboration } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryDiscussionAdoption";
 import { DeliveryDesignContextPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryDesignContextPanel";
 import { DeliveryTaskSubmissionPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskSubmissionPanel";
@@ -22,7 +23,7 @@ import { request } from "./http";
 import type { DeliveryTaskData } from "./delivery";
 
 const h = vi.hoisted(() => ({ hooks: {} as Record<string, any[]>, component: "", next: 0, effects: [] as Array<() => void>, scope: "scope-a", task: {} as any, context: {} as any, options: [] as any[], storage: {} as Record<string, string>,
-  taskEditPending: undefined as undefined | ((value: boolean) => void), recoveryIds: [] as string[], discoveryError: false, taskEdit: { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, reset: vi.fn(), run: vi.fn(), locked: false },
+  taskEditPending: undefined as undefined | ((value: boolean) => void), recoveryIds: [] as string[], externalIds: { submission: [] as string[], "work-order": [] as string[] }, externalDiscoveryError: false, discoveryError: false, taskEdit: { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, reset: vi.fn(), run: vi.fn(), locked: false },
   invalidate: vi.fn(), refetch: vi.fn(), mutation: vi.fn(), queue: { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, reset: vi.fn(), locked: false },
 }));
 vi.mock("react", async () => {
@@ -46,6 +47,8 @@ vi.mock("./taskEditCommand", async () => ({ ...await vi.importActual<typeof impo
   discoverTaskEditRecovery: () => { if (h.discoveryError) throw new Error("retainedOriginalUnavailable"); return h.recoveryIds; }, taskEditRecoveryPending: (_project: string, taskId: string) => h.recoveryIds.includes(taskId),
 }));
 vi.mock("./deliveryQuery", async () => ({ ...await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery"), fetchDeliveryTaskEditData: async () => structuredClone(h.task.data) }));
+vi.mock("./deliveryTaskSubmission", async () => ({ ...await vi.importActual<typeof import("./deliveryTaskSubmission")>("./deliveryTaskSubmission"), discoverSubmissionRecovery: () => { if (h.externalDiscoveryError) throw new Error("retainedOriginalUnavailable"); return h.externalIds.submission; }, externalDeliveryRecoveryPending: (_p: string, task: string) => h.externalIds.submission.includes(task) }));
+vi.mock("./externalWorkOrderCommand", async () => ({ ...await vi.importActual<typeof import("./externalWorkOrderCommand")>("./externalWorkOrderCommand"), discoverWorkOrderRecovery: () => { if (h.externalDiscoveryError) throw new Error("retainedOriginalUnavailable"); return h.externalIds["work-order"]; }, workOrderRecoveryPending: (_p: string, task: string) => h.externalIds["work-order"].includes(task) }));
 vi.mock("./executionDispatchCommand", async () => ({ ...await vi.importActual<typeof import("./executionDispatchCommand")>("./executionDispatchCommand"), useExecutionDispatchCommand: () => h.queue }));
 vi.mock("./deliveryAttention", () => ({ useDeliveryInboxQuery: () => ({ data: undefined }), useDeliveryInboxNavigation: () => ({ open: vi.fn(), retry: vi.fn() }) }));
 vi.mock("../components/DeliveryMemberIdentity", async () => ({ ...await vi.importActual<typeof import("../components/DeliveryMemberIdentity")>("../components/DeliveryMemberIdentity"), useMemberIdentity: () => (_members: unknown, id: string) => id }));
@@ -69,6 +72,7 @@ function workbench() { const shell = frame("shell", () => DeliveryWorkbench()), 
 function beforeUnload() { const event = new Event("beforeunload", { cancelable: true }); Object.defineProperty(event, "returnValue", { writable: true, value: "" }); window.dispatchEvent(event); return event; }
 beforeEach(() => {
   h.hooks = {}; h.effects = []; h.recoveryIds = []; h.discoveryError = false; h.taskEditPending = undefined; h.options = []; h.storage = {}; h.scope = "scope-a"; h.invalidate.mockReset(); h.refetch.mockReset();
+  h.externalIds = { submission: [], "work-order": [] }; h.externalDiscoveryError = false;
   vi.mocked(request).mockReset();
   const local = new Map<string, string>(); vi.stubGlobal("localStorage", { getItem: (key: string) => local.get(key) ?? null, setItem: (key: string, value: string) => local.set(key, value), removeItem: (key: string) => local.delete(key) });
   vi.stubGlobal("sessionStorage", { getItem: (key: string) => h.storage[key] ?? null, setItem: (key: string, value: string) => { h.storage[key] = value; } });
@@ -82,6 +86,36 @@ beforeEach(() => {
 afterEach(() => { Object.keys(h.hooks).forEach(unmount); vi.unstubAllGlobals(); });
 
 describe("task draft navigation protection", () => {
+  for (const kind of ["submission", "work-order"] as const) for (const failed of ["pending", "error", "old-schema", "requirement"]) {
+    it(`retains ${kind} recovery outside the ${failed} context without current GET authority`, () => {
+      h.externalIds[kind] = ["T"];
+      if (failed === "pending") h.context.isPending = true;
+      if (failed === "error") h.context.error = new Error("HTTP 503: unavailable");
+      if (failed === "old-schema") h.context.data.query_state.status = "stale";
+      if (failed === "requirement") location.hash = "#/dev-flow?view=list&requirement=R&detail=overview&task=T&project_id=P";
+      const owner = nodes(workbench()).find((node) => node.type === TaskExternalRecoveryOwner && node.props.kind === kind)!;
+      expect(owner.props.taskId).toBe("T"); expect(owner.props.isActive()).toBe(true);
+      owner.props.onPending(true); expect(beforeUnload().defaultPrevented).toBe(true);
+      h.externalIds[kind] = []; owner.props.onPending(false); owner.props.onResolved(); expect(beforeUnload().defaultPrevented).toBe(false);
+    });
+  }
+  it("does not clear a retained external original from a stale fallback callback", () => {
+    h.externalIds.submission = ["T"]; h.context.error = new Error("HTTP 503");
+    const owner = find(workbench(), TaskExternalRecoveryOwner); owner.props.onPending(true);
+    h.scope = "other-account"; expect(owner.props.isActive()).toBe(false); owner.props.onPending(false);
+    expect(beforeUnload().defaultPrevented).toBe(false); h.scope = "scope-a"; expect(beforeUnload().defaultPrevented).toBe(true);
+  });
+  for (const kind of ["submission", "work-order"] as const) {
+    it(`transfers a normal ${kind} owner to fallback without leaving a stale Task aggregate`, () => {
+      const parent = workbench(), detail = find(parent, DeliveryTaskDetail), inner = frame("external-transfer", () => DeliveryTaskDetail(detail.props));
+      const panel = find(inner, kind === "submission" ? DeliveryTaskSubmissionPanel : ExternalWorkOrderPanel);
+      h.externalIds[kind] = ["T"]; panel.props.onUnresolvedChange(true);
+      h.context.error = new Error("HTTP 503"); const owner = nodes(workbench()).find((node) => node.type === TaskExternalRecoveryOwner && node.props.kind === kind)!;
+      panel.props.onUnresolvedChange(false); unmount("external-transfer"); owner.props.onPending(true);
+      expect(beforeUnload().defaultPrevented).toBe(true);
+      h.externalIds[kind] = []; owner.props.onPending(false); owner.props.onResolved(); expect(beforeUnload().defaultPrevented).toBe(false);
+    });
+  }
   it("protects a report draft immediately while leaving its own prepare and send authority available", () => {
     const report = find(host(), DeliveryTaskSubmissionPanel);
     report.props.onEditingChange(true);
@@ -269,11 +303,12 @@ describe("task draft navigation protection", () => {
     expect(history.replaceState).toHaveBeenCalled();
   });
   it("forwards the requirement task's draft separately from its pending command", () => {
-    const draft = vi.fn(), pending = vi.fn(), definition = vi.fn(), route = { task: "T", taskPage: 1, taskCursor: "" } as any;
-    const tree = frame("requirement-tasks", () => DeliveryRequirementTasks({ projectId: "P", sessionId: "s", requirementId: "R", route, onRoute: vi.fn(), onUnresolvedChange: pending, onDraftChange: draft, onDefinitionPending: definition }));
+    const draft = vi.fn(), pending = vi.fn(), definition = vi.fn(), external = vi.fn(), route = { task: "T", taskPage: 1, taskCursor: "" } as any;
+    const tree = frame("requirement-tasks", () => DeliveryRequirementTasks({ projectId: "P", sessionId: "s", requirementId: "R", route, onRoute: vi.fn(), onUnresolvedChange: pending, onDraftChange: draft, onDefinitionPending: definition, onExternalPending: external }));
     const detail = find(tree, DeliveryTaskDetail); detail.props.onDraftChange(true); detail.props.onDraftChange(false);
     expect(draft.mock.calls).toEqual([[true], [false]]); expect(pending).not.toHaveBeenCalled();
     detail.props.onDefinitionPending(true); detail.props.onDefinitionPending(false); expect(definition.mock.calls).toEqual([[true], [false]]); expect(pending).not.toHaveBeenCalled();
+    detail.props.onExternalPending("submission", true); detail.props.onExternalPending("work-order", false); expect(external.mock.calls).toEqual([["submission", true], ["work-order", false]]); expect(pending).not.toHaveBeenCalled();
   });
 });
 

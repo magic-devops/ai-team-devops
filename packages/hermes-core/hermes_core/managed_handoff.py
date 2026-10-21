@@ -75,6 +75,14 @@ def _request(principal, workspace, *, operation_id, project_id, execution_id, en
     except ValueError as exc:
         raise CoreError("invalid_handoff", "Use the complete typed original managed task envelope", 422) from exc
     validate_feedback_context(envelope, project_id=project_id)
+    # Absence stays absent for exact saved-original probe/receipt recovery. New
+    # Manager requests always carry the explicit plan; no old original is edited.
+    if "test_plan" in envelope["source"]:
+        from .managed_test_quality import valid_test_plan
+
+        selected = frozen_body.test_nodes if type(frozen_body) is AgentDispatch else frozen_body.nodes
+        if not valid_test_plan(envelope["source"]["test_plan"], [node.model_dump() for node in selected]):
+            raise CoreError("invalid_test_plan", "Managed test plan does not match its original commands", 422)
     request = {"schema": "manager.execution-handoff.v1", "tenant": principal.tenant,
                "business": principal.business, "workspace": workspace, "actor": principal.actor,
                "operation_id": operation_id, "project_id": project_id, "execution_id": execution_id,

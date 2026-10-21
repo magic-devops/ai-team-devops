@@ -9,7 +9,7 @@ import pytest
 from sop_sdk.errors import SopTransportError
 from sop_sdk.work_order_original import load_work_order_original
 from test_delivery_task_submissions import client_for
-from test_work_order_client import original
+from test_work_order_client import ack_for, original
 
 
 def reference():
@@ -47,7 +47,7 @@ def test_work_order_replay_keeps_the_feedback_original_and_saved_file(tmp_path):
     def transport(request):
         calls.append(request)
         if len(calls) == 1: raise httpx.ReadError("lost dispatch receipt", request=request)
-        return httpx.Response(200, json={"resource": {"kind": "work_order", "id": "work-order-1"}})
+        return httpx.Response(200, json=ack_for(body))
 
     with client_for(transport) as client:
         with pytest.raises(SopTransportError): client.delivery_work_order_command(load_work_order_original(path))

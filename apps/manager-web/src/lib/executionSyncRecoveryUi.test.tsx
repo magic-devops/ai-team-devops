@@ -16,6 +16,7 @@ import { request } from "./http";
 import { setSession, setWorkspaceScope, USER_KEY } from "./authStorage";
 import type { DeliveryContext, DeliveryExecution, DeliveryTaskData } from "./delivery";
 import { openExecutionDraft, prepareExecution, type ExecutionObservations } from "./deliveryExecution";
+import { qualityFixture } from "./executionQualityFixtures";
 import { commandDraft } from "./executionCommands";
 
 const h = vi.hoisted(() => ({ frames: {} as Record<string, any[]>, frame: "", next: 0,
@@ -61,9 +62,10 @@ const taskData = { project: { id: "P", name: "Project" }, version: 7, query_gene
     acceptance_criteria: [], acceptance: { criteria: [], sources: [], available: true, requirement_id: null, requirement_revision: null },
     execution_gate: { eligible: true, reasons: [] } } } as unknown as DeliveryTaskData;
 const observation: ExecutionObservations = { project_id: "P", execution_id: "E", run_id: "R", run_version: 9, attempt: 2,
+  review_verified: false, quality: qualityFixture({ execution_id: "E", run_id: "R", run_version: 9, attempt: 2 }),
   status: "awaiting_review", stale: false, observed_at: "2026-10-20T12:00:00Z", executor_snapshot: null, executor_binding_invalidated: false,
   events: [], next_cursor: null, more: false, nodes: [], tests: { total: 0, passed: 0, failed: 0, pending: 0, status: "not_configured" },
-  permissions: { can_start: false, can_cancel: true, can_review: true, can_sync: true }, log_streaming: false };
+  permissions: { can_start: false, can_cancel: true, can_review: true, can_accept: false, can_sync: true }, log_streaming: false };
 function ack(body: any) {
   const executionId = body.payload.id;
   return { project_id: "P", action: body.action, resource: { kind: "execution", id: executionId },

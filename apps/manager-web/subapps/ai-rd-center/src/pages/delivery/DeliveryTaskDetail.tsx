@@ -248,6 +248,7 @@ export function DeliveryTaskDetail({
   queryGeneration,
   onUnresolvedChange,
   onDefinitionPending,
+  onExternalPending,
   onDraftChange,
   onRecoveryIdentity,
   isActive: parentIsActive,
@@ -259,6 +260,7 @@ export function DeliveryTaskDetail({
   queryGeneration?: number | null;
   onUnresolvedChange?: (value: boolean) => void;
   onDefinitionPending?: (value: boolean) => void;
+  onExternalPending?: (kind: "submission" | "work-order", value: boolean) => void;
   onDraftChange?: (value: boolean) => void;
   onRecoveryIdentity?: (executionId: string) => void;
   isActive?: () => boolean;
@@ -281,7 +283,8 @@ export function DeliveryTaskDetail({
   const notifyTaskPending = (_aggregate: boolean) => {
     if (origin.current !== projectSessionKey() || activeIdentity.current !== identity) return;
     // Definition originals transfer to the same parent slot as their independent recovery owner.
-    onUnresolvedChange?.([...pendingSources.current].some((source) => source !== `planning:${taskId}`));
+    onUnresolvedChange?.([...pendingSources.current].some((source) => source !== `planning:${taskId}` &&
+      (!onExternalPending || source !== `external:${taskId}` && source !== `work-order:${taskId}`)));
   };
   const draftExit = useExecutionExitGuard();
   const draftActive = useRef(false), draftNotify = useRef(onDraftChange); draftNotify.current = onDraftChange;
@@ -568,7 +571,7 @@ export function DeliveryTaskDetail({
         isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.workOrder}
         onSelect={(orderId) => { if (!canWriteExternal() || draftActive.current) return; const href = taskDispatchOrderHref(location.hash, projectId, taskId, orderId); if (href && href !== location.hash) location.hash = href; }}
         onWriteReport={(order) => { if (isActive() && !hasWorkOrderPending() && !hasExternalPending() && !queueLocked) { setReportOrder(order); setReportRequest((value) => value + 1); } }}
-        onUnresolvedChange={(value) => { workOrderPending.current = value || workOrderRecoveryPending(projectId, taskId); notifyTaskPending(setTaskPending(`work-order:${taskId}`, workOrderPending.current)); }} />
+        onUnresolvedChange={(value) => { workOrderPending.current = value || workOrderRecoveryPending(projectId, taskId); if (origin.current === projectSessionKey() && activeIdentity.current === identity) onExternalPending?.("work-order", workOrderPending.current); notifyTaskPending(setTaskPending(`work-order:${taskId}`, workOrderPending.current)); }} />
       <TaskDetailContent
         detail={query.error || displayedOperationRecovery ? undefined : query.data}
         pinnedDetail={query.error || displayedOperationRecovery ? undefined : executionPinnedWorkspace || pinnedWorkspace}
@@ -614,6 +617,7 @@ export function DeliveryTaskDetail({
         isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.submission}
         onUnresolvedChange={(value) => {
           externalPending.current = value || externalDeliveryRecoveryPending(projectId, taskId);
+          if (origin.current === projectSessionKey() && activeIdentity.current === identity) onExternalPending?.("submission", externalPending.current);
           const pending = setTaskPending(`external:${taskId}`, externalPending.current);
           notifyTaskPending(pending);
         }} />

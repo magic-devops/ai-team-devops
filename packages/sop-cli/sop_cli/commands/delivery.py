@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from .._util import console, get_client, warn
-from . import delivery_discussion
+from . import delivery_discussion, delivery_operations
 from sop_sdk.task_submission import load_submission_command
 from sop_sdk.design_original import load_design_original, load_design_selection
 from sop_sdk.work_order_original import load_work_order_original
@@ -18,6 +18,7 @@ app = typer.Typer(
 )
 
 app.add_typer(delivery_discussion.app, name="discussion")
+app.add_typer(delivery_operations.app, name="operation")
 
 
 class RequirementRecordCollection(str, Enum):

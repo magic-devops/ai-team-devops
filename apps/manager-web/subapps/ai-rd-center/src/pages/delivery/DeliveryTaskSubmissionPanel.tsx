@@ -13,6 +13,7 @@ import { taskSubmissionCopy, taskSubmissionReason } from "@/i18n/task-submission
 import { parseSubmissionSelection, readSubmissionCurrent, readSubmissionDetail, readSubmissions, submissionUrl, useSubmissionCommand, validSubmissionOriginal,
   type SubmissionCurrent, type SubmissionDetail, type SubmissionOriginal, type SubmissionReason, type TaskSubmissionPayload, type TaskSubmissionReviewPayload } from "@/lib/deliveryTaskSubmission";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
+import { TaskExternalRecovery } from "./TaskExternalRecovery";
 import { externalWorkOrderTaskHref } from "@/lib/externalWorkOrderRoute";
 
 type Draft = { kind: "submit"; current: SubmissionCurrent; payload: TaskSubmissionPayload; stopped: boolean } | { kind: "review"; detail: SubmissionDetail; decision: "accept" | "request_changes"; comment: string };
@@ -133,21 +134,24 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
       changePrepared(null); setChanged(false); setLatest(null); setError("");
     } catch (cause) { reportError(cause); }
   };
-  const complete = async (ack: DeliveryCommandAck | undefined) => {
-    if (!ack) return; assertCurrent();
-    const original = command.snapshot().original;
-    command.reset(); if (command.snapshot().phase !== "idle") { notify.current?.(true); return; }
+  const confirmed = (ack: DeliveryCommandAck, original: SubmissionOriginal) => {
+    assertCurrent();
     changeDraft(null); changePrepared(null); setLatest(null); setChanged(false); setError(""); notify.current?.(false);
     setFeedback(original?.action === "task.delivery.review" ? copy.reviewSaved : (original?.payload as TaskSubmissionPayload | undefined)?.work_order ? copy.submittedHandoff : copy.submitted);
     const id = ack.result?.submission_id; if (typeof id === "string") { setSelected(id); setInvalidSelection(false); }
-    try { onSaved(ack); const value = await query.refetch(); assertCurrent(); if (value.isError) setError(copy.refreshFailed); if (id && id === selectedId) void detailQuery.refetch(); if (historyOpen) void history.refetch(); }
+    try { onSaved(ack); }
     catch { if (current()) setError(copy.refreshFailed); }
   };
-  const submit = async (replay = false) => {
+  const complete = (ack: DeliveryCommandAck | undefined) => {
+    if (!ack) return; assertCurrent(); const original = command.snapshot().original; if (!original) return;
+    command.reset(); if (command.snapshot().phase !== "idle") { notify.current?.(true); return; }
+    confirmed(ack, original);
+  };
+  const submit = async () => {
     const original = preparedRef.current;
-    if (pending.current || (replay ? command.snapshot().phase !== "unknown" : !original || locked || changed || !canWrite())) return;
+    if (pending.current || !original || locked || changed || !canWrite()) return;
     pending.current = true; setBusy(true); setError("");
-    try { assertCurrent(); const ack = replay ? await command.replay() : await command.run(original!); assertCurrent(); await complete(ack); }
+    try { assertCurrent(); const ack = await command.run(original); assertCurrent(); complete(ack); }
     catch (cause) { reportError(cause); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   };
@@ -156,16 +160,14 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
   const payload = shown?.kind === "submit" ? shown.payload : null;
   const evidenceOptions = payload?.artifacts.map((item, index) => ({ value: item.id, label: item.title || `${copy.artifacts} ${index + 1}` })) || [];
   const reasons = (items: SubmissionReason[]) => <div className="runtime-help"><p>{items.map((item) => taskSubmissionReason(i18n?.language, item)).join(" · ")}</p><details><summary>{copy.details}</summary><ul>{items.map((item, index) => <li key={`${item.code}:${index}`}><code>{item.code}</code> · {item.message}</li>)}</ul></details></div>;
-  const errorProblem = executionRuntimeProblem(error || state.error);
+  const errorProblem = executionRuntimeProblem(error);
   const errorMessage = errorProblem.code ? taskSubmissionReason(i18n?.language, errorProblem) : errorProblem.message;
   const problemFacts = (cause: unknown) => { const problem = executionRuntimeProblem(cause); return <>{taskSubmissionReason(i18n?.language, problem)}{problem.code && <details className="runtime-help"><summary>{copy.details}</summary><code>{problem.code}</code><p>{problem.message}</p></details>}</>; };
   const fixedDetails = (original: SubmissionOriginal) => <details className="runtime-help"><summary>{copy.details}</summary><dl className="grid grid-cols-[auto_1fr] gap-x-3 break-all"><dt>{copy.task}</dt><dd>{taskId}</dd><dt>{copy.version}</dt><dd>{original.intent.version}</dd><dt>{copy.digest}</dt><dd>{original.payload.task_basis}</dd>{original.action === "task.delivery.submit" && (original.payload as TaskSubmissionPayload).work_order && <><dt>{copy.workOrder}</dt><dd>{(original.payload as TaskSubmissionPayload).work_order!.id} · {(original.payload as TaskSubmissionPayload).work_order!.order_revision}</dd><dt>{copy.stopAttestation}</dt><dd>{copy.stoppedReported}</dd></>}</dl></details>;
   const recovery = <>
-    {(error || state.error) && <Alert role="alert" type="warning" title={copy.failed} description={state.error === "retainedOriginalUnavailable" ? copy.unavailableStorage : state.error === "retainedOriginalInvalid" || state.error === "ackMismatch" ? copy.invalid : <>{errorMessage}{errorProblem.code && <details className="runtime-help"><summary>{copy.details}</summary><code>{errorProblem.code}</code><p>{errorProblem.message}</p></details>}</>} />}
+    {error && <Alert role="alert" type="warning" title={copy.failed} description={<>{errorMessage}{errorProblem.code && <details className="runtime-help"><summary>{copy.details}</summary><code>{errorProblem.code}</code><p>{errorProblem.message}</p></details>}</>} />}
     {blocked.length > 0 && Boolean(error) && reasons(blocked)}
-    {state.phase === "unknown" && <Alert role="status" type="warning" title={copy.unknown} description={copy.unknownHint} action={state.original && <Button size="small" data-action="recover-submission" disabled={busy} onClick={() => void submit(true)}>{copy.replay}</Button>} />}
-    {state.phase === "succeeded" && <Alert role="status" type="info" title={copy.confirmed} action={<Button size="small" data-action="finish-submission" disabled={busy} onClick={async () => { if (pending.current) return; pending.current = true; setBusy(true); try { await complete(command.snapshot().ack); } catch (cause) { reportError(cause); } finally { pending.current = false; if (mounted.current) setBusy(false); } }}>{copy.finish}</Button>} />}
-    {state.original && locked && <details className="runtime-help"><summary>{copy.original}</summary><p>{state.original.action === "task.delivery.submit" ? (state.original.payload as TaskSubmissionPayload).summary : (state.original.payload as TaskSubmissionReviewPayload).comment}</p>{fixedDetails(state.original)}</details>}
+    <TaskExternalRecovery projectId={projectId} taskId={taskId} kind="submission" command={command} isActive={current} busy={busy} onSaved={confirmed} />
   </>;
   return <section className="delivery-manual-panel" aria-label={copy.title}>
     <div className="runtime-section-heading"><strong>{copy.title}</strong><Space wrap><Button size="small" loading={query.isFetching || detailQuery.isFetching} onClick={() => { if (current()) { void query.refetch(); if (selectedId) void detailQuery.refetch(); } }}>{copy.refresh}</Button><Button size="small" disabled={disabled || !proof?.can_submit || locked || Boolean(draft)} onClick={() => begin()}>{copy.create}</Button></Space></div>

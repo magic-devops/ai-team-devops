@@ -197,6 +197,8 @@ def test_agent_tests_have_one_server_derived_identity(bridge, extra):
 
 
 def test_agent_post_tests_share_frozen_plan_and_only_review_creates_test_artifact(bridge):
+    from hermes_core.managed_test_quality import evidence_binding
+
     client, _, store, principal, ws, _, task = bridge
     body = agent_proposal(bridge)
     preview = client.post("/api/v1/delivery/execution-preview", json=body)
@@ -246,6 +248,7 @@ def test_agent_post_tests_share_frozen_plan_and_only_review_creates_test_artifac
                         "succeeded": True,
                         "exit_code": 0,
                         "expected_exit_code": 0,
+                        "evidence_binding": evidence_binding(run["id"], run["data"]["nodes"][1], 2),
                         "stdout": "3 passed",
                         "duration_ms": 23,
                         "attempt": 2,

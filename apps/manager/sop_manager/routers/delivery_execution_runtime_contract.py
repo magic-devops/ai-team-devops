@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, Field, StringConstraints, model_validator
 
-from .delivery_execution_contract import ExecutionInput
+from .delivery_execution_contract import ExecutionInput, ExecutionQuality
 from .delivery_issue_contract import human_text
 
 Identity = Annotated[str, StringConstraints(strict=True, min_length=1, max_length=100,
@@ -117,6 +117,10 @@ class ExecutionRuntimeResponse(ExecutionInput):
     approval: ExecutionRuntimeApproval | None
     nodes: list[ExecutionRuntimeNode]
     controls: ExecutionRuntimeControls
+    quality: ExecutionQuality
+    review_verified: bool
+    can_review: bool
+    can_accept: bool
 
 
 class ExecutionOutputChunk(ExecutionInput):

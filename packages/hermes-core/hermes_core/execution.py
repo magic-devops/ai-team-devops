@@ -295,6 +295,9 @@ class Execution:
                     else:
                         result = self.tool(principal, workspace, run_id, node, root, owner)
                 result["attempt"] = current["data"].get("attempt", 1)
+                from .managed_test_quality import evidence_binding
+
+                result["evidence_binding"] = evidence_binding(run_id, node.model_dump(), result["attempt"])
                 self.patch(principal, workspace, run_id, "node.evidence", lambda item: {
                     "data": {**item["data"], "active_node": None, "node_results": {**item["data"].get("node_results", {}), node.id: result}}}, owner,
                     audit_data={"node_id": node.id, "attempt": current["data"].get("attempt", 1), "result": result})

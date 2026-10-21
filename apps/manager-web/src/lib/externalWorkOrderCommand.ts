@@ -1,7 +1,7 @@
 import { validFeedbackReference } from "./deliveryFeedback";
-import { useRef } from "react";
 import type { DeliveryCommandAck, DeliveryIntent } from "./delivery";
-import { createDeliveryCommandController, useDeliveryCommand, validDeliveryCommandAck, type DeliveryControllerOptions } from "./deliveryCommandController";
+import { createDeliveryCommandController, validDeliveryCommandAck, type DeliveryControllerOptions } from "./deliveryCommandController";
+import { discoverTaskExternalRecovery, useTaskExternalCommand } from "./taskExternalCommand";
 import { eventRetryDraftKey } from "./eventReceipts";
 import { bindSessionRequest } from "./http";
 import { getSessionRevision } from "./authStorage";
@@ -73,18 +73,18 @@ export function workOrderRecoveryPending(projectId: string, taskId: string) {
   try { const raw = sessionStorage.getItem(key); if (!raw) return false; if (raw.length > maxOriginal * 2) return true; const saved: unknown = JSON.parse(raw); return !record(saved) || saved.phase !== "refused" || !validWorkOrderOriginal(saved.original, taskId); } catch { return true; }
 }
 export function createWorkOrderController(options: Omit<DeliveryControllerOptions<WorkOrderOriginal>, "validateOriginal" | "validateAck"> & { taskId: string }) {
-  return createDeliveryCommandController({ ...options,
+  return createDeliveryCommandController({ ...options, retainSucceededOnRestore: true,
     load: () => { const raw = options.load(); if (raw !== null && raw.length > maxOriginal * 2) throw new Error("retainedOriginalInvalid"); return raw; },
     save: (raw) => { if (raw.length > maxOriginal * 2) throw new Error("retainedOriginalUnavailable"); options.save(raw); },
     validateOriginal: (value) => validWorkOrderOriginal(value, options.taskId), validateAck: (original, value) => validWorkOrderAck(options.projectId, options.taskId, original, value),
   });
 }
-export function useWorkOrderCommand(projectId: string, taskId: string, sessionId: string, onPending?: (value: boolean) => void) {
-  const identity = JSON.stringify([projectId, taskId, sessionId]), live = useRef(identity); live.current = identity;
-  return useDeliveryCommand<WorkOrderOriginal>({ projectId, identity: `work-order:${identity}`, storageKey: () => workOrderStorageKey(projectId, taskId), onPending,
+export function discoverWorkOrderRecovery(projectId: string, includeRefused = false) {
+  return discoverTaskExternalRecovery(projectId, { prefix: "sop.work-order.v1:", receiptPrefix: "work-order:", key: workOrderStorageKey, identity: submissionIdentity, pending: workOrderRecoveryPending, includeRefused });
+}
+export function useWorkOrderCommand(projectId: string, taskId: string, _sessionId: string, onPending?: (value: boolean) => void) {
+  return useTaskExternalCommand<WorkOrderOriginal>({ projectId, taskId, kind: "work-order", storageKey: () => workOrderStorageKey(projectId, taskId), onPending,
     create: (options) => { const send = bindSessionRequest({ projectId, revision: getSessionRevision() || "" }); return createWorkOrderController({ ...options, taskId,
-      scope: `${options.scope}\n${identity}`, currentScope: () => `${options.currentScope()}\n${live.current}`,
-      load: () => { if (!workOrderStorageKey(projectId, taskId)) throw new Error("retainedOriginalUnavailable"); return options.load(); },
       send: (original) => send("/api/v1/delivery/commands", { method: "POST", headers: { "X-Project-Id": projectId }, body: JSON.stringify({ action: original.action, payload: original.payload, expected_version: original.intent.version, idempotency_key: original.intent.key }) }),
     }); },
   });

@@ -15,6 +15,7 @@ import { request } from "./http";
 import type { ExecutionRuntime } from "./executionRuntime";
 import type { DeliveryContext, DeliveryExecution } from "./delivery";
 import type { ExecutionObservations } from "./deliveryExecution";
+import { qualityFixture } from "./executionQualityFixtures";
 import type { ExecutionControlOperationsRead } from "./executionControlOperations";
 
 const h = vi.hoisted(() => ({
@@ -60,6 +61,7 @@ vi.mock("@tanstack/react-query", async () => ({
 }));
 
 const runtime: ExecutionRuntime = {
+  review_verified: false, quality: qualityFixture({ execution_id: "E", run_id: "R", run_version: 9, attempt: 2 }), can_review: false, can_accept: false,
   project_id: "P", execution_id: "E", run_id: "R", run_version: 9, attempt: 2,
   status: "running", runtime_status: "running", stale: false, active_node_id: "node", observed_at: "2026-10-20T12:00:00Z",
   recovery_requires_review: false, stop: null, approval: null, nodes: [],
@@ -70,9 +72,10 @@ const execution: DeliveryExecution = { id: "E", workspace_id: "W", task_id: "T",
   snapshot: { task_acceptance_criteria: [] }, executor_snapshot: null };
 const workspace = { project: { id: "P" }, version: 7 } as unknown as DeliveryContext;
 const observation: ExecutionObservations = { project_id: "P", execution_id: "E", run_id: "R", run_version: 9, attempt: 2,
+  review_verified: false, quality: qualityFixture({ execution_id: "E", run_id: "R", run_version: 9, attempt: 2 }),
   status: "awaiting_review", stale: false, observed_at: "2026-10-20T12:00:00Z", executor_snapshot: null, executor_binding_invalidated: false,
   events: [], next_cursor: null, more: false, nodes: [], tests: { total: 0, passed: 0, failed: 0, pending: 0, status: "not_configured" },
-  permissions: { can_start: false, can_cancel: true, can_review: true, can_sync: true }, log_streaming: false };
+  permissions: { can_start: false, can_cancel: true, can_review: true, can_accept: false, can_sync: true }, log_streaming: false };
 function ack(body: any) {
   return { project_id: "P", action: body.action, resource: { kind: "execution", id: "E" }, applied_version: body.expected_version + 1, version: body.expected_version + 1,
     query_generation: 2, replayed: false, affected_refs: [{ kind: "execution", id: "E" }],

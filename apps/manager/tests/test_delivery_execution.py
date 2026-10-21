@@ -155,6 +155,8 @@ def drain_controls(bridge, *, execute=False, monkeypatch=None, now=None):
 
 
 def finish(bridge, execution, success=True):
+    from hermes_core.managed_test_quality import evidence_binding
+
     _, _, store, p, ws, _, _ = bridge
     run = store.get(p, ws["id"], "runs", execution["run_id"])
     store.mutate(
@@ -173,6 +175,8 @@ def finish(bridge, execution, success=True):
                 **r["data"],
                 "node_results": {
                     "tests": {"succeeded": success, "exit_code": 0 if success else 1, "stdout": "test output",
+                              "expected_exit_code": 0, "attempt": r["data"].get("attempt", 1),
+                              "evidence_binding": evidence_binding(r["id"], r["data"]["nodes"][0], r["data"].get("attempt", 1)),
                               "process_tree_stopped": True, "wait_completed": True, "output_eof": True}
                 },
             },

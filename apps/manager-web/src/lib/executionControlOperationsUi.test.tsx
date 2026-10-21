@@ -14,6 +14,7 @@ import { readControlOperation, readControlOperations, useExecutionControlOperati
 import { createExecutionControlController, executionControlCloseOriginal, executionControlRecoveryPending } from "./executionControlCommand";
 import type { DeliveryExecution } from "./delivery";
 import type { ExecutionRuntime } from "./executionRuntime";
+import { qualityFixture } from "./executionQualityFixtures";
 import { executionControlOperationsCopy } from "../i18n/execution-control-operations";
 
 const h = vi.hoisted(() => ({ frames: {} as Record<string, any[]>, frame: "", next: 0, queries: [] as any[],
@@ -36,6 +37,7 @@ const operation = (patch: Partial<ControlOperation> = {}): ControlOperation => (
 const detail = (patch: Partial<ControlOperation> = {}, version = 12): ControlOperationDetail => ({ project_id: "P", execution_id: "E", task_id: "T", version, operation: operation(patch) });
 const page = (items: ControlOperation[] = []) => ({ project_id: "P", execution_id: "E", task_id: "T", version: 12, items, total: items.length, limit: 20, next_cursor: null, as_of: now });
 const runtime: ExecutionRuntime = { project_id: "P", execution_id: "E", run_id: "R", run_version: 7, attempt: 1, status: "queued", runtime_status: "queued", stale: false,
+  review_verified: false, quality: qualityFixture({ execution_id: "E", run_id: "R", run_version: 7, attempt: 1 }), can_review: false, can_accept: false,
   active_node_id: null, observed_at: now, recovery_requires_review: false, stop: null, approval: null, nodes: [],
   controls: { start: { allowed: true, reasons: [] }, retry: { allowed: true, reasons: [] }, cancel: { allowed: true, reasons: [] }, approval: { allowed: true, reasons: [] }, approval_reject: { allowed: true, reasons: [] } } };
 function read(patch: Partial<ExecutionControlOperationsRead> = {}): ExecutionControlOperationsRead {

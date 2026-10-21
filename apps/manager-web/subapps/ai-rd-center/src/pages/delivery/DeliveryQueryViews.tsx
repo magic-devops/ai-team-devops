@@ -461,6 +461,7 @@ export function DeliveryRequirementTasks({
   onRoute,
   onUnresolvedChange,
   onDefinitionPending,
+  onExternalPending,
   onDraftChange,
   onRecoveryIdentity,
   isActive,
@@ -473,6 +474,7 @@ export function DeliveryRequirementTasks({
   onRoute: (patch: Partial<DeliveryRoute>, push?: boolean) => void;
   onUnresolvedChange: (value: boolean) => void;
   onDefinitionPending?: (value: boolean) => void;
+  onExternalPending?: (kind: "submission" | "work-order", value: boolean) => void;
   onDraftChange?: (value: boolean) => void;
   onRecoveryIdentity?: (executionId: string) => void;
   isActive?: () => boolean;
@@ -558,6 +560,7 @@ export function DeliveryRequirementTasks({
           expectedRequirementId={requirementId}
           onUnresolvedChange={onUnresolvedChange}
           onDefinitionPending={onDefinitionPending}
+          onExternalPending={onExternalPending}
           onDraftChange={onDraftChange}
           onRecoveryIdentity={onRecoveryIdentity}
           isActive={isActive}

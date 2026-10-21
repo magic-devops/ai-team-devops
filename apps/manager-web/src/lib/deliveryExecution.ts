@@ -1,5 +1,6 @@
 import { verifyFeedbackFields, type FeedbackReference, type FeedbackFields } from "./deliveryFeedback";
 import { request } from "./http";
+import type { ExecutionQuality, ExecutionTestPlan } from "./executionQuality";
 import type { DesignReference } from "./designLibrary";
 import {
   prepareDeliveryIntent,
@@ -93,6 +94,7 @@ export type ExecutionPayload = {
   test_node_ids: string[];
 };
 export type ExecutionPreview = FeedbackFields & {
+  test_plan: ExecutionTestPlan;
   executor_snapshot: ExecutorSnapshot | null;
   project_id: string;
   version: number;
@@ -135,6 +137,7 @@ export type ExecutionPreview = FeedbackFields & {
   test_node_ids: string[];
 };
 export type ExecutionNodeResult = {
+  evidence_binding: { run_id: string; node_id: string; command_sha256: string; attempt: number } | null;
   succeeded: boolean | null;
   exit_code: number | null;
   expected_exit_code: number | null;
@@ -203,9 +206,12 @@ export type ExecutionObservations = {
     can_start: boolean;
     can_cancel: boolean;
     can_review: boolean;
+    can_accept: boolean;
     can_sync: boolean;
   };
   log_streaming: false;
+  quality: ExecutionQuality;
+  review_verified: boolean;
 };
 const scope = (projectId: string) => {
   if (!projectId || projectId !== projectId.trim())

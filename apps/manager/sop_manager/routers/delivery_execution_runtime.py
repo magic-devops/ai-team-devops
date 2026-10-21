@@ -356,6 +356,13 @@ def runtime_detail(db, project, user, state, entry, store, execution, permission
                           "status": status, "available_attempts": attempts, "result_attempt": result_attempt,
                           "reused_result": bool(result and result["succeeded"] is True and result_attempt < attempt)})
         from .delivery_execution import CLOSED
+        from .delivery_execution_quality import execution_quality, review_capabilities, review_verified
+        from .delivery_verification import VerificationContext
+
+        runtime_task = store.get(principal, entry["workspace_id"], "tasks", entry["runtime_task_id"]) if run else None
+        quality = execution_quality(entry, run, runtime_task)
+        review_permissions = review_capabilities(project, permissions, principal, entry, run,
+                                                VerificationContext(db, project, state), quality)
         result = {"project_id": project.id, "execution_id": entry["id"], "run_id": run["id"] if run else "",
                   "run_version": run["version"] if run else 0, "attempt": attempt,
                   "status": entry["status"] if entry["status"] in CLOSED or not run else
@@ -363,7 +370,8 @@ def runtime_detail(db, project, user, state, entry, store, execution, permission
                   "runtime_status": run["status"] if run else None, "stale": not current,
                   "active_node_id": data.get("active_node"), "observed_at": stamp(),
                   "recovery_requires_review": bool(data.get("recovery_requires_review")), "stop": _stop(run) or entry.get("stop_snapshot"),
-                  "approval": approval, "nodes": nodes, "controls": controls}
+                  "approval": approval, "nodes": nodes, "controls": controls,
+                  "quality": quality, "review_verified": review_verified(entry, run, quality, current=current), **review_permissions}
         return ExecutionRuntimeResponse.model_validate(result).model_dump()
     except CoreError as exc:
         raise _error(exc) from exc

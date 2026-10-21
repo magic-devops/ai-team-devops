@@ -1,6 +1,7 @@
 import { request } from "./http";
 import type { DeliveryCommandAck } from "./delivery";
 import { projectHeaders, projectSessionKey } from "./projectPortfolio";
+import type { ExecutionQuality } from "./executionQuality";
 
 export type ExecutionControlAction =
   | "execution.start"
@@ -34,6 +35,10 @@ export type ExecutionRuntimeNode = {
   reused_result: boolean;
 };
 export type ExecutionRuntime = {
+  quality: ExecutionQuality;
+  review_verified: boolean;
+  can_review: boolean;
+  can_accept: boolean;
   project_id: string;
   execution_id: string;
   run_id: string;

@@ -68,6 +68,7 @@ function draft(): ExecutionDraftSession { return { ...openExecutionDraft(data, "
 function previewFor(value = draft()): ExecutionPreview {
   const prepared = prepareExecution(value);
   return { project_id: "P", version: 7, task_basis: taskBasis, plan_basis: "c".repeat(64), workspace_id: "W", workspace_version: 1, target, agent: null, executor_snapshot: null,
+    test_plan: { schema: "manager.execution-test-plan.v1", node_ids: ["tests"], command_sha256: { tests: "d".repeat(64) } },
     nodes: prepared.payload.nodes.map((node) => ({ expected_exit_code: 0, timeout_seconds: 60, agent_id: "", prompt: "", ...node })), test_node_ids: ["tests"],
     snapshot: { task_id: "T", title: "Task", description: "Task body", assigned_to: "", task_acceptance_criteria: ["original criterion"], acceptance_criteria: ["original criterion"], requirement: null, owner: null, dependency_basis: {}, designs: [], design_basis: "a".repeat(64) },
   };

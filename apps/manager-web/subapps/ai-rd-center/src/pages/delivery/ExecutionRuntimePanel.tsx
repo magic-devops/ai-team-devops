@@ -12,6 +12,7 @@ import { projectSessionKey } from "@/lib/projectPortfolio";
 import { ExecutionNodeOutput } from "./ExecutionNodeOutput";
 import { ExecutionRuntimeControl } from "./ExecutionRuntimeControl";
 import type { ExecutionControlOperationsRead } from "@/lib/executionControlOperations";
+import { ExecutionQualityNotice } from "./ExecutionQualityNotice";
 type Props = {
   projectId: string;
   executionId: string;
@@ -138,6 +139,7 @@ export function ExecutionRuntimePanel({
       />
       {runtime && !error && (
         <>
+          <ExecutionQualityNotice quality={runtime.quality} />
           <div className="execution-runtime-facts">
             <Space wrap>
               <Tag>

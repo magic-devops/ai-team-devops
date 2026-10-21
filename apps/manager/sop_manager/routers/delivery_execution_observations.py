@@ -16,6 +16,18 @@ def _integer(value):
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+def _binding(value):
+    if not isinstance(value, dict) or set(value) != {"run_id", "node_id", "command_sha256", "attempt"}:
+        return None
+    import re
+
+    if (any(not isinstance(value[key], str) or not 1 <= len(value[key]) <= 64 for key in ("run_id", "node_id"))
+            or not isinstance(value["command_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", value["command_sha256"])
+            or type(value["attempt"]) is not int or value["attempt"] < 1):
+        return None
+    return dict(value)
+
+
 def project_result(value, *, attempt=None):
     """No text inference, credential projection, or aggregate cross-provider usage."""
     if not isinstance(value, dict):
@@ -45,6 +57,7 @@ def project_result(value, *, attempt=None):
         "stderr": safe_text(value["stderr"], 12000, tail=True)[0] if value.get("stderr") is not None else None,
         "duration_ms": _integer(value.get("duration_ms")),
         "attempt": _integer(value.get("attempt", attempt)),
+        "evidence_binding": _binding(value.get("evidence_binding")),
         "skipped": value.get("skipped") is True,
         "stdout_truncated": bool(value.get("stdout_truncated"))
         or len(str(value.get("stdout") or "")) > 12000
@@ -158,6 +171,11 @@ def observations(db, project, user, state, entry, store, execution, permissions,
     passed = sum(node["status"] == "passed" for node in test_nodes)
     failed = sum(node["status"] == "failed" for node in test_nodes)
     pending = len(test_nodes) - passed - failed
+    from .delivery_execution_quality import execution_quality, review_capabilities, review_verified
+
+    runtime_task = store.get(principal, entry["workspace_id"], "tasks", entry["runtime_task_id"]) if run else None
+    quality = execution_quality(entry, run, runtime_task)
+    review_permissions = review_capabilities(project, permissions, principal, entry, run, verification, quality)
     target_ready = False
     if (
         run
@@ -229,6 +247,8 @@ def observations(db, project, user, state, entry, store, execution, permissions,
             if pending
             else "passed",
         },
+        "quality": quality,
+        "review_verified": review_verified(entry, run, quality, current=actionable),
         "permissions": {
             "can_start": not active_order and not taken_over and project.status == "active"
             and permissions["write"]
@@ -239,11 +259,7 @@ def observations(db, project, user, state, entry, store, execution, permissions,
             and bool(run_id or "requirement" in entry.get("snapshot", {}))
             and entry["status"] not in CLOSED
             and (not run or run["status"] != "completed" or stale),
-            "can_review": not active_order and not taken_over and actionable
-            and permissions["approve"]
-            and "approve" in principal.permissions
-            and entry["status"] not in CLOSED
-            and bool(run and run["status"] in {"completed", "failed", "cancelled"}),
+            **review_permissions,
             "can_sync": bool(run)
             and (actionable or bool(entry.get("stop_pending")))
             and not executor_invalidated

@@ -99,6 +99,10 @@ import { DeliveryTaskDetail } from "./DeliveryTaskDetail";
 import { TaskDefinitionRecoveryOwner } from "./DeliveryTaskDefinitionHost";
 import { discoverTaskEditRecovery, taskEditRecoveryPending } from "@/lib/taskEditCommand";
 import { taskDefinitionCopy } from "@/i18n/task-definition";
+import { discoverSubmissionRecovery, externalDeliveryRecoveryPending } from "@/lib/deliveryTaskSubmission";
+import { discoverWorkOrderRecovery, workOrderRecoveryPending } from "@/lib/externalWorkOrderCommand";
+import { TaskExternalRecoveryOwner } from "./TaskExternalRecovery";
+import { deliveryOperationRecoveryCopy } from "@/i18n/delivery-operation-recovery";
 import {
   DeliveryActivityFeed,
   DeliveryActivityDetail,
@@ -174,6 +178,7 @@ function ProjectDelivery() {
   const identityLabel = useMemberIdentity();
   const taskEditCopy = taskDefinitionCopy(i18n?.language);
   const [, refreshTaskRecovery] = useState(0);
+  const [, refreshExternalRecovery] = useState(0), externalRecoveryCopy = deliveryOperationRecoveryCopy(i18n?.language);
   const tp = (key: string) => t(`deliveryProject.${key}`);
   const projectId = getProjectId() || "";
   const sessionId = useMemo(() => crypto.randomUUID(), []);
@@ -1016,6 +1021,17 @@ function ProjectDelivery() {
       onPending={(value) => { if (originScope.current === sessionSnapshot()) executionPending(`task-definition:${taskId}`, value || taskEditRecoveryPending(projectId, taskId)); }}
       onResolved={() => refreshTaskRecovery((value) => value + 1)} />)}
   </>;
+  let submissionRecovery: string[] = [], workOrderRecovery: string[] = [], externalDiscoveryFailed = false;
+  try { submissionRecovery = discoverSubmissionRecovery(projectId, true); workOrderRecovery = discoverWorkOrderRecovery(projectId, true); } catch { externalDiscoveryFailed = true; }
+  useEffect(() => { executionExit.setPending("task-external-discovery", externalDiscoveryFailed); }, [externalDiscoveryFailed, executionExit.setPending]);
+  const externalFallback = <>
+    {externalDiscoveryFailed && <Alert type="error" title={externalRecoveryCopy.unavailable} action={<Button onClick={() => refreshExternalRecovery((value) => value + 1)}>{externalRecoveryCopy.retry}</Button>} />}
+    {([ ["submission", submissionRecovery], ["work-order", workOrderRecovery] ] as const).flatMap(([kind, ids]) => ids.filter((id) => id !== normalTaskHost).map((taskId) =>
+      <TaskExternalRecoveryOwner key={`${projectId}:${kind}:${taskId}`} kind={kind} projectId={projectId} taskId={taskId} sessionId={sessionId} onSaved={saveWorkspace}
+        isActive={() => originScope.current === sessionSnapshot()}
+        onPending={(value) => { if (originScope.current === sessionSnapshot()) executionPending(`task-${kind}:${taskId}`, value || (kind === "submission" ? externalDeliveryRecoveryPending(projectId, taskId) : workOrderRecoveryPending(projectId, taskId))); }}
+        onResolved={() => { if (originScope.current === sessionSnapshot()) refreshExternalRecovery((value) => value + 1); }} />))}
+  </>;
   const taskHandoffFallback = displayedRecovery ? displayedRecovery.kind === "queue" ?
     <TaskQueueOriginalRecovery key={`${projectId}:${sessionId}:queue:${displayedRecovery.taskId}`} projectId={projectId} taskId={displayedRecovery.taskId} sessionId={sessionId}
       isActive={() => originScope.current === sessionSnapshot() && locatedRecoveryLive.current === recoveryKey(displayedRecovery)} onPending={recoveryPending} onSaved={saveWorkspace} /> :
@@ -1038,6 +1054,7 @@ function ProjectDelivery() {
   if (displayedRecovery) return <section className="delivery-workbench space-y-4">
     {taskHandoffFallback}
     {taskEditFallback}
+    {externalFallback}
     {query.error && <Alert type="warning" title={t("deliveryQuery.readFailed")} description={query.error.message} />}
   </section>;
   if (query.isPending)
@@ -1046,6 +1063,7 @@ function ProjectDelivery() {
         {requirementBack}
         {taskHandoffFallback}
         {taskEditFallback}
+        {externalFallback}
         <Skeleton active paragraph={{ rows: 12 }} />
         {requirementRecovery}
         {requirementDesign}
@@ -1058,6 +1076,7 @@ function ProjectDelivery() {
         {requirementBack}
         {taskHandoffFallback}
         {taskEditFallback}
+        {externalFallback}
         <Alert
           type="error"
           showIcon
@@ -1084,6 +1103,7 @@ function ProjectDelivery() {
         {requirementBack}
         {taskHandoffFallback}
         {taskEditFallback}
+        {externalFallback}
         <Alert
           type="warning"
           showIcon
@@ -1121,6 +1141,7 @@ function ProjectDelivery() {
   return (
     <section className="delivery-workbench" aria-label={tr("title")}>
       {taskEditFallback}
+      {externalFallback}
       {data.project.status === "archived" && (
         <Alert
           type="info"
@@ -1518,6 +1539,7 @@ function ProjectDelivery() {
             taskId={taskInspector.displayId}
             onDraftChange={inspectorDraftChanged}
             onDefinitionPending={(value) => executionPending(`task-definition:${taskInspector.displayId}`, value)}
+            onExternalPending={(kind, value) => executionPending(`task-${kind}:${taskInspector.displayId}`, value)}
             onUnresolvedChange={(value) =>
               executionPending(`task:${taskInspector.displayId}`, value)
             }
@@ -1767,6 +1789,7 @@ function ProjectDelivery() {
                         onRoute={changeQueryRoute}
                         onDraftChange={requirementTaskDraftChanged}
                         onDefinitionPending={(value) => executionPending(`task-definition:${selectedTaskId}`, value)}
+                        onExternalPending={(kind, value) => executionPending(`task-${kind}:${selectedTaskId}`, value)}
                         onUnresolvedChange={(value) =>
                           executionPending(`task:${selectedTaskId}`, value)
                         }

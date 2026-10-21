@@ -10,6 +10,7 @@ import {
 } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionObservationCard";
 import { ExecutionCommandEditor } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionCommandEditor";
 import { commandDraft } from "./executionCommands";
+import { qualityFixture } from "./executionQualityFixtures";
 import type {
   ExecutionObservations,
   ExecutionTarget,
@@ -124,6 +125,8 @@ function renderObservedCard(
       status,
       observed_at: "2026-10-17T00:00:00Z",
       tests: { ...observation.tests, status: tests },
+      quality: qualityFixture({ execution_id: "execution-one", run_id: handoff?.observedRunId ?? "run-one", run_version: 3, attempt: 1 }, tests),
+      review_verified: false,
       events: [],
       next_cursor: null,
       more: false,
@@ -131,6 +134,7 @@ function renderObservedCard(
         can_start: false,
         can_cancel: false,
         can_review: true,
+        can_accept: tests === "passed",
         can_sync: false,
       },
       log_streaming: false,
@@ -204,11 +208,12 @@ describe("external execution presentation", () => {
       renderToStaticMarkup(createElement(ExecutionTargetFacts, { target })),
     ).toContain("<strong>Remote build worker</strong>");
   });
-  it("allows explicit human review of a completed run without inventing configured tests", () => {
+  it("allows rework but blocks acceptance until explicit tests have passed", () => {
     const html = renderObservedCard("not_configured");
     expect(html).toContain("Tests not configured");
     expect(acceptButton(html)).not.toBe("");
-    expect(acceptButton(html)).not.toContain("disabled");
+    expect(acceptButton(html)).toContain("disabled");
+    expect(acceptButton(renderObservedCard("passed"))).not.toContain("disabled");
     for (const tests of ["pending", "failed"] as const)
       expect(acceptButton(renderObservedCard(tests))).toContain("disabled");
   });
@@ -254,6 +259,11 @@ describe("external execution presentation", () => {
       }),
     );
     expect(stale).not.toContain("Verified delivery");
+    const oldReview = renderToStaticMarkup(createElement(ExecutionStageFacts, {
+      observation: { ...observation, quality: qualityFixture({ execution_id: "E", run_id: "R", run_version: 9, attempt: 2 }, "passed"),
+        stale: false, review_verified: false }, status: "accepted",
+    }));
+    expect(oldReview).not.toContain("Verified delivery");
   });
   it("renders explicit command and separate argument fields with a named test toggle", () => {
     const html = renderToStaticMarkup(

@@ -35,6 +35,8 @@ import { ExecutionHandoffStatus, handoffControlsId } from "./ExecutionHandoffSta
 import { useExecutionControlOperations } from "@/lib/executionControlOperations";
 import { executionReviewRecoveryPending } from "@/lib/executionReviewCommand";
 import { ExecutionReviewControl } from "./ExecutionReviewControl";
+import { canAcceptExecution } from "@/lib/executionQuality";
+import { ExecutionQualityNotice } from "./ExecutionQualityNotice";
 
 export function ExecutionStageFacts({
   observation,
@@ -58,7 +60,7 @@ export function ExecutionStageFacts({
       ? "notConfiguredTest"
       : observation.tests.status;
   const reviewState =
-    status === "accepted" && !observation.stale
+    status === "accepted" && !observation.stale && observation.review_verified === true
       ? "accepted"
       : status === "changes_requested"
         ? "failed"
@@ -221,13 +223,13 @@ export function ExecutionObservationCard({
   </article>;
   return (
     <article
-      className={`runtime-execution-card is-${stale ? "stale" : status}`}
+      className={`runtime-execution-card is-${stale ? "stale" : status === "accepted" && !observation?.review_verified ? "awaiting_review" : status}`}
     >
       {entry.handoff_id && <ExecutionHandoffStatus projectId={projectId} executionId={entry.id} taskId={entry.task_id} sessionId={sessionId} read={handoff} isActive={isActive} controlsAvailable={!recovering} />}
       <div className="runtime-section-heading">
         <Tag
           color={
-            status === "accepted" && !stale
+            status === "accepted" && !stale && observation?.review_verified
               ? "success"
               : status === "failed"
                 ? "error"
@@ -373,7 +375,7 @@ export function ExecutionObservationCard({
       <ExecutionReviewControl projectId={projectId} executionId={entry.id} taskId={entry.task_id} workspaceId={entry.workspace_id}
         sessionId={sessionId} runId={runId} runVersion={observation?.run_version} workspaceVersion={workspaceVersion}
         canReview={handoff.readable && Boolean(permissions?.can_review)}
-        canAccept={!stale && status === "awaiting_review" && ["passed", "not_configured"].includes(observation?.tests.status || "")}
+        canAccept={handoff.readable && canAcceptExecution(observation)}
         disabled={disabled || Boolean(readError) || !handoff.readable || runtimePending.current || syncPending.current}
         canSubmit={() => handoffAccess.current.readable}
         isActive={() => origin.current === projectSessionKey() && !runtimePending.current && !syncPending.current &&
@@ -381,6 +383,7 @@ export function ExecutionObservationCard({
         onSaved={onSaved} onObserved={observe} onUnresolvedChange={(value) => unresolved("review", value)} />
       </>}
       </section>
+      {observation && <ExecutionQualityNotice quality={observation.quality} />}
       <Collapse
         size="small"
         ghost

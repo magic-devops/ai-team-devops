@@ -9,7 +9,7 @@ from .delivery_progress_facts import metrics
 from .delivery_scheduling import planning_basis
 from .sql_models import DeliveryQueryFact, DeliveryQueryState, DeliveryWorkspace
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 FLOW_FIELDS = (
     "stage",
     "revision",

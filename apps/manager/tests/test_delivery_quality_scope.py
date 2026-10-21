@@ -250,7 +250,23 @@ def test_current_owner_revocation_is_checked_even_if_query_facts_are_unchanged(f
         assert not value["eligible"] and value["scope_basis"] == truth["scope_basis"]
 
 
-def test_native_latest_entry_and_exact_snapshot_change_match_canonical(fixture):
+def native_quality_entry(entry):
+    """Explicit canonical proof fixture; no process execution is claimed here."""
+    from hermes_core.managed_test_quality import evidence_binding, make_test_plan, test_quality as evaluate_quality
+    from hermes_core.models import Node
+
+    node = Node(id="tests", argv=["python", "-m", "pytest"]).model_dump()
+    plan = make_test_plan([node], ["tests"])
+    results = {"tests": {"succeeded": True, "exit_code": 0, "expected_exit_code": 0, "attempt": 1,
+                         "evidence_binding": evidence_binding(entry["run_id"], node, 1)}}
+    entry.update(nodes=[node], agent_id="", test_node_ids=["tests"], test_plan=plan, results=results, attempt=1)
+    entry["review"]["quality"] = evaluate_quality({"id": entry["run_id"], "version": entry["run_version"],
+        "status": "completed", "data": {"nodes": [node], "node_results": results, "managed_execution_id": entry["id"], "attempt": 1}}, plan)
+    return entry
+
+
+@pytest.mark.parametrize("with_quality", [False, True])
+def test_native_latest_entry_and_exact_snapshot_change_match_canonical(fixture, with_quality):
     seed(fixture)
     with Session(fixture) as db:
         project = db.get(m.Project, "project")
@@ -274,7 +290,7 @@ def test_native_latest_entry_and_exact_snapshot_change_match_canonical(fixture):
                 "at": "2026-10-18T00:00:00Z",
             },
         }
-        state["executions"] = [entry]
+        state["executions"] = [native_quality_entry(entry) if with_quality else entry]
     with fixture.begin() as conn:
         conn.execute(update(m.DeliveryWorkspace).values(data=state))
     index(fixture)
@@ -289,7 +305,7 @@ def test_native_latest_entry_and_exact_snapshot_change_match_canonical(fixture):
             context = load(db, project, **selected)
             result = quality(db, project, context.data, **selected, verification=context)
             assert result["scope_basis"] == truth["scope_basis"]
-            assert result["eligible"] is (not changed)
+            assert result["eligible"] is (with_quality and not changed)
             assert set(context.executions) == {"A"}
 
 
@@ -405,7 +421,7 @@ def test_runtime_test_artifact_uses_original_run_and_latest_sibling_execution(fi
         definition = VerificationContext(db, db.get(m.Project, "project"), state).definition("B")["snapshot"]
 
     def execution(id, run):
-        return {
+        return native_quality_entry({
             "id": id,
             "task_id": "B",
             "workspace_id": "runtime",
@@ -421,7 +437,7 @@ def test_runtime_test_artifact_uses_original_run_and_latest_sibling_execution(fi
                 "actor": "lead",
                 "at": "2026-10-18T00:00:00Z",
             },
-        }
+        })
 
     state["executions"] = [execution("old-E", "old-run"), execution("current-E", "current-run")]
     state["flows"]["R"]["artifacts"] = [

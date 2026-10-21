@@ -29,6 +29,25 @@ def client_for(handler):
     return client
 
 
+def ack_for(body, review=False):
+    p = body["payload"]
+    action = "task.delivery.review" if review else "task.delivery.submit"
+    submission_id = p["submission_id"] if review else "S1"
+    result = {"task_ids": [p["task_id"]], "submission_id": submission_id,
+        "submission_digest": p["submission_digest"] if review else "e" * 64, "issue_id": None}
+    resource = {"kind": "task_review" if review else "task_submission", "id": "R1" if review else submission_id}
+    refs = [resource, {"kind": "task", "id": p["task_id"]}]
+    if review:
+        result.update(decision_id="D1", review_id="R1")
+        refs.append({"kind": "task_submission", "id": submission_id})
+    elif p.get("work_order"):
+        w = p["work_order"]
+        result["work_order"] = {"id": w["id"], "order_revision": w["order_revision"] + 1, "state": "reported"}
+        refs.append({"kind": "work_order", "id": w["id"]})
+    return {"project_id": "P", "action": action, "resource": resource, "result": result,
+        "affected_refs": refs, "applied_version": 8, "version": 8, "query_generation": 1, "replayed": True}
+
+
 def test_current_history_exact_reads_keep_unicode_path_scope_cursor_and_one_page():
     calls = []
     with client_for(lambda request: calls.append(request) or httpx.Response(200, json={"next_cursor": "more", "items": []})) as client:
@@ -73,7 +92,7 @@ def test_invalid_exact_submission_reference_does_not_send(submission):
 def test_exact_report_and_human_review_write_do_not_fetch_or_adopt_current_versions(review):
     calls = []
     body = original(review)
-    with client_for(lambda request: calls.append(request) or httpx.Response(200, json={"recorded": True})) as client:
+    with client_for(lambda request: calls.append(request) or httpx.Response(200, json=ack_for(body, review))) as client:
         method = client.delivery_task_submit_review if review else client.delivery_task_submit
         method(body)
         method(deepcopy(body))
@@ -112,7 +131,7 @@ def test_bound_report_preserves_exact_work_order_stop_statement_in_one_command_a
         calls.append(request)
         if len(calls) == 1:
             raise httpx.ReadError("Lost handoff receipt", request=request)
-        return httpx.Response(200, json={"result": {"submission_id": "S1", "work_order": {"id": "W1", "order_revision": 3, "state": "reported"}}})
+        return httpx.Response(200, json=ack_for(body))
 
     with client_for(handler) as client:
         with pytest.raises(SopTransportError):
@@ -131,7 +150,7 @@ def test_current_handoff_context_is_one_read_and_report_only_does_not_acquire_it
 
     def handler(request):
         calls.append(request)
-        return httpx.Response(200, json={"work_order": context} if request.method == "GET" else {"result": {"submission_id": "S1"}})
+        return httpx.Response(200, json={"work_order": context} if request.method == "GET" else ack_for(body))
 
     body = original()
     with client_for(handler) as client:

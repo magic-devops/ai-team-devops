@@ -287,6 +287,8 @@ class VerificationContext:
         )["current"]
 
     def native_accepted(self, task_id):
+        from .delivery_execution_quality import accepted_quality_valid
+
         if task_id in self.work_order_active_task_ids or not self.execution_valid(task_id):
             return False
         entry = self.executions[task_id]
@@ -296,6 +298,7 @@ class VerificationContext:
             and review.get("decision") == "accept"
             and review.get("run_version") == entry["run_version"]
             and bool(review.get("evidence_sha256"))
+            and accepted_quality_valid(entry)
         )
 
     def external_accepted(self, task_id):

@@ -36,6 +36,7 @@ from .errors import (
     SopTransportError,
 )
 from .task_submission import submission_command_body
+from .delivery_ack import DeliveryAckError, MAX_ACK_BYTES, OPERATION_ACTIONS, command_original, strict_json, validate_ack
 from .design_original import design_command_body, design_preview_body
 from .work_order_original import WORK_ORDER_STATES, verified_work_order_packet, work_order_command_body, work_order_preview_body
 from .security import Auth, BearerAuth, HmacAuth, NoAuth, auth_from_env
@@ -506,12 +507,12 @@ class ManagerClient:
         return self._request("GET", f"/api/v1/delivery/tasks/{_resource_segment(task_id)}")
 
     def delivery_work_order_current(self, task_id: str) -> dict[str, Any]:
-        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/work-orders/current")
+        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/work-orders/current", strict_response_limit=1024 * 1024)
 
     def delivery_work_order_preview(self, task_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
         """Read admission for one exact work package; does not dispatch or execute."""
         return self._request("POST", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/work-order-preview",
-                             json_body=work_order_preview_body(body))
+                             json_body=work_order_preview_body(body), strict_response_limit=1024 * 1024)
 
     def delivery_work_orders(self, *, task_id: str = "", state: str = "", limit: int = 20, cursor: str = "") -> dict[str, Any]:
         if not isinstance(state, str) or state and state not in WORK_ORDER_STATES:
@@ -524,7 +525,7 @@ class ManagerClient:
         return self._request("GET", "/api/v1/delivery/work-orders", params=params)
 
     def delivery_work_order(self, work_order_id: str) -> dict[str, Any]:
-        return self._request("GET", f"/api/v1/delivery/work-orders/{_requirement_segment(work_order_id)}")
+        return self._request("GET", f"/api/v1/delivery/work-orders/{_requirement_segment(work_order_id)}", strict_response_limit=1024 * 1024)
 
     def delivery_work_order_packet(self, work_order_id: str) -> dict[str, Any]:
         value = self._request("GET", f"/api/v1/delivery/work-orders/{_requirement_segment(work_order_id)}/packet")
@@ -536,7 +537,7 @@ class ManagerClient:
 
     def delivery_task_submission_current(self, task_id: str) -> dict[str, Any]:
         """Read the exact current definition and native boundary before reporting."""
-        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions/current")
+        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions/current", strict_response_limit=1024 * 1024)
 
     def delivery_task_submissions(self, task_id: str, *, limit: int = 20, cursor: str = "") -> dict[str, Any]:
         """Read one bounded report page; report status is not runtime proof."""
@@ -546,7 +547,7 @@ class ManagerClient:
     def delivery_task_submission(self, task_id: str, submission_id: str) -> dict[str, Any]:
         if not isinstance(submission_id, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", submission_id) is None:
             raise ValueError("submission ID must contain 1 to 64 safe ASCII characters")
-        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions/{_resource_segment(submission_id)}")
+        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions/{_resource_segment(submission_id)}", strict_response_limit=1024 * 1024)
 
     def delivery_task_submit(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Save this original external report; acceptance remains a later decision."""
@@ -1280,6 +1281,19 @@ class ManagerClient:
 
     def delivery_command(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Caller preserves expected_version and idempotency_key across retries."""
+        if isinstance(body, Mapping) and isinstance(body.get("action"), str) and body["action"] in OPERATION_ACTIONS:
+            original = command_original(body)
+            from .delivery_operations import _context, _frozen_client
+
+            client = _frozen_client(self)
+            if not client.project_id:
+                _context(client)
+            try:
+                ack = client._request("POST", "/api/v1/delivery/commands", json_body=original,
+                    retry=False, strict_response_limit=MAX_ACK_BYTES)
+            except ValueError as exc:
+                raise DeliveryAckError("Manager response is not a complete strict delivery receipt") from exc
+            return validate_ack(original, ack, project_id=client.project_id)
         return self._request("POST", "/api/v1/delivery/commands", json_body=_delivery_command_body(body))
 
     def __init__(
@@ -1347,6 +1361,7 @@ class ManagerClient:
         params: Mapping[str, Any] | None = None,
         extra_headers: Mapping[str, str] | None = None,
         retry: bool = True,
+        strict_response_limit: int | None = None,
     ) -> Any:
         url_path = path if path.startswith("/") else "/" + path
         body_bytes = b""
@@ -1378,14 +1393,16 @@ class ManagerClient:
             except httpx.HTTPError as e:
                 raise SopTransportError(f"网络错误：{e}") from e
             self._raise_for_status(resp)
+            if strict_response_limit is not None:
+                return strict_json(resp.content, strict_response_limit)
             if resp.status_code == 204 or not resp.content:
                 return None
             ct = resp.headers.get("content-type", "")
             if ct.startswith("application/json") or ct.startswith("application/problem+json"):
                 if url_path.startswith("/api/v1/events"):
-                    from .event_envelope import strict_json
+                    from .event_envelope import strict_json as event_strict_json
 
-                    return strict_json(resp.text)
+                    return event_strict_json(resp.text)
                 return resp.json()
             return resp.text
 
@@ -2426,7 +2443,7 @@ class ManagerClient:
         return self._request("POST", "/api/v1/copilot/suggest", json_body={"context": context, "goal": goal})
 
     def context_me(self) -> dict[str, Any]:
-        return self._request("GET", "/api/v1/context/me")
+        return self._request("GET", "/api/v1/context/me", strict_response_limit=256 * 1024)
 
     def sync_push(
         self,

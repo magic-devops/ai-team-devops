@@ -1,5 +1,6 @@
 /** Actual page callbacks and persistent/session-bound consumer definitions; not executed in this stage. */
 import { isValidElement, type ReactNode } from "react";
+import { TaskExternalRecovery } from "../../subapps/ai-rd-center/src/pages/delivery/TaskExternalRecovery";
 import { Button, Checkbox, Input, Modal, Select, Table, Tag } from "antd";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { request } from "./http";
@@ -33,7 +34,7 @@ vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQue
 } }));
 const digest = "a".repeat(64), now = "2026-10-21T04:00:00Z", copy = externalWorkOrderCopy("zh-CN");
 function frame<T>(key: string, fn: () => T) { h.frame = key; h.next = 0; return fn(); }
-function nodes(value: ReactNode): any[] { if (Array.isArray(value)) return value.flatMap(nodes); if (!isValidElement<any>(value)) return []; return [value, ...["children", "footer", "action", "actions", "description"].flatMap((key) => nodes(value.props[key]))]; }
+function nodes(value: ReactNode): any[] { if (Array.isArray(value)) return value.flatMap(nodes); if (!isValidElement<any>(value)) return []; if (value.type === TaskExternalRecovery) return [value, ...nodes(frame("original-recovery", () => TaskExternalRecovery(value.props)))]; return [value, ...["children", "footer", "action", "actions", "description"].flatMap((key) => nodes(value.props[key]))]; }
 const find = (tree: ReactNode, type: unknown, test: (props: any) => boolean = () => true) => nodes(tree).find((node) => node.type === type && test(node.props))?.props;
 const button = (tree: ReactNode, label: string) => find(tree, Button, (props) => props.children === label);
 const panel = () => frame("panel", () => ExternalWorkOrderPanel({ projectId: "P", taskId: "T", sessionId: "session", canSubmit: () => h.canWrite, onSaved: h.saved, onUnresolvedChange: h.pending }));
@@ -88,7 +89,7 @@ it("recovers a cold original despite failed fresh reads and disabled fresh actio
 });
 it("clears a retained confirmed ACK without a second POST after local cleanup fails", async () => {
   const tree = await prepareClaim(); h.cleanupFail = true; await button(tree, copy.confirm).onClick(); expect(h.saved).not.toHaveBeenCalled();
-  h.cleanupFail = false; await button(panel(), copy.cleanup).onClick(); expect(h.sent).toHaveLength(1); expect(h.saved).toHaveBeenCalledTimes(1);
+  h.cleanupFail = false; await find(panel(), Button, (props) => props["data-action"] === "finish-work-order-original").onClick(); expect(h.sent).toHaveLength(1); expect(h.saved).toHaveBeenCalledTimes(1);
 });
 it("requires an explicit unchecked stop attestation before release", async () => {
   h.detail.work_order.state = "claimed"; h.detail.work_order.claimed_by = { id: "U", name: "Claimant" }; h.detail.work_order.claimed_at = now; h.detail.permissions.can_claim = false; h.detail.permissions.can_progress = true; h.detail.permissions.can_release = true;

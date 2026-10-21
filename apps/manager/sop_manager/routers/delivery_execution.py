@@ -159,11 +159,15 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
 
     design_context = execution_design_context(db, project, snapshot)
     feedback = freeze_feedback(db, project, user, task.id, body.feedback_reference, store=store)
+    from hermes_core.managed_test_quality import make_test_plan
+
+    test_ids = [node.id for node in body.test_nodes] if agent else body.test_node_ids
+    test_plan = make_test_plan([node.model_dump() for node in (body.test_nodes if agent else body.nodes)], test_ids)
     nodes = body.nodes
     if agent:
         from hermes_core.agents import single_agent_nodes
 
-        nodes = single_agent_nodes(agent, _envelope_data({"snapshot": snapshot, "id": "", "design_context": design_context,
+        nodes = single_agent_nodes(agent, _envelope_data({"snapshot": snapshot, "id": "", "design_context": design_context, "test_plan": test_plan,
             "feedback_reference": body.feedback_reference.model_dump(mode="json") if body.feedback_reference else None, **feedback}), body.test_nodes)
     result = {
         "design_context": design_context,
@@ -183,7 +187,8 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
             "provider": agent["data"]["provider"],
         },
         "nodes": [node.model_dump(mode="json") for node in nodes],
-        "test_node_ids": [node.id for node in body.test_nodes] if agent else body.test_node_ids,
+        "test_node_ids": test_ids,
+        "test_plan": test_plan,
     }
     result["plan_basis"] = digest(result)
     return result
@@ -197,6 +202,7 @@ def _queue(db, project, user, state, body, store, execution=None):
         "project_id": project.id,
         **body.model_dump(mode="json"),
         "test_node_ids": plan["test_node_ids"],
+        "test_plan": deepcopy(plan["test_plan"]),
         "plan_nodes": [{key: node[key] for key in ("id", "kind", "title") if key in node} for node in plan["nodes"]],
         "plan_basis": plan["plan_basis"],
         "target_snapshot": plan["target"],
@@ -230,6 +236,8 @@ def _queue(db, project, user, state, body, store, execution=None):
 def _envelope_data(entry):
     snapshot = entry["snapshot"]
     source = {"kind": "manager.delivery", "execution_id": entry["id"], "snapshot": snapshot}
+    if "test_plan" in entry:
+        source["test_plan"] = deepcopy(entry["test_plan"])
     if entry.get("executor_snapshot") is not None:
         source["executor_snapshot"] = entry["executor_snapshot"]
     if entry.get("feedback_reference") is not None:
@@ -375,8 +383,13 @@ def _review(entry, run, task, flow, body, user, store, principal):
     if entry["stale"]:
         raise HTTPException(409, "Requirement or task changed; old execution cannot be accepted")
     runtime_task = store.get(principal, entry["workspace_id"], "tasks", entry["runtime_task_id"])
+    from .delivery_execution_quality import execution_quality
+
+    quality = execution_quality(entry, run, runtime_task)
+    if body.decision == "accept" and quality["status"] != "passed":
+        raise HTTPException(409, {"code": "test_evidence_required", "message": "Fixed successful command tests are required before acceptance."})
     # Use the runtime's evidence/code checks, but Manager remains the review authority.
-    Delivery(store, Repository(None)).review(
+    runtime_review = Delivery(store, Repository(None)).review(
         principal,
         entry["workspace_id"],
         runtime_task["id"],
@@ -391,6 +404,8 @@ def _review(entry, run, task, flow, body, user, store, principal):
         ),
         entry["id"],
     )
+    if body.decision == "accept" and (quality["status"] != "passed" or quality != runtime_review["review"]["quality"]):
+        raise HTTPException(409, {"code": "test_evidence_required", "message": "Fixed successful command tests are required before acceptance."})
     entry["status"] = "accepted" if body.decision == "accept" else "changes_requested"
     entry["review"] = {
         "decision": body.decision,
@@ -399,6 +414,7 @@ def _review(entry, run, task, flow, body, user, store, principal):
         "at": stamp(),
         "run_version": run["version"],
         "evidence_sha256": digest(run),
+        "quality": quality,
     }
     task.status = "completed" if body.decision == "accept" else "blocked"
     test_ids = entry["test_node_ids"]

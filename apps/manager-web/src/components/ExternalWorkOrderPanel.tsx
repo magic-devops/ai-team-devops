@@ -17,6 +17,7 @@ import { createWorkOrderOriginal, useWorkOrderCommand, workOrderActionOriginal, 
 import { previewWorkOrder, readWorkOrderCurrent, readWorkOrderDetail, readWorkOrderPacket, readWorkOrders,
   type WorkOrderCurrent, type WorkOrderDetail, type WorkOrderPreview, type WorkOrderReason, type WorkOrderSummary } from "@/lib/externalWorkOrders";
 import { DesignReferenceFacts } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryDesignContextPanel";
+import { TaskExternalRecovery } from "../../subapps/ai-rd-center/src/pages/delivery/TaskExternalRecovery";
 
 type Props = { requestCreate?: { token: number; executorId: string; feedback_reference?: FeedbackReference }; onComposeSettled?: (token: number, started: boolean) => void; onComposeClosed?: (token: number) => void; onDispatch?: () => void; projectId: string; taskId: string; sessionId: string; selectedOrderId?: string; invalidSelection?: boolean; compose?: boolean;
   disabled?: boolean; isActive?: () => boolean; canSubmit?: () => boolean; onSaved?: (ack: DeliveryCommandAck) => void;
@@ -124,18 +125,22 @@ export function ExternalWorkOrderPanel({ requestCreate, onComposeSettled, onComp
     } catch (cause) { fail(cause); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
-  async function complete(ack: DeliveryCommandAck | undefined) {
-    if (!ack) return; assertCurrent(); command.reset();
-    if (command.snapshot().phase !== "idle") { onUnresolvedChange?.(true); return; }
+  function confirmed(ack: DeliveryCommandAck) {
+    assertCurrent();
     composeDraftToken.current = 0; changeDraft(null); changePrepared(null); setLatest(null); setPreview(null); setError(""); setFeedback(copy.confirmed); onUnresolvedChange?.(false);
     const id = ack.result?.work_order_id; if (typeof id === "string") setSelected(id);
     onSaved?.(ack); void invalidateDeliveryQueries(client, projectId);
     if (typeof id === "string") onSelect?.(id);
   }
-  async function send(replay = false) {
-    if (pending.current || !current() || (replay ? command.snapshot().phase !== "unknown" : !preparedRef.current || !canWrite())) return;
+  function complete(ack: DeliveryCommandAck | undefined) {
+    if (!ack) return; assertCurrent(); command.reset();
+    if (command.snapshot().phase !== "idle") { onUnresolvedChange?.(true); return; }
+    confirmed(ack);
+  }
+  async function send() {
+    if (pending.current || !current() || !preparedRef.current || !canWrite()) return;
     pending.current = true; setBusy(true); setError("");
-    try { const ack = replay ? await command.replay() : await command.run(preparedRef.current!); assertCurrent(); await complete(ack); }
+    try { const ack = await command.run(preparedRef.current); assertCurrent(); complete(ack); }
     catch (cause) { fail(cause); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
@@ -155,13 +160,7 @@ export function ExternalWorkOrderPanel({ requestCreate, onComposeSettled, onComp
   const original = state.original || prepared;
   const actionTitle = (action: WorkOrderAction) => ({ "work_order.create": copy.create, "work_order.claim": copy.claim, "work_order.progress": copy.updateProgress, "work_order.cancel": copy.cancelOrder, "work_order.release": copy.release, "work_order.report": copy.linkReport })[action];
   const originalFacts = original && <details className="text-xs text-[var(--muted)]"><summary>{copy.details}</summary><dl className="grid grid-cols-[auto_1fr] gap-2 break-all"><dt>{copy.task}</dt><dd>{original.binding.task_id}</dd><dt>{copy.order}</dt><dd>{original.binding.work_order_id || "—"}</dd><dt>{copy.basis}</dt><dd>{original.binding.packet_digest}</dd></dl></details>;
-  const recovery = <>
-    {state.phase === "sending" && <Alert type="info" title={copy.sending} />}
-    {state.phase === "unknown" && <Alert role="status" type="warning" showIcon title={copy.unknown} description={copy.unknownHint} action={state.original && <Button size="small" disabled={busy} data-action="recover-work-order" onClick={() => send(true)}>{copy.recover}</Button>} />}
-    {state.phase === "succeeded" && <Alert type="info" title={copy.confirmed} action={<Button size="small" disabled={busy} onClick={async () => { if (pending.current || !current()) return; pending.current = true; setBusy(true); try { await complete(command.snapshot().ack); } catch (cause) { fail(cause); } finally { pending.current = false; if (mounted.current) setBusy(false); } }}>{copy.cleanup}</Button>} />}
-    {state.error && <Alert type="warning" title={state.error.startsWith("retainedOriginal") ? copy.recoveryUnavailable : problem(new Error(state.error))} />}
-    {locked && originalFacts}
-  </>;
+  const recovery = <TaskExternalRecovery projectId={projectId} taskId={taskId} kind="work-order" command={command} isActive={current} busy={busy} onSaved={confirmed} />;
   const shown = draft, formLocked = busy || locked || Boolean(prepared);
   const reportSummary = !reportChoice.error && !reportCurrent.error && reportChoice.data?.submission.id === latestReportId ? reportChoice.data.submission : null;
   const eligibleReports = reportSummary && !reportSummary.invalidated && reportSummary.status === "awaiting_review" && reportSummary.review_id === null && reportSummary.definition_digest === draft?.detail?.work_order.definition_digest && reportSummary.native_boundary_digest === draft?.detail?.work_order.native_boundary_digest && reportSummary.submitted_by.id === draft?.detail?.work_order.claimed_by?.id ? [reportSummary] : [];
