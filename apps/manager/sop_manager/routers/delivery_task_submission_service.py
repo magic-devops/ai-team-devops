@@ -249,13 +249,15 @@ def _submit(db, project, user, data, body, store, execution, command_key):
     reasons = submission_reasons(context, body.task_id, project_status=project.status)
     boundary = native_boundary(db, project, user, data, body.task_id, store, execution)
     reasons.extend(boundary["reasons"])
-    from .delivery_external_work_order_service import submission_intake_reasons
+    from .delivery_external_work_order_service import prepare_submission_handoff, submission_intake_reasons
 
     reasons.extend(submission_intake_reasons(db, project, user, body.task_id, fixed["definition_digest"], boundary["digest"], task_basis=fixed["task_basis"]))
     if reasons:
         _fail(reasons[0]["code"], reasons[0]["message"])
     if body.task_basis != fixed["task_basis"] or body.definition_digest != fixed["definition_digest"] or body.native_boundary_digest != boundary["digest"]:
         _fail("submission_basis_changed", "Task definition or native closure changed. Review and explicitly adopt the latest source.")
+    if body.work_order is not None:
+        prepare_submission_handoff(db, project, user, body.task_id, body.work_order, store=store, execution=execution)
     actual = sorted((item.source, item.index, item.text_digest) for item in body.criteria)
     expected = sorted((item["source"], item["index"], item["text_digest"]) for item in fixed["criteria"])
     if actual != expected:
@@ -283,7 +285,19 @@ def _submit(db, project, user, data, body, store, execution, command_key):
     with task_submission_write_scope(db, project.tenant_id, project.id, row.id):
         db.add(row)
         db.flush()
-    return row.id, None, {"task_ids": [row.task_id], "submission_id": row.id, "submission_digest": row.submission_digest, "issue_id": row.issue_id}
+    result = {"task_ids": [row.task_id], "submission_id": row.id, "submission_digest": row.submission_digest, "issue_id": row.issue_id}
+    if body.work_order is not None:
+        from .delivery_external_work_order_contract import WorkOrderReport
+        from .delivery_external_work_order_service import apply_work_order
+
+        # Reuse the existing report original/latest/claimant/freshness gates and
+        # mutation guard. The caller owns the one transaction and receipt.
+        linked = apply_work_order(db, project, user, data, "work_order.report", WorkOrderReport(
+            id=body.work_order.id, order_revision=body.work_order.order_revision,
+            submission_id=row.id, submission_digest=row.submission_digest, stopped_attestation=body.work_order.stopped_attestation),
+            command_key=command_key, store=store, execution=execution)[2]
+        result["work_order"] = {"id": linked["work_order_id"], "order_revision": linked["order_revision"], "state": linked["state"]}
+    return row.id, None, result
 
 
 def _review(db, project, user, data, body, store, execution):
@@ -358,14 +372,11 @@ def apply_submission(db, project, user, data, action, body, *, store=None, execu
     _fail("submission_action_invalid", "Unsupported external delivery action.", 422)
 
 
-def assert_submission_access(db, project, user, submission_ids, *, store=None):
-    """All paged/legacy consumers recheck the original S scopes, without reports."""
-    from .delivery_issue_evidence import assert_evidence_access
-
+def _submission_runtime_scope_map(db, project, submission_ids):
+    """One bounded scope loader for exact originals, summaries and receipts."""
     identities = set(submission_ids)
     if not identities:
-        return
-    current, _permissions = _actor(db, project, user)
+        return {}
     predicate = (*_scope(project, Submission), Submission.id.in_(identities))
     field = Submission.native_boundary
     size = func.length(cast(field, LargeBinary)) if db.bind.dialect.name == "sqlite" else func.octet_length(cast(field, Text))
@@ -374,16 +385,48 @@ def assert_submission_access(db, project, user, submission_ids, *, store=None):
         _fail("submission_missing", "A fixed external delivery scope is unavailable.", 404)
     if any((value or 0) > 1024 * 1024 for value in sizes) or sum(value or 0 for value in sizes) > 16 * 1024 * 1024:
         _fail("submission_native_history_budget", "The original runtime scopes exceed the bounded read budget.", 413)
-    boundaries = db.scalars(select(field).where(*predicate)).all()
-    workspaces = {item["workspace_id"] for boundary in boundaries for item in boundary.get("identities", []) if item.get("workspace_id")}
-    assert_evidence_access(store, current, project, workspaces)
+    rows = db.execute(select(Submission.id, field, Submission.payload["work_order"]["id"].as_string()).where(*predicate)).all()
+    if any(not isinstance(boundary, dict) for _identity, boundary, _binding in rows):
+        _fail("submission_missing", "The accepted submission scope is unavailable.", 404)
+    scopes_by_order = {}
+    bound = {binding for _identity, _boundary, binding in rows if binding}
+    if bound:
+        from .delivery_external_work_order_model import DeliveryExternalWorkOrder as Order
+
+        predicate = (*_scope(project, Order), Order.id.in_(bound))
+        field = Order.runtime_scopes
+        size = func.length(cast(field, LargeBinary)) if db.bind.dialect.name == "sqlite" else func.octet_length(cast(field, Text))
+        order_sizes = db.scalars(select(size).where(*predicate)).all()
+        if len(order_sizes) != len(bound):
+            _fail("work_order_missing", "The bound work order's original runtime scope is unavailable.", 404)
+        if (any((value or 0) > 1024 * 1024 for value in order_sizes)
+                or sum(value or 0 for value in [*sizes, *order_sizes]) > 16 * 1024 * 1024):
+            _fail("submission_native_history_budget", "The complete original report and work-order scopes exceed the bounded read budget.", 413)
+        for identity, original_scopes in db.execute(select(Order.id, field).where(*predicate)):
+            if not isinstance(original_scopes, list) or any(not isinstance(value, str) for value in original_scopes):
+                _fail("work_order_missing", "The bound work order's original runtime scope is unavailable.", 404)
+            scopes_by_order[identity] = original_scopes
+    return {identity: sorted({item["workspace_id"] for item in boundary.get("identities", []) if item.get("workspace_id")}
+        | set(scopes_by_order.get(binding, []))) for identity, boundary, binding in rows}
+
+
+def _submission_runtime_scope_set(db, project, submission_ids):
+    return sorted({scope for scopes in _submission_runtime_scope_map(db, project, submission_ids).values() for scope in scopes})
+
+
+def assert_submission_access(db, project, user, submission_ids, *, store=None):
+    """All paged/legacy consumers recheck S and bound W scopes without bodies."""
+    from .delivery_issue_evidence import assert_evidence_access
+
+    identities = set(submission_ids)
+    if not identities:
+        return
+    current, _permissions = _actor(db, project, user)
+    assert_evidence_access(store, current, project, _submission_runtime_scope_set(db, project, identities))
 
 
 def submission_runtime_scopes(db, project, submission_id):
-    boundary = db.scalar(select(Submission.native_boundary).where(*_scope(project, Submission), Submission.id == submission_id))
-    if not isinstance(boundary, dict):
-        _fail("submission_missing", "The accepted submission scope is unavailable.", 404)
-    return sorted({item["workspace_id"] for item in boundary.get("identities", []) if item.get("workspace_id")})
+    return _submission_runtime_scope_set(db, project, [submission_id])
 
 
 PROOF_COLUMNS = (Submission.id, Submission.task_id, Submission.seq, Submission.submission_digest, Submission.definition_digest,

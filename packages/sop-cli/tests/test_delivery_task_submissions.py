@@ -3,9 +3,11 @@ import json
 from contextlib import contextmanager
 
 import pytest
+import httpx
 from typer.testing import CliRunner
 
 from sop_cli.commands import delivery
+from sop_sdk.client import ManagerClient
 
 
 @pytest.fixture
@@ -89,3 +91,35 @@ def test_missing_exact_ids_and_write_file_are_not_inferred(client_calls):
     for args in (["submission-current"], ["submission", "--id", "T"], ["task-submit"], ["task-submit-review"], ["submissions", "--id", "T", "--limit", "0"]):
         assert runner.invoke(delivery.app, args).exit_code != 0
     assert client_calls == []
+
+
+def test_cli_bound_report_uses_actual_client_transport_without_selecting_or_rewriting_handoff(monkeypatch, tmp_path):
+    """Actual CLI -> ManagerClient -> HTTP transport definition, currently unrun."""
+    body = {"expected_version": 7, "idempotency_key": "fixed-handoff-key", "payload": {
+        "task_id": "任务 一", "task_basis": "a" * 64, "definition_digest": "b" * 64, "native_boundary_digest": "c" * 64,
+        "source": {"kind": "tool", "name": "Codex"}, "summary": "Reported change; human review remains required",
+        "artifacts": [{"id": "diff", "title": "Diff", "content": "Reported evidence"}],
+        "criteria": [{"source": "task", "index": 0, "text_digest": "d" * 64, "result": "unknown", "evidence_ids": []}], "tests": [],
+        "work_order": {"id": "W1", "order_revision": 2, "stopped_attestation": True}}}
+    file = tmp_path / "handoff.json"
+    raw = json.dumps(body, ensure_ascii=False, indent=2).encode("utf-8")
+    file.write_bytes(raw)
+    calls = []
+
+    @contextmanager
+    def client():
+        actual = ManagerClient(base_url="https://manager.test", project_id="P", max_retries=0)
+        actual._client.close()
+        actual._client = httpx.Client(base_url="https://manager.test", transport=httpx.MockTransport(
+            lambda request: calls.append(request) or httpx.Response(200, json={"result": {"submission_id": "S1", "work_order": {"id": "W1", "order_revision": 3, "state": "reported"}}})))
+        with actual:
+            yield actual
+
+    monkeypatch.setattr(delivery, "get_client", client)
+    for _ in range(2):
+        result = CliRunner().invoke(delivery.app, ["task-submit", "--file", str(file)])
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.output)["result"]["work_order"]["id"] == "W1"
+    assert file.read_bytes() == raw and len(calls) == 2 and calls[0].content == calls[1].content
+    assert all(call.method == "POST" and call.url.path == "/api/v1/delivery/commands" and call.headers["X-Project-Id"] == "P" for call in calls)
+    assert json.loads(calls[0].content) == {"action": "task.delivery.submit", **body}

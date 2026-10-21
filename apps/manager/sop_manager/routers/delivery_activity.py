@@ -75,6 +75,11 @@ class _RecordedTargets:
             self.add("work_order", rid)
         elif action == "task.manual_review":
             self.add("task", payload.get("task_id"))
+        elif action in {"task.delivery.submit", "task.delivery.review"}:
+            self.add("task", payload.get("task_id"))
+            binding = payload.get("work_order")
+            if action == "task.delivery.submit" and isinstance(binding, dict):
+                self.add("work_order", binding.get("id"))
         elif action.startswith("task.") or action == "tasks.plan":
             self.add("task", rid)
         elif action.startswith("release.candidate."):
@@ -93,6 +98,8 @@ class _RecordedTargets:
             self.add("task", id)
         for tid in result.get("task_ids", []) if isinstance(result, dict) else []:
             self.add("task", tid)
+        if action in {"task.delivery.submit", "task.delivery.review"} and isinstance(result, dict):
+            self.add("issue", result.get("issue_id"))
         if action == "tasks.schedule":
             for change in payload.get("changes", []):
                 self.add("task", change.get("task_id"))

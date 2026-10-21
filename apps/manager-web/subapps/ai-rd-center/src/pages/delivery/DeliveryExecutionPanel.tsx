@@ -26,6 +26,7 @@ import type { ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
 import { useExecutionHandoffQuery } from "@/lib/executionHandoff";
+import { useDeliveryDraftState } from "@/lib/useDeliveryDraftState";
 
 type Props = {
   sessionId: string;
@@ -77,7 +78,7 @@ export function DeliveryExecutionPanel({
     gcTime: 0,
     retry: false,
   });
-  const [draft, setDraft] = useState<ExecutionDraftSession>();
+  const [draft, setDraft] = useDeliveryDraftState<ExecutionDraftSession | undefined>(undefined, onEditingChange);
   const [historyId, setHistoryId] = useState("");
   const [controlLocked, setControlLocked] = useState(false);
   const pendingControls = useRef(new Set<string>());
@@ -190,11 +191,6 @@ export function DeliveryExecutionPanel({
     handoff.readable && canReplaceHandoff() &&
     task.execution_gate.eligible &&
     (!task.execution_id || Boolean(current && closed.includes(current.status)));
-  useEffect(() => {
-    if (!draft) return;
-    onEditingChange?.(true);
-    return () => onEditingChange?.(false);
-  }, [Boolean(draft), onEditingChange]);
   return (
     <section
       className="delivery-executions runtime-panel"
@@ -397,7 +393,7 @@ export function DeliveryExecutionPanel({
             targets.data.can_configure_policy
           }
           onClose={() => { if (["idle", "refused"].includes(queueCommand.snapshot().phase)) setDraft(undefined); }}
-          onSaved={onSaved}
+          onSaved={(ack) => { if (queueCommand.snapshot().phase === "idle") setDraft(undefined); onSaved(ack); }}
         />
       )}
     </section>

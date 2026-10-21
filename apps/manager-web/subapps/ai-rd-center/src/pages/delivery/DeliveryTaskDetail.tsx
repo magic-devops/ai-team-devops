@@ -5,7 +5,7 @@ import {
 } from "@/lib/deliveryQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Select, Skeleton, Tag } from "antd";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   saveDelivery,
@@ -37,6 +37,10 @@ import { DeliveryDesignContextPanel } from "./DeliveryDesignContextPanel";
 import { ExternalWorkOrderPanel } from "@/components/ExternalWorkOrderPanel";
 import { workOrderRecoveryPending } from "@/lib/externalWorkOrderCommand";
 import { selectedTaskWorkOrder } from "@/lib/externalWorkOrderRoute";
+import { deliveryDraftCopy } from "@/i18n/delivery-drafts";
+
+type TaskDraftScope = "execution" | "planning" | "work-order" | "design" | "submission" | "manual";
+type TaskPendingScope = "execution" | "planning" | "collaboration";
 
 type TaskContentProps = {
   detail?: DeliveryTaskData;
@@ -46,12 +50,12 @@ type TaskContentProps = {
   canEdit: boolean;
   executionBlocked?: boolean;
   onSaved: (workspace: DeliveryCommandAck) => void;
-  onEditingChange: (editing: boolean) => void;
+  onEditingChange: (scope: "execution" | "planning", editing: boolean) => void;
   onCommand?: (
     action: DeliveryAction,
     payload: Record<string, unknown>,
   ) => Promise<void>;
-  onUnresolvedChange?: (value: boolean) => void;
+  onUnresolvedChange?: (value: boolean, scope?: TaskPendingScope) => void;
   queueCommand?: ExecutionDispatchCommand;
   isActive?: () => boolean;
   canSubmitQueue?: () => boolean;
@@ -74,6 +78,9 @@ export function TaskDetailContent({
   onExecutionRecovery,
 }: TaskContentProps) {
   const { t } = useTranslation();
+  const executionEditingChanged = (editing: boolean) => onEditingChange("execution", editing);
+  const planningEditingChanged = (editing: boolean) => onEditingChange("planning", editing);
+  const background = typeof location === "undefined" ? "" : location.hash;
   const tr = (key: string) => t(`deliveryTaskAcceptance.${key}`);
   const data = pinnedDetail || detail;
   const editable = canEdit && !executionBlocked;
@@ -105,8 +112,8 @@ export function TaskDetailContent({
       sessionId={sessionId}
       onCommand={command}
       onSaved={onSaved}
-      onEditingChange={onEditingChange}
-      onUnresolvedChange={onUnresolvedChange}
+      onEditingChange={executionEditingChanged}
+      onUnresolvedChange={(value) => onUnresolvedChange?.(value, "execution")}
       queueCommand={queueCommand}
       isActive={isActive}
       canSubmitQueue={canSubmitQueue}
@@ -138,7 +145,7 @@ export function TaskDetailContent({
         {task.id} · {task.estimate}
       </small>
       {requirement && (
-        <Button type="link" size="small" href={manualTaskHref(task)}>
+        <Button type="link" size="small" href={manualTaskHref(task, background, data.project.id)}>
           {requirement.title}
         </Button>
       )}
@@ -205,17 +212,18 @@ export function TaskDetailContent({
         object
         readOnly={!editable}
         onSaved={onSaved}
-        onUnresolvedChange={onUnresolvedChange}
+        onUnresolvedChange={(value) => onUnresolvedChange?.(value, "collaboration")}
       />
       <DeliveryTaskPlanMaintenance
         task={task}
         data={data}
         onTask={(dependency) => {
-          location.hash = manualTaskHref(dependency);
+          location.hash = manualTaskHref(dependency, background, data.project.id);
         }}
         onSaved={onSaved}
         canEdit={editable && !stageLocked}
-        onEditingChange={onEditingChange}
+        onEditingChange={planningEditingChanged}
+        onUnresolvedChange={(value) => onUnresolvedChange?.(value, "planning")}
       />
       {!native && execution}
       {native && <p className="runtime-help">{tr("nativeReview")}</p>}
@@ -229,6 +237,7 @@ export function DeliveryTaskDetail({
   expectedRequirementId,
   queryGeneration,
   onUnresolvedChange,
+  onDraftChange,
   onRecoveryIdentity,
   isActive: parentIsActive,
 }: {
@@ -238,10 +247,12 @@ export function DeliveryTaskDetail({
   expectedRequirementId?: string;
   queryGeneration?: number | null;
   onUnresolvedChange?: (value: boolean) => void;
+  onDraftChange?: (value: boolean) => void;
   onRecoveryIdentity?: (executionId: string) => void;
   isActive?: () => boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const draftCopy = deliveryDraftCopy(i18n?.language);
   const qc = useQueryClient();
   const origin = useRef(projectSessionKey());
   const mounted = useRef(true), identity = `${projectId}:${sessionId}:${taskId}`, activeIdentity = useRef(identity);
@@ -250,6 +261,8 @@ export function DeliveryTaskDetail({
   const isActive = () => mounted.current && origin.current === projectSessionKey() && activeIdentity.current === identity && parentAccess.current?.() !== false;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const executionExit = useExecutionExitGuard();
+  const draftExit = useExecutionExitGuard();
+  const draftActive = useRef(false), draftNotify = useRef(onDraftChange); draftNotify.current = onDraftChange;
   const externalPending = useRef(externalDeliveryRecoveryPending(projectId, taskId));
   const hasExternalPending = () => externalPending.current || externalDeliveryRecoveryPending(projectId, taskId);
   const designPending = useRef(designRecoveryPending(projectId, { kind: "task", id: taskId }));
@@ -260,6 +273,7 @@ export function DeliveryTaskDetail({
   const workOrderParams = new URLSearchParams(typeof location === "undefined" ? "" : location.hash.split("?")[1]);
   const invalidWorkOrderSelection = workOrderParams.has("work_order_id") && !selectedWorkOrderId;
   const [reportRequest, setReportRequest] = useState(() => selectedWorkOrderId && workOrderParams.getAll("delivery_report").length === 1 && workOrderParams.get("delivery_report") === "1" ? 1 : 0);
+  const [reportOrder, setReportOrder] = useState<{ id: string; order_revision?: number } | undefined>(() => selectedWorkOrderId ? { id: selectedWorkOrderId } : undefined);
   const [pinnedWorkspace, setPinnedWorkspace] = useState<DeliveryTaskData>();
   const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
     useState<DeliveryTaskData>();
@@ -294,13 +308,27 @@ export function DeliveryTaskDetail({
     queuePending(queueLocked);
     return () => { executionExit.setPending(`queue:${taskId}`, false); };
   }, [queueLocked]);
-  const editingChanged = useCallback((editing: boolean) => {
-    if (editing) {
+  const editingChanged = useCallback((scope: TaskDraftScope, editing: boolean) => {
+    if (!mounted.current || origin.current !== projectSessionKey() || activeIdentity.current !== identity || editing && parentAccess.current?.() === false) return;
+    const pending = draftExit.setPending(`${identity}:${scope}`, editing);
+    draftActive.current = pending;
+    if (pending) {
       const current = latestWorkspace.current;
       if (current)
         setPinnedWorkspace((previous) => previous || structuredClone(current));
     } else setPinnedWorkspace(undefined);
-  }, []);
+    draftNotify.current?.(pending);
+  }, [identity, draftExit.setPending]);
+  const draftCallbacks = useMemo(() => ({
+    workOrder: (editing: boolean) => editingChanged("work-order", editing),
+    design: (editing: boolean) => editingChanged("design", editing),
+    submission: (editing: boolean) => editingChanged("submission", editing),
+    manual: (editing: boolean) => editingChanged("manual", editing),
+  }), [editingChanged]);
+  useEffect(() => {
+    draftNotify.current?.(draftActive.current);
+    return () => draftNotify.current?.(false);
+  }, [identity]);
   const key = [
     "delivery-task-detail",
     projectId,
@@ -462,10 +490,11 @@ export function DeliveryTaskDetail({
           title={t("deliveryExecutionRuntime.pendingNavigation")}
         />
       )}
+      {draftExit.blocked && <Alert type="warning" role="status" title={draftCopy.navigationBlocked} />}
       <ExternalWorkOrderPanel key={`${projectId}:${sessionId}:${taskId}:work-orders`} projectId={projectId} taskId={taskId} sessionId={sessionId} selectedOrderId={selectedWorkOrderId} invalidSelection={invalidWorkOrderSelection}
         disabled={executionExit.pending || hasExternalPending() || hasDesignPending() || queueLocked || Boolean(displayedOperationRecovery) || busy}
-        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={editingChanged}
-        onWriteReport={() => { if (isActive() && !hasWorkOrderPending() && !hasExternalPending() && !queueLocked) setReportRequest((value) => value + 1); }}
+        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.workOrder}
+        onWriteReport={(order) => { if (isActive() && !hasWorkOrderPending() && !hasExternalPending() && !queueLocked) { setReportOrder(order); setReportRequest((value) => value + 1); } }}
         onUnresolvedChange={(value) => { workOrderPending.current = value || workOrderRecoveryPending(projectId, taskId); onUnresolvedChange?.(executionExit.setPending(`work-order:${taskId}`, workOrderPending.current)); }} />
       <TaskDetailContent
         detail={query.error || displayedOperationRecovery ? undefined : query.data}
@@ -485,10 +514,10 @@ export function DeliveryTaskDetail({
         onExecutionRecovery={rememberRecovery}
         onEditingChange={editingChanged}
         onCommand={command}
-        onUnresolvedChange={(value) => {
-          const retained = Boolean(knownExecution.current && executionOperationPending(projectId, knownExecution.current));
+        onUnresolvedChange={(value, scope = "execution") => {
+          const retained = scope === "execution" && Boolean(knownExecution.current && executionOperationPending(projectId, knownExecution.current));
           const pending = executionExit.setPending(
-            `execution:${taskId}`,
+            `${scope}:${taskId}`,
             value || retained,
           );
           const latest = latestWorkspace.current;
@@ -502,11 +531,11 @@ export function DeliveryTaskDetail({
       />
       <DeliveryDesignContextPanel key={`${projectId}:${sessionId}:${taskId}:design`} projectId={projectId} target={{ kind: "task", id: taskId }} sessionId={sessionId}
         disabled={executionExit.pending || hasExternalPending() || hasWorkOrderPending() || queueLocked || Boolean(displayedOperationRecovery) || busy}
-        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={editingChanged}
+        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.design}
         onUnresolvedChange={(value) => { designPending.current = value || designRecoveryPending(projectId, { kind: "task", id: taskId }); onUnresolvedChange?.(executionExit.setPending(`design:${taskId}`, designPending.current)); }} />
       <DeliveryTaskSubmissionPanel key={`${projectId}:${sessionId}:${taskId}:external`} projectId={projectId} taskId={taskId} sessionId={sessionId}
-        disabled={executionExit.pending || hasWorkOrderPending() || queueLocked || Boolean(displayedOperationRecovery) || busy} requestCreate={reportRequest}
-        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={editingChanged}
+        disabled={executionExit.pending || hasWorkOrderPending() || queueLocked || Boolean(displayedOperationRecovery) || busy} requestCreate={reportRequest} requestWorkOrder={reportOrder}
+        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.submission}
         onUnresolvedChange={(value) => {
           externalPending.current = value || externalDeliveryRecoveryPending(projectId, taskId);
           const pending = executionExit.setPending(`external:${taskId}`, externalPending.current);
@@ -520,7 +549,7 @@ export function DeliveryTaskDetail({
         disabled={executionExit.pending || hasExternalPending() || hasDesignPending() || hasWorkOrderPending() || queueLocked || Boolean(displayedOperationRecovery) || busy || query.isError}
         canSubmit={canWriteChild}
         onSaved={saved}
-        onEditingChange={editingChanged}
+        onEditingChange={draftCallbacks.manual}
         onUnresolvedChange={(value) => {
           const pending = executionExit.setPending(`manual:${taskId}`, value);
           const latest = latestWorkspace.current;

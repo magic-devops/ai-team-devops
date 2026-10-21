@@ -138,6 +138,7 @@ export type ManualReviewSession = {
 export function manualTaskHref(
   task: { id: string; req_id?: string },
   background = "",
+  projectId = "",
 ) {
   const href = deliveryInboxHref({
     view: "list",
@@ -146,9 +147,12 @@ export function manualTaskHref(
     task_id: task.id,
   });
   const safe = safeExecutionReturn(background);
+  const backgroundParams = new URLSearchParams(safe?.split("?")[1]);
+  const sameProject = !projectId || backgroundParams.getAll("project_id").length === 1 && backgroundParams.get("project_id") === projectId;
   return preserveProjectContext(
-    safe ? `${href}&return_to=${encodeURIComponent(safe)}` : href,
-    background,
+    safe && sameProject ? `${href}&return_to=${encodeURIComponent(safe)}` : href,
+    sameProject ? background : "",
+    projectId,
   );
 }
 

@@ -239,6 +239,36 @@ def submission_intake_reasons(db, project, user, task_id, definition_digest, nat
     return []
 
 
+def submission_handoff_context(db, project, user, task_id, *, can_submit, store=None, execution=None):
+    """Offer only the claimant's usable locator; no packet or stop attestation."""
+    if not can_submit:
+        return None
+    row = active_order(db, project, task_id)
+    if (row is None or row.state != "claimed" or row.invalidated
+            or not row.claimed_by or row.claimed_by["id"] != user.id):
+        return None
+    try:
+        assert_order_access(db, project, user, row, store=store)
+        _fresh(db, project, user, row, store, execution)
+    except HTTPException:
+        return None
+    return {"id": row.id, "order_revision": row.revision, "executor": deepcopy(row.executor)}
+
+
+def prepare_submission_handoff(db, project, user, task_id, binding, *, store=None, execution=None):
+    """An explicit wrong original must fail before saving any new report."""
+    row = load_order(db, project, binding.id)
+    assert_order_access(db, project, user, row, store=store)
+    if row.task_id != task_id or row.active_task_id != task_id:
+        fail("work_order_submission_mismatch", "The selected work order does not hold this exact task.")
+    if row.revision != binding.order_revision:
+        fail("work_order_revision_changed", "The work order changed; read its current revision before a new action.")
+    _claimant(row, user)
+    if row.state != "claimed":
+        fail("work_order_not_claimed", "Only current claimed work can submit a new report and stop together.")
+    _fresh(db, project, user, row, store, execution)
+
+
 def apply_work_order(db, project, user, data, action, body, *, command_key, store=None, execution=None):
     from sop_manager.project_write_guard import work_order_write_scope, require_project_operation
     from .delivery_service import identifier

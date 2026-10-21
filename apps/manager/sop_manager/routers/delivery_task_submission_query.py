@@ -79,14 +79,15 @@ def submission_current(db, project, user, task_id, *, store=None, execution=None
         fixed = submission_definition(context, task_id)
         boundary = native_boundary(db, project, current, context.data, task_id, store, execution)
         reasons = submission_reasons(context, task_id, can_write=permissions["write"], project_status=project.status) + boundary["reasons"]
-        from .delivery_external_work_order_service import submission_intake_reasons
+        from .delivery_external_work_order_service import submission_handoff_context, submission_intake_reasons
 
         reasons.extend(submission_intake_reasons(db, project, current, task_id, fixed["definition_digest"], boundary["digest"], task_basis=fixed["task_basis"]))
+        work_order = submission_handoff_context(db, project, current, task_id, can_submit=not reasons, store=store, execution=execution)
         latest = db.scalar(select(Submission.id).where(*scope(project, Submission), Submission.task_id == task_id).order_by(Submission.seq.desc()).limit(1))
         _unchanged(db, project, generation)
         return {**metadata(db, project, generation), "task_id": task_id, "as_of": _now(), **fixed,
                 "native_boundary_digest": boundary["digest"], "can_submit": not reasons, "reasons": reasons,
-                "latest_submission_id": latest}
+                "latest_submission_id": latest, "work_order": work_order}
 
 
 def submission_list(db, project, user, task_id, *, limit=20, cursor="", store=None, execution=None):

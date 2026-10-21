@@ -59,6 +59,8 @@ def recorded_ack(project, action, resource_id, result, applied_version):
         if result.get("requirement_id"):
             refs.append({"kind": "requirement", "id": result["requirement_id"]})
         if action in {"task.delivery.submit", "task.delivery.review"}:
+            if action == "task.delivery.submit" and result.get("work_order"):
+                refs.append({"kind": "work_order", "id": result["work_order"]["id"]})
             if action == "task.delivery.review":
                 refs.append({"kind": "task_submission", "id": result["submission_id"]})
             if result.get("issue_id"):

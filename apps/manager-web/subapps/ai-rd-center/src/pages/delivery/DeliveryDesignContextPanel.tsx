@@ -10,6 +10,7 @@ import { useDesignCommand, validDesignOriginal, type DesignOriginal } from "@/li
 import { designLibraryHref, designSlots, parseDesignSourceRoute, previewDesignAdoption, readDesignCurrent, readDesignDocuments, readDesignRevision, readDesignRevisions,
   type DesignCurrent, type DesignPreview, type DesignReference, type DesignSlot, type DesignTarget } from "@/lib/designLibrary";
 import { DesignOperationRecovery } from "./DesignOperationRecovery";
+import { useDeliveryDraftState } from "@/lib/useDeliveryDraftState";
 
 type Props = { projectId: string; target: DesignTarget; sessionId: string; disabled?: boolean; isActive?: () => boolean; canSubmit?: () => boolean; onSaved: (ack: DeliveryCommandAck) => void; onEditingChange?: (value: boolean) => void; onUnresolvedChange?: (value: boolean) => void };
 export function DesignReferenceFacts({ references, projectId, background = "", target }: { references: DesignReference[]; projectId: string; background?: string; target?: DesignTarget }) {
@@ -26,14 +27,13 @@ export function DeliveryDesignContextPanel({ projectId, target, sessionId, disab
   const locked = command.locked, isLocked = () => !["idle", "refused"].includes(command.snapshot().phase);
   const active = () => mounted.current && origin.current === projectSessionKey() && liveIdentity.current === identity && access.current.isActive?.() !== false && command.current();
   const [selection] = useState(() => parseDesignSourceRoute(typeof location === "undefined" ? "" : location.hash, projectId, target));
-  const [open, setOpen] = useState(false), [operation, setOperation] = useState<"adopt" | "clear">("adopt"), [slot, setSlot] = useState<DesignSlot>("prd");
+  const [open, setOpen] = useDeliveryDraftState(false, onEditingChange), [operation, setOperation] = useState<"adopt" | "clear">("adopt"), [slot, setSlot] = useState<DesignSlot>("prd");
   const [documentId, setDocumentId] = useState(selection.documentId), [revisionId, setRevisionId] = useState(selection.revisionId), [cursor, setCursor] = useState(""), [revisionCursor, setRevisionCursor] = useState("");
   const [comment, setComment] = useState(""), [basis, setBasis] = useState<DesignCurrent | null>(null), [candidate, setCandidate] = useState<DesignCurrent | null>(null), [preview, setPreview] = useState<DesignPreview | null>(null);
   const [prepared, setPrepared] = useState<DesignOriginal | null>(null), originalRef = useRef(prepared); originalRef.current = prepared;
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [feedback, setFeedback] = useState("");
   const draft = useRef({ operation, slot, documentId, revisionId, comment, basis }); draft.current = { operation, slot, documentId, revisionId, comment, basis };
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { if (!open) return; onEditingChange?.(true); return () => onEditingChange?.(false); }, [open, onEditingChange]);
   useEffect(() => { notify.current?.(["sending", "unknown", "succeeded"].includes(command.state.phase)); }, [command.state.phase]);
   const currentQuery = useQuery({ queryKey: ["delivery-design-current", projectId, origin.current, target.kind, target.id], queryFn: ({ signal }) => readDesignCurrent(projectId, target, origin.current, signal), enabled: active() && !locked, retry: false, gcTime: 0 });
   const current = !currentQuery.error && currentQuery.data?.project_id === projectId && currentQuery.data.target_kind === target.kind && currentQuery.data.target_id === target.id ? currentQuery.data : undefined;

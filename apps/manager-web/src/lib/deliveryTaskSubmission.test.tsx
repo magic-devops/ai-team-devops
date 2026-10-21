@@ -1,6 +1,6 @@
 /** Actual adapters/controllers/consumers. Definitions only: runtime validation is deferred. */
 import { isValidElement, type ReactNode } from "react";
-import { Button, Input, Modal, Select } from "antd";
+import { Button, Checkbox, Input, Modal, Select } from "antd";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { request } from "./http";
 import { setSession, USER_KEY } from "./authStorage";
@@ -16,7 +16,7 @@ import { issueEvidenceHref } from "./deliveryIssue";
 
 const h = vi.hoisted(() => ({ frames: {} as Record<string, any[]>, frame: "", next: 0, local: new Map<string, string>(), retained: new Map<string, string>(),
   current: {} as any, detail: {} as any, page: {} as any, currentError: null as Error | null, detailError: null as Error | null, sent: [] as any[], queries: [] as any[], saved: vi.fn(), pending: vi.fn(),
-  mode: "success" as "success" | "unknown", storageFail: false, canWrite: true, taskData: {} as any,
+  mode: "success" as "success" | "unknown", storageFail: false, canWrite: true, taskData: {} as any, editing: vi.fn(),
 }));
 vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>("react"),
   useRef: (initial: any) => { const slots = h.frames[h.frame] ||= [], index = h.next++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
@@ -37,7 +37,8 @@ const payload = (): TaskSubmissionPayload => ({ task_id: "T", task_basis: a, def
   criteria: [{ source: "task", index: 0, text_digest: d, result: "met", evidence_ids: ["e1"] }], tests: [{ id: "test1", title: "Acceptance check", status: "passed", evidence_ids: ["e1"] }] });
 const current = (): SubmissionCurrent => ({ project_id: "P", task_id: "T", version: 7, query_generation: null, as_of: now, task_basis: a, definition_digest: b, native_boundary_digest: c,
   definition: { task_id: "T", title: "Task", description: "Current scope", assigned_to: "owner", task_acceptance_criteria: ["User can recover"], acceptance_criteria: ["User can recover"], owner: null, dependency_basis: {}, requirement: null, designs: [], design_basis: a },
-  criteria: [{ source: "task", index: 0, text: "User can recover", text_digest: d }], can_submit: true, reasons: [], latest_submission_id: null });
+  criteria: [{ source: "task", index: 0, text: "User can recover", text_digest: d }], can_submit: true, reasons: [], latest_submission_id: null, work_order: null });
+const workOrder = () => ({ id: "W1", order_revision: 2, executor: { id: "tool:codex", name: "Codex", kind: "tool" as const, tool: "codex", active: true, available: true, reasons: [] } });
 const summary = (): SubmissionSummary => ({ id: "S1", task_id: "T", created_at: now, submitted_by: { id: "U", name: "Submitter" }, source: payload().source, summary: payload().summary,
   digest: d, task_basis: a, definition_digest: b, native_boundary_digest: c, status: "awaiting_review", invalidated: false, invalidated_at: null, invalidated_reason: "",
   counts: { artifacts: 1, criteria: 1, tests: 1, reported_passed: 1, reported_failed: 0 }, issue_id: null, review_id: null });
@@ -46,24 +47,26 @@ const detail = (): SubmissionDetail => ({ project_id: "P", task_id: "T", version
 const original = (review = false): SubmissionOriginal => ({ action: review ? "task.delivery.review" : "task.delivery.submit", payload: review ? { task_id: "T", submission_id: "S1", submission_digest: d, task_basis: a, native_boundary_digest: c, decision: "accept", comment: "Reviewed actual evidence" } : payload(), intent: { version: 7, key: "original-submission-key" } });
 function ack(value: SubmissionOriginal, issue: string | null = null) {
   const review = value.action === "task.delivery.review", resource = { kind: review ? "task_review" : "task_submission", id: review ? "R1" : "S1" };
-  return { project_id: "P", action: value.action, resource, result: { task_ids: ["T"], submission_id: "S1", submission_digest: d, issue_id: issue, ...(review ? { decision_id: "K1", review_id: "R1" } : {}) },
-    affected_refs: [resource, { kind: "task", id: "T" }, ...(review ? [{ kind: "task_submission", id: "S1" }] : []), ...(issue ? [{ kind: "issue", id: issue }] : [])],
+  const binding = review ? null : (value.payload as TaskSubmissionPayload).work_order;
+  return { project_id: "P", action: value.action, resource, result: { task_ids: ["T"], submission_id: "S1", submission_digest: d, issue_id: issue, ...(review ? { decision_id: "K1", review_id: "R1" } : {}), ...(binding ? { work_order: { id: binding.id, order_revision: binding.order_revision + 1, state: "reported" } } : {}) },
+    affected_refs: [resource, { kind: "task", id: "T" }, ...(review ? [{ kind: "task_submission", id: "S1" }] : []), ...(issue ? [{ kind: "issue", id: issue }] : []), ...(binding ? [{ kind: "work_order", id: binding.id }] : [])],
     applied_version: value.intent.version + 1, version: value.intent.version + 1, query_generation: null, replayed: false };
 }
 function frame<T>(name: string, callback: () => T) { h.frame = name; h.next = 0; return callback(); }
 function nodes(node: ReactNode): any[] { if (Array.isArray(node)) return node.flatMap(nodes); if (!isValidElement<any>(node)) return []; return [node, ...["children", "footer", "action", "description"].flatMap((key) => nodes(node.props[key]))]; }
 const find = (tree: ReactNode, type: unknown, predicate: (props: any) => boolean = () => true) => nodes(tree).find((node) => node.type === type && predicate(node.props))?.props;
 const button = (tree: ReactNode, text: string) => find(tree, Button, (props) => props.children === text);
-const panel = () => frame("panel", () => DeliveryTaskSubmissionPanel({ projectId: "P", taskId: "T", sessionId: "session", canSubmit: () => h.canWrite, onSaved: h.saved, onUnresolvedChange: h.pending }));
-async function ready() {
+const panel = () => frame("panel", () => DeliveryTaskSubmissionPanel({ projectId: "P", taskId: "T", sessionId: "session", canSubmit: () => h.canWrite, onSaved: h.saved, onUnresolvedChange: h.pending, onEditingChange: h.editing }));
+async function ready(handoff = false) {
   button(panel(), copy.create).onClick();
   const input = (type: unknown, label: string, value: string) => find(panel(), type, (props) => props["aria-label"] === label).onChange({ target: { value } });
   input(Input, copy.name, "Codex"); input(Input.TextArea, copy.summary, "External change"); input(Input, `${copy.evidenceTitle} 1`, "Diff"); input(Input.TextArea, `${copy.content} 1`, "Actual changes");
   find(panel(), Select, (props) => props["aria-label"] === `${copy.criteria} 1`).onChange("met"); find(panel(), Select, (props) => props["aria-label"] === `${copy.evidenceIds} 1`).onChange(["evidence-1"]);
-  await button(panel(), copy.preview).onClick(); return panel();
+  if (handoff) find(panel(), Checkbox).onChange({ target: { checked: true } });
+  await button(panel(), handoff ? copy.previewHandoff : h.current.work_order ? copy.previewOnly : copy.preview).onClick(); return panel();
 }
 beforeEach(() => {
-  h.frames = {}; h.frame = ""; h.next = 0; h.local.clear(); h.retained.clear(); h.sent = []; h.queries = []; h.saved.mockReset(); h.pending.mockReset(); h.mode = "success"; h.storageFail = false; h.canWrite = true;
+  h.frames = {}; h.frame = ""; h.next = 0; h.local.clear(); h.retained.clear(); h.sent = []; h.queries = []; h.saved.mockReset(); h.pending.mockReset(); h.editing.mockReset(); h.mode = "success"; h.storageFail = false; h.canWrite = true;
   h.current = current(); h.detail = detail(); h.page = { project_id: "P", task_id: "T", as_of: now, items: [summary()], total: 1, limit: 20, next_cursor: null }; h.currentError = null; h.detailError = null;
   h.taskData = { project: { id: "P" }, version: 7, query_generation: 1, permissions: { write: true }, members: [], task: { id: "T", execution_id: "", execution_gate: { eligible: true, reasons: [] } } };
   vi.stubGlobal("localStorage", { getItem: (key: string) => h.local.get(key) || null, setItem: (key: string, value: string) => h.local.set(key, value), removeItem: (key: string) => h.local.delete(key) });
@@ -139,6 +142,92 @@ describe("external submission actual contract and read definitions", () => {
   it("adopts changed criteria only by stable source/index/text digest and resets changed reports", () => {
     const next = current(); next.criteria[0].text = "New condition"; next.criteria[0].text_digest = b;
     const adopted = adoptSubmissionDraft(payload(), next); expect(adopted.criteria[0]).toMatchObject({ result: "unknown", evidence_ids: [], text_digest: b }); expect(adopted.artifacts).toEqual(payload().artifacts);
+  });
+});
+
+describe("report and work-order handoff through the actual form and command controller (unrun)", () => {
+  it("requires a fresh stop statement and sends one fixed S command for the exact W", async () => {
+    h.current.work_order = workOrder();
+    button(panel(), copy.create).onClick();
+    expect(find(panel(), Checkbox).checked).toBe(false);
+    expect(button(panel(), copy.previewHandoff).disabled).toBe(true);
+    expect(find(panel(), Input, (props) => props["aria-label"] === copy.name).value).toBe("Codex");
+    await button(panel(), copy.previewHandoff).onClick();
+    expect(h.sent).toEqual([]); expect(JSON.stringify(panel())).toContain(copy.stopRequired);
+    button(panel(), copy.close).onClick();
+    const prepared = await ready(true);
+    await button(prepared, copy.confirmHandoff).onClick();
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0]).toMatchObject({ action: "task.delivery.submit", expected_version: 7, payload: { work_order: { id: "W1", order_revision: 2, stopped_attestation: true } } });
+    expect(JSON.stringify(panel())).toContain(copy.submittedHandoff);
+    expect(h.saved).toHaveBeenCalledTimes(1);
+  });
+  it("can save only the report while a work order remains held, without inventing a stop statement", async () => {
+    h.current.work_order = workOrder();
+    await button(await ready(), copy.confirm).onClick();
+    expect(h.sent).toHaveLength(1); expect(h.sent[0].payload.work_order).toBeUndefined();
+    expect(JSON.stringify(panel())).toContain(copy.submitted);
+  });
+  it.each(["id", "order_revision", "removed"])("keeps report contents but requires adoption and a new stop statement after W %s changes", async (change) => {
+    h.current.work_order = workOrder(); button(panel(), copy.create).onClick();
+    find(panel(), Input.TextArea, (props) => props["aria-label"] === copy.summary).onChange({ target: { value: "Keep this report" } });
+    find(panel(), Checkbox).onChange({ target: { checked: true } });
+    h.current = { ...current(), work_order: change === "removed" ? null : { ...workOrder(), ...(change === "id" ? { id: "W2" } : { order_revision: 3 }) } };
+    await button(panel(), copy.previewHandoff).onClick();
+    expect(button(panel(), copy.adopt)).toBeDefined(); expect(h.sent).toHaveLength(0);
+    button(panel(), copy.adopt).onClick();
+    expect(find(panel(), Input.TextArea, (props) => props["aria-label"] === copy.summary).value).toBe("Keep this report");
+    if (change !== "removed") { expect(find(panel(), Checkbox).checked).toBe(false); expect(button(panel(), copy.previewHandoff).disabled).toBe(true); }
+  });
+  it.each([false, 1, "true", null, undefined])("rejects non-explicit stopped attestation %s in the actual original validator", (stopped) => {
+    const report: any = payload(); report.work_order = { id: "W1", order_revision: 2, stopped_attestation: stopped };
+    expect(validSubmissionPayload(report, "T")).toBe(false);
+  });
+  it.each(["../W1", "W/1", "W\\1", "\ud800", "W\u0085"])("rejects malformed bound W identity %s before transport", (id) => {
+    const report = payload(); report.work_order = { id, order_revision: 2, stopped_attestation: true };
+    expect(validSubmissionPayload(report, "T")).toBe(false);
+  });
+  it.each(["missing", "revision", "body", "foreign"])("rejects malformed current handoff context %s", async (change) => {
+    const value: any = current(); value.work_order = workOrder();
+    if (change === "missing") delete value.work_order;
+    if (change === "revision") value.work_order.order_revision = true;
+    if (change === "body") value.work_order.packet = { arbitrary: "not a thin context" };
+    if (change === "foreign") value.project_id = "Q";
+    vi.mocked(request).mockResolvedValueOnce(value);
+    await expect(readSubmissionCurrent("P", "T", projectSessionKey())).rejects.toThrow("submissionInvalid");
+  });
+  it.each(["id", "revision", "state", "ref", "missing"])("refuses a handoff ACK with wrong %s", (change) => {
+    const value = original(); (value.payload as TaskSubmissionPayload).work_order = { id: "W1", order_revision: 2, stopped_attestation: true };
+    const answer: any = ack(value);
+    if (change === "id") answer.result.work_order.id = "W2";
+    if (change === "revision") answer.result.work_order.order_revision = 2;
+    if (change === "state") answer.result.work_order.state = "claimed";
+    if (change === "ref") answer.affected_refs = answer.affected_refs.filter((item: any) => item.kind !== "work_order");
+    if (change === "missing") delete answer.result.work_order;
+    expect(validSubmissionAck("P", "T", value, answer)).toBe(false);
+  });
+  it("retains the entire S/W original across transport loss and replays one unchanged command", async () => {
+    let raw: string | null = null; const sent: string[] = []; const value = original();
+    (value.payload as TaskSubmissionPayload).work_order = { id: "W1", order_revision: 2, stopped_attestation: true };
+    const controller = () => createSubmissionController({ projectId: "P", taskId: "T", scope: "scope", currentScope: () => "scope", load: () => raw, save: (next) => { raw = next; }, send: async (captured) => { sent.push(JSON.stringify(captured)); if (sent.length === 1) throw new TypeError("Lost reply"); return ack(captured); } });
+    await controller().run(value);
+    (value.payload as TaskSubmissionPayload).work_order!.id = "W2";
+    await controller().replay(); expect(sent).toHaveLength(2); expect(sent[1]).toBe(sent[0]); expect(JSON.parse(sent[1]).payload.work_order.id).toBe("W1");
+  });
+  it("releases the draft synchronously before the saved callback, without releasing an unknown command", async () => {
+    const prepared = await ready(); expect(h.editing.mock.calls).toEqual([[true]]);
+    h.saved.mockImplementationOnce(() => expect(h.editing.mock.calls).toEqual([[true], [false]]));
+    await button(prepared, copy.confirm).onClick(); expect(h.saved).toHaveBeenCalledTimes(1);
+    h.editing.mockReset(); h.frames = {}; h.mode = "unknown";
+    await button(await ready(), copy.confirm).onClick();
+    expect(h.editing.mock.calls).toEqual([[true]]); expect(externalDeliveryRecoveryPending("P", "T")).toBe(true);
+  });
+  it("opens the fixed report's linked work order without changing acceptance", () => {
+    const value = detail(); value.payload.work_order = { id: "W1", order_revision: 2, stopped_attestation: true };
+    const tree = frame("facts", () => SubmissionFacts({ detail: value }));
+    const href = button(tree, copy.openWorkOrder).href;
+    expect(href).toContain("work_order_id=W1"); expect(href).toContain("submission_id=S1"); expect(href).toContain("project_id=P");
+    expect(JSON.stringify(tree)).toContain(copy.stoppedReported); expect(JSON.stringify(tree)).toContain(copy.statuses.awaiting_review);
   });
 });
 

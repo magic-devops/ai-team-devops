@@ -1,4 +1,4 @@
-import { Alert, Button, Input, Modal, Select, Skeleton, Space, Tag } from "antd";
+import { Alert, Button, Checkbox, Input, Modal, Select, Skeleton, Space, Tag } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -11,28 +11,34 @@ import { taskSubmissionCopy, taskSubmissionReason } from "@/i18n/task-submission
 import { parseSubmissionSelection, readSubmissionCurrent, readSubmissionDetail, readSubmissions, submissionUrl, useSubmissionCommand, validSubmissionOriginal,
   type SubmissionCurrent, type SubmissionDetail, type SubmissionOriginal, type SubmissionReason, type TaskSubmissionPayload, type TaskSubmissionReviewPayload } from "@/lib/deliveryTaskSubmission";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
+import { externalWorkOrderTaskHref } from "@/lib/externalWorkOrderRoute";
 
-type Draft = { kind: "submit"; current: SubmissionCurrent; payload: TaskSubmissionPayload } | { kind: "review"; detail: SubmissionDetail; decision: "accept" | "request_changes"; comment: string };
+type Draft = { kind: "submit"; current: SubmissionCurrent; payload: TaskSubmissionPayload; stopped: boolean } | { kind: "review"; detail: SubmissionDetail; decision: "accept" | "request_changes"; comment: string };
 type Props = { projectId: string; taskId: string; sessionId: string; disabled?: boolean; isActive?: () => boolean; canSubmit?: () => boolean; requestCreate?: number;
+  requestWorkOrder?: { id: string; order_revision?: number };
   onSaved: (ack: DeliveryCommandAck) => void; onEditingChange?: (value: boolean) => void; onUnresolvedChange?: (value: boolean) => void };
 export function submissionDraft(current: SubmissionCurrent): TaskSubmissionPayload {
   return { task_id: current.task_id, task_basis: current.task_basis, definition_digest: current.definition_digest, native_boundary_digest: current.native_boundary_digest,
-    source: { kind: "human", name: "", url: "" }, summary: "", artifacts: [{ id: "evidence-1", title: "", content: "", url: "", sha256: null }],
+    source: { kind: current.work_order?.executor.kind || "human", name: current.work_order?.executor.name || "", url: "" }, summary: "", artifacts: [{ id: "evidence-1", title: "", content: "", url: "", sha256: null }],
     criteria: current.criteria.map(({ source, index, text_digest }) => ({ source, index, text_digest, result: "unknown", evidence_ids: [] })), tests: [] };
 }
 export function adoptSubmissionDraft(payload: TaskSubmissionPayload, current: SubmissionCurrent): TaskSubmissionPayload {
-  return { ...structuredClone(payload), task_basis: current.task_basis, definition_digest: current.definition_digest, native_boundary_digest: current.native_boundary_digest,
+  const next: TaskSubmissionPayload = { ...structuredClone(payload), task_basis: current.task_basis, definition_digest: current.definition_digest, native_boundary_digest: current.native_boundary_digest,
     criteria: current.criteria.map(({ source, index, text_digest }) => payload.criteria.find((item) => item.source === source && item.index === index && item.text_digest === text_digest) ||
       { source, index, text_digest, result: "unknown", evidence_ids: [] }) };
+  delete next.work_order;
+  return next;
 }
-const sameBasis = (a: SubmissionCurrent, b: SubmissionCurrent) => a.task_basis === b.task_basis && a.definition_digest === b.definition_digest && a.native_boundary_digest === b.native_boundary_digest;
+const sameBasis = (a: SubmissionCurrent, b: SubmissionCurrent) => a.task_basis === b.task_basis && a.definition_digest === b.definition_digest && a.native_boundary_digest === b.native_boundary_digest &&
+  a.work_order?.id === b.work_order?.id && a.work_order?.order_revision === b.work_order?.order_revision;
 
-export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disabled = false, isActive, canSubmit, requestCreate = 0, onSaved, onEditingChange, onUnresolvedChange }: Props) {
+export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disabled = false, isActive, canSubmit, requestCreate = 0, requestWorkOrder, onSaved, onEditingChange, onUnresolvedChange }: Props) {
   const { i18n } = useTranslation(), copy = taskSubmissionCopy(i18n?.language);
   const origin = useRef(projectSessionKey()), mounted = useRef(true), pending = useRef(false);
   const identity = JSON.stringify([projectId, taskId, sessionId]), activeIdentity = useRef(identity); activeIdentity.current = identity;
   const access = useRef({ disabled, isActive, canSubmit }); access.current = { disabled, isActive, canSubmit };
   const notify = useRef(onUnresolvedChange); notify.current = onUnresolvedChange;
+  const editing = useRef(onEditingChange); editing.current = onEditingChange;
   const controller = useRef<{ snapshot: () => { phase: string } }>();
   const command = useSubmissionCommand(projectId, taskId, sessionId, (value) => notify.current?.(value || controller.current?.snapshot().phase === "succeeded")); controller.current = command;
   const state = command.state, locked = !["idle", "refused"].includes(state.phase);
@@ -44,7 +50,7 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
   const [changed, setChanged] = useState(false), [latest, setLatest] = useState<SubmissionCurrent | SubmissionDetail | null>(null);
   const initialSelection = useRef(parseSubmissionSelection(typeof location === "undefined" ? "" : location.hash, projectId, taskId));
   const [selected, setSelected] = useState(initialSelection.current.id), [invalidSelection, setInvalidSelection] = useState(initialSelection.current.invalid), [historyOpen, setHistoryOpen] = useState(false), [cursor, setCursor] = useState("");
-  const changeDraft = (value: Draft | null) => { draftRef.current = value; setDraft(value); };
+  const changeDraft = (value: Draft | null) => { const changed = Boolean(draftRef.current) !== Boolean(value); draftRef.current = value; if (changed) editing.current?.(Boolean(value)); setDraft(value); };
   const changePrepared = (value: SubmissionOriginal | null) => { preparedRef.current = value; setPrepared(value); };
   const current = () => mounted.current && activeIdentity.current === identity && origin.current === projectSessionKey() && access.current.isActive?.() !== false && command.current();
   const assertCurrent = () => { if (!current()) throw new Error("submissionScopeChanged"); };
@@ -62,18 +68,17 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
   const reads = useRef({ proof, detail }); reads.current = { proof, detail };
   const canWrite = () => current() && !isLocked() && !access.current.disabled && access.current.canSubmit?.() !== false && Boolean(reads.current.proof) && !query.error;
   const reportError = (cause: unknown) => { if (!current()) return; const problem = executionRuntimeProblem(cause); setError(problem.message === "submissionInvalid" || problem.message === "retainedOriginalInvalid" ? copy.invalid : problem.message === "submissionScopeChanged" ? copy.scopeChanged : problem.code ? JSON.stringify({ detail: problem }) : problem.message); };
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { mounted.current = true; if (draftRef.current) editing.current?.(true); return () => { mounted.current = false; if (draftRef.current) editing.current?.(false); }; }, []);
   useEffect(() => {
     const selectRoute = () => { if (!current() || isLocked()) return; const value = parseSubmissionSelection(location.hash, projectId, taskId); setSelected(value.id); setInvalidSelection(value.invalid); };
     window.addEventListener("hashchange", selectRoute); window.addEventListener("popstate", selectRoute);
     return () => { window.removeEventListener("hashchange", selectRoute); window.removeEventListener("popstate", selectRoute); };
   }, [projectId, taskId, sessionId, command]);
   useEffect(() => { notify.current?.(["sending", "unknown", "succeeded"].includes(state.phase)); }, [state.phase]);
-  useEffect(() => { if (!draft) return; onEditingChange?.(true); return () => onEditingChange?.(false); }, [Boolean(draft), onEditingChange]);
   const begin = (decision?: "accept" | "request_changes") => {
     if (!canWrite() || pending.current || locked || draftRef.current || (decision ? !reads.current.detail?.permissions.can_review || decision === "accept" && !reads.current.detail.permissions.can_accept : !reads.current.proof?.can_submit)) return;
     try { assertCurrent(); if (state.phase === "refused") { command.reset(); if (command.snapshot().phase !== "idle") return; }
-      changeDraft(decision ? { kind: "review", detail: structuredClone(reads.current.detail!), decision, comment: "" } : { kind: "submit", current: structuredClone(reads.current.proof!), payload: submissionDraft(reads.current.proof!) });
+      changeDraft(decision ? { kind: "review", detail: structuredClone(reads.current.detail!), decision, comment: "" } : { kind: "submit", current: structuredClone(reads.current.proof!), payload: submissionDraft(reads.current.proof!), stopped: false });
       changePrepared(null); setChanged(false); setLatest(null); setError(""); setFeedback(""); setBlocked([]);
     } catch (cause) { reportError(cause); }
   };
@@ -81,22 +86,29 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
   useEffect(() => {
     if (!requestCreate || requestCreate <= handledCreateRequest.current || !proof || disabled || locked || busy) return;
     handledCreateRequest.current = requestCreate;
+    if (requestWorkOrder && (proof.work_order?.id !== requestWorkOrder.id || requestWorkOrder.order_revision !== undefined && proof.work_order?.order_revision !== requestWorkOrder.order_revision)) {
+      setError(copy.requestWorkOrderChanged); return;
+    }
     begin();
-  }, [requestCreate, proof, disabled, locked, busy]);
+  }, [requestCreate, proof, disabled, locked, busy, requestWorkOrder]);
   const patch = (change: Partial<TaskSubmissionPayload>) => {
     const value = draftRef.current; if (!value || value.kind !== "submit" || pending.current || locked || preparedRef.current || !canWrite()) return;
     changeDraft({ ...value, payload: { ...value.payload, ...change } }); setError("");
   };
-  const preview = async (readLatest = false) => {
+  const preview = async (readLatest = false, handoff = false) => {
     const value = draftRef.current; if (!value || pending.current || locked || !canWrite()) return;
     pending.current = true; setBusy(true); setError(""); setBlocked([]); changePrepared(null); setLatest(null);
     try {
       assertCurrent();
       if (value.kind === "submit") {
+        if (handoff && (!value.current.work_order || !value.stopped)) throw new Error(copy.stopRequired);
         const next = await readSubmissionCurrent(projectId, taskId, origin.current); assertCurrent();
         if (readLatest || !sameBasis(value.current, next)) { setLatest(next); setChanged(true); return; }
         if (!next.can_submit) { setBlocked(next.reasons); throw new Error(next.reasons.map((item) => taskSubmissionReason(i18n?.language, item)).join(" · ") || copy.changed); }
-        const original: SubmissionOriginal = { action: "task.delivery.submit", payload: structuredClone(value.payload), intent: { version: next.version, key: crypto.randomUUID() } };
+        const payload = structuredClone(value.payload);
+        delete payload.work_order;
+        if (handoff) payload.work_order = { id: next.work_order!.id, order_revision: next.work_order!.order_revision, stopped_attestation: true };
+        const original: SubmissionOriginal = { action: "task.delivery.submit", payload, intent: { version: next.version, key: crypto.randomUUID() } };
         if (!validSubmissionOriginal(original, taskId)) throw new Error("submissionInvalid"); changePrepared(original);
       } else {
         const next = await readSubmissionDetail(projectId, taskId, value.detail.submission.id, origin.current); assertCurrent();
@@ -113,7 +125,7 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
   const adopt = () => {
     const value = draftRef.current; if (!value || !latest || pending.current || locked || !canWrite()) return;
     try { assertCurrent(); if (state.phase === "refused") { command.reset(); if (command.snapshot().phase !== "idle") return; }
-      if (value.kind === "submit" && "criteria" in latest) changeDraft({ ...value, current: structuredClone(latest), payload: adoptSubmissionDraft(value.payload, latest) });
+      if (value.kind === "submit" && "criteria" in latest) changeDraft({ ...value, current: structuredClone(latest), payload: adoptSubmissionDraft(value.payload, latest), stopped: false });
       else if (value.kind === "review" && "submission" in latest && latest.submission.id === value.detail.submission.id && latest.submission.digest === value.detail.submission.digest) changeDraft({ ...value, detail: structuredClone(latest) });
       else throw new Error("submissionInvalid");
       changePrepared(null); setChanged(false); setLatest(null); setError("");
@@ -124,7 +136,7 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
     const original = command.snapshot().original;
     command.reset(); if (command.snapshot().phase !== "idle") { notify.current?.(true); return; }
     changeDraft(null); changePrepared(null); setLatest(null); setChanged(false); setError(""); notify.current?.(false);
-    setFeedback(original?.action === "task.delivery.review" ? copy.reviewSaved : copy.submitted);
+    setFeedback(original?.action === "task.delivery.review" ? copy.reviewSaved : (original?.payload as TaskSubmissionPayload | undefined)?.work_order ? copy.submittedHandoff : copy.submitted);
     const id = ack.result?.submission_id; if (typeof id === "string") { setSelected(id); setInvalidSelection(false); }
     try { onSaved(ack); const value = await query.refetch(); assertCurrent(); if (value.isError) setError(copy.refreshFailed); if (id && id === selectedId) void detailQuery.refetch(); if (historyOpen) void history.refetch(); }
     catch { if (current()) setError(copy.refreshFailed); }
@@ -145,7 +157,7 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
   const errorProblem = executionRuntimeProblem(error || state.error);
   const errorMessage = errorProblem.code ? taskSubmissionReason(i18n?.language, errorProblem) : errorProblem.message;
   const problemFacts = (cause: unknown) => { const problem = executionRuntimeProblem(cause); return <>{taskSubmissionReason(i18n?.language, problem)}{problem.code && <details className="runtime-help"><summary>{copy.details}</summary><code>{problem.code}</code><p>{problem.message}</p></details>}</>; };
-  const fixedDetails = (original: SubmissionOriginal) => <details className="runtime-help"><summary>{copy.details}</summary><dl className="grid grid-cols-[auto_1fr] gap-x-3 break-all"><dt>{copy.task}</dt><dd>{taskId}</dd><dt>{copy.version}</dt><dd>{original.intent.version}</dd><dt>{copy.digest}</dt><dd>{original.payload.task_basis}</dd></dl></details>;
+  const fixedDetails = (original: SubmissionOriginal) => <details className="runtime-help"><summary>{copy.details}</summary><dl className="grid grid-cols-[auto_1fr] gap-x-3 break-all"><dt>{copy.task}</dt><dd>{taskId}</dd><dt>{copy.version}</dt><dd>{original.intent.version}</dd><dt>{copy.digest}</dt><dd>{original.payload.task_basis}</dd>{original.action === "task.delivery.submit" && (original.payload as TaskSubmissionPayload).work_order && <><dt>{copy.workOrder}</dt><dd>{(original.payload as TaskSubmissionPayload).work_order!.id} · {(original.payload as TaskSubmissionPayload).work_order!.order_revision}</dd><dt>{copy.stopAttestation}</dt><dd>{copy.stoppedReported}</dd></>}</dl></details>;
   const recovery = <>
     {(error || state.error) && <Alert role="alert" type="warning" title={copy.failed} description={state.error === "retainedOriginalUnavailable" ? copy.unavailableStorage : state.error === "retainedOriginalInvalid" || state.error === "ackMismatch" ? copy.invalid : <>{errorMessage}{errorProblem.code && <details className="runtime-help"><summary>{copy.details}</summary><code>{errorProblem.code}</code><p>{errorProblem.message}</p></details>}</>} />}
     {blocked.length > 0 && Boolean(error) && reasons(blocked)}
@@ -175,10 +187,18 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
       <Space wrap>{cursor && <Button size="small" disabled={locked} onClick={() => { if (current()) setCursor(""); }}>{copy.first}</Button>}{history.data?.next_cursor && <Button size="small" disabled={locked} onClick={() => { if (current() && history.data?.next_cursor) setCursor(history.data.next_cursor); }}>{copy.more}</Button>}</Space>
     </details>
     <Modal open={Boolean(draft)} title={draft?.kind === "review" ? copy.review : copy.create} width={760} maskClosable={false} closable={!locked && !busy} keyboard={!locked && !busy} onCancel={close}
-      footer={<Space wrap><Button disabled={locked || busy} onClick={close}>{copy.close}</Button>{!locked && !prepared && <Button type="primary" loading={busy} disabled={!proof || disabled || changed} onClick={() => void preview()}>{draft?.kind === "review" ? copy.reviewPreview : copy.preview}</Button>}{prepared && !locked && <Button type="primary" loading={busy} disabled={disabled || changed} onClick={() => void submit()}>{draft?.kind === "review" ? copy.reviewConfirm : copy.confirm}</Button>}</Space>}>
+      footer={<Space wrap><Button disabled={locked || busy} onClick={close}>{copy.close}</Button>{!locked && !prepared && <>
+        <Button type={draft?.kind === "submit" && draft.current.work_order ? "default" : "primary"} loading={busy} disabled={!proof || disabled || changed} onClick={() => void preview()}>{draft?.kind === "review" ? copy.reviewPreview : draft?.current.work_order ? copy.previewOnly : copy.preview}</Button>
+        {draft?.kind === "submit" && draft.current.work_order && <Button type="primary" loading={busy} disabled={!proof || disabled || changed || !draft.stopped} onClick={() => void preview(false, true)}>{copy.previewHandoff}</Button>}
+      </>}{prepared && !locked && <Button type="primary" loading={busy} disabled={disabled || changed} onClick={() => void submit()}>{draft?.kind === "review" ? copy.reviewConfirm : (prepared.payload as TaskSubmissionPayload).work_order ? copy.confirmHandoff : copy.confirm}</Button>}</Space>}>
       <p className="runtime-help">{copy.reportOnly}</p>
       {draft && recovery}
       {shown?.kind === "submit" && payload && <div className="space-y-4">
+        {shown.current.work_order && <section className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3" aria-label={copy.handoff}>
+          <strong>{copy.handoff}</strong><p className="break-words text-sm">{shown.current.work_order.executor.name} · {shown.current.work_order.executor.tool}</p><p className="break-all text-xs text-[var(--muted)]">{copy.workOrder}: {shown.current.work_order.id}</p>
+          <p className="runtime-help">{copy.handoffHint}</p><Checkbox checked={shown.stopped} disabled={formLocked} onChange={(event) => { const value = draftRef.current; if (value?.kind === "submit" && !pending.current && !isLocked() && !preparedRef.current && canWrite()) changeDraft({ ...value, stopped: event.target.checked }); }}>{copy.stopAttestation}</Checkbox>
+          <p className="runtime-help">{copy.reportOnlyHint}</p>
+        </section>}
         <TaskAcceptanceFacts acceptance={{ criteria: shown.current.criteria.map((item) => item.text), sources: shown.current.criteria.map(({ source, index, text }) => ({ source, index, text })), available: shown.current.criteria.length > 0, requirement_id: shown.current.definition.requirement?.id || null, requirement_revision: shown.current.definition.requirement?.revision ?? null }} />
         <label className="block">{copy.kind}<Select className="w-full" aria-label={copy.kind} disabled={formLocked} value={payload.source.kind} options={Object.entries(copy.kinds).map(([value, label]) => ({ value, label }))} onChange={(kind) => patch({ source: { ...payload.source, kind } })} /></label>
         <label className="block">{copy.name} *<Input aria-label={copy.name} value={payload.source.name} maxLength={2000} disabled={formLocked} onChange={(event) => patch({ source: { ...payload.source, name: event.target.value } })} /></label>
@@ -223,6 +243,7 @@ export function SubmissionFacts({ detail }: { detail: SubmissionDetail }) {
     <div><strong className="text-sm">{copy.tests}</strong>{payload.tests.length ? <ul>{payload.tests.map((item) => <li key={item.id}><Tag>{copy.testStates[item.status]}</Tag>{item.title}<small className="block runtime-help">{item.evidence_ids.map((id) => payload.artifacts.find((row) => row.id === id)?.title || id).join(" · ")}</small></li>)}</ul> : <p className="runtime-help">{copy.noTests}</p>}</div>
     <details className="runtime-help"><summary>{copy.artifacts} · {payload.artifacts.length}</summary>{payload.artifacts.map((item) => <article className="space-y-1 py-2" key={item.id}><strong>{item.title}</strong>{item.url && submissionUrl(item.url) && <a className="block break-all" href={item.url} target="_blank" rel="noopener noreferrer">{item.url}</a>}{item.content && <pre className="runtime-output whitespace-pre-wrap">{item.content}</pre>}{item.sha256 && <p className="break-all">{copy.hash}: {item.sha256}</p>}</article>)}</details>
     {detail.decision && <blockquote><p>{detail.decision.comment}</p><footer>{copy.reviewer}: {detail.decision.reviewer.name} · {detail.decision.created_at}</footer></blockquote>}
+    {payload.work_order && <div className="space-y-1 rounded-lg border border-[var(--border)] p-2"><p className="runtime-help">{copy.stoppedReported}</p><Button size="small" href={externalWorkOrderTaskHref(detail.project_id, detail.task_id, payload.work_order.id, s.id, typeof location === "undefined" ? "" : location.hash)}>{copy.openWorkOrder}</Button></div>}
     {s.issue_id && <Button size="small" href={executionIssueHref(s.issue_id, typeof location === "undefined" ? "" : location.hash, detail.project_id)}>{copy.issue}</Button>}
     <details className="runtime-help"><summary>{copy.details}</summary><dl className="grid grid-cols-[auto_1fr] gap-x-3 break-all"><dt>{copy.submission}</dt><dd>{s.id}</dd><dt>{copy.digest}</dt><dd>{s.digest}</dd><dt>{copy.task}</dt><dd>{s.task_id}</dd></dl></details>
   </section>;

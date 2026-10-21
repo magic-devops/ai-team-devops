@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from .delivery_execution_contract import ExecutionSnapshot
+from .delivery_external_work_order_contract import Executor, Identity as WorkOrderIdentity
 from .delivery_issue_contract import human_text
 
 Digest = Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{64}$")]
@@ -68,6 +69,25 @@ class SubmissionTest(Contract):
     evidence_ids: list[EvidenceId] = Field(max_length=40)
 
 
+class SubmissionWorkOrderBinding(Contract):
+    id: WorkOrderIdentity
+    order_revision: int = Field(ge=1)
+    stopped_attestation: Literal[True]
+
+    @field_validator("stopped_attestation", mode="before")
+    @classmethod
+    def actual_stop_attestation(cls, value):
+        if value is not True:
+            raise ValueError("Explicitly attest that this external work stopped")
+        return value
+
+
+class SubmissionWorkOrderContext(Contract):
+    id: WorkOrderIdentity
+    order_revision: int = Field(ge=1)
+    executor: Executor
+
+
 class TaskDeliverySubmit(Contract):
     task_id: Identity
     task_basis: Digest
@@ -78,6 +98,7 @@ class TaskDeliverySubmit(Contract):
     artifacts: list[SubmissionArtifact] = Field(min_length=1, max_length=40)
     criteria: list[SubmissionCriterion] = Field(min_length=1, max_length=160)
     tests: list[SubmissionTest] = Field(max_length=40)
+    work_order: SubmissionWorkOrderBinding | None = None
 
     @model_validator(mode="after")
     def fixed_references_and_budget(self):
@@ -182,6 +203,7 @@ class SubmissionCurrent(Contract):
     can_submit: bool
     reasons: list[SubmissionReason]
     latest_submission_id: Identity | None
+    work_order: SubmissionWorkOrderContext | None
 
 
 class SubmissionDetail(Contract):

@@ -43,6 +43,7 @@ import "./delivery-manual-review.css";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 import type { TaskAcceptance } from "@/lib/taskAcceptance";
 import { taskSubmissionCopy } from "@/i18n/task-submission";
+import { useDeliveryDraftState } from "@/lib/useDeliveryDraftState";
 
 function reviewTime(value: string | null, language: string) {
   if (!value) return "—";
@@ -417,7 +418,7 @@ export function DeliveryManualReviewPanel({
   const access = useRef({ disabled, canSubmit }); access.current = { disabled, canSubmit };
   // Fresh writes share the task's live authority; retained replay stays independent.
   const canWrite = () => !access.current.disabled && access.current.canSubmit?.() !== false;
-  const [session, setSession] = useState<ManualReviewSession | null>(null);
+  const [session, setSession] = useDeliveryDraftState<ManualReviewSession | null>(null, onEditingChange);
   const [draftScope, setDraftScope] = useState("");
   const [feedback, setFeedback] = useState("");
   const [refreshFailed, setRefreshFailed] = useState(false);
@@ -483,11 +484,6 @@ export function DeliveryManualReviewPanel({
         .map((review) => [review.id, review]) || [],
     ).values(),
   ];
-  useEffect(() => {
-    if (!modalOpen) return;
-    onEditingChange?.(true);
-    return () => onEditingChange?.(false);
-  }, [modalOpen, onEditingChange]);
   function open() {
     if (
       !canWrite() ||

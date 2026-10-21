@@ -18,7 +18,7 @@ import { DesignReferenceFacts } from "../../subapps/ai-rd-center/src/pages/deliv
 type Props = { projectId: string; taskId: string; sessionId: string; selectedOrderId?: string; invalidSelection?: boolean; compose?: boolean;
   disabled?: boolean; isActive?: () => boolean; canSubmit?: () => boolean; onSaved?: (ack: DeliveryCommandAck) => void;
   onUnresolvedChange?: (pending: boolean) => void; onEditingChange?: (editing: boolean) => void;
-  onSelect?: (orderId: string) => void; onWriteReport?: () => void };
+  onSelect?: (orderId: string) => void; onWriteReport?: (order: { id: string; order_revision: number }) => void };
 type Draft = { action: WorkOrderAction; current?: WorkOrderCurrent; detail?: WorkOrderDetail; executorId: string; instructions: string;
   comment: string; percent: number | null; knownPercent: boolean; status: "running" | "blocked"; submissionId: string; stopped: boolean };
 const newDraft = (action: WorkOrderAction): Draft => ({ action, executorId: "", instructions: "", comment: "", percent: null, knownPercent: false, status: "running", submissionId: "", stopped: false });
@@ -167,7 +167,7 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
         <Button size="small" disabled={busy} onClick={() => void download(detail.work_order)}>{copy.download}</Button>
         {detail.permissions.can_claim && <Button size="small" type="primary" disabled={!canWrite() || Boolean(draft)} onClick={() => begin("work_order.claim")}>{copy.claim}</Button>}
         {detail.permissions.can_progress && <Button size="small" disabled={!canWrite() || Boolean(draft)} onClick={() => begin("work_order.progress")}>{copy.updateProgress}</Button>}
-        {detail.permissions.can_report && <><Button size="small" disabled={locked || busy} href={onWriteReport ? undefined : externalWorkOrderTaskHref(projectId, taskId, detail.work_order.id, "", background, true)} onClick={onWriteReport}>{copy.writeReport}</Button><Button size="small" type="primary" disabled={!canWrite() || Boolean(draft)} onClick={() => begin("work_order.report")}>{copy.linkReport}</Button></>}
+        {detail.permissions.can_report && <><Button size="small" type="primary" disabled={locked || busy} href={onWriteReport ? undefined : externalWorkOrderTaskHref(projectId, taskId, detail.work_order.id, "", background, true)} onClick={onWriteReport ? () => { if (canWrite() && !pending.current && !draftRef.current) onWriteReport({ id: detail.work_order.id, order_revision: detail.work_order.order_revision }); } : undefined}>{copy.writeReport}</Button><Button size="small" disabled={!canWrite() || Boolean(draft)} onClick={() => begin("work_order.report")}>{copy.linkReport}</Button></>}
         {detail.work_order.submission && <Button size="small" href={externalWorkOrderTaskHref(projectId, taskId, detail.work_order.id, detail.work_order.submission.id, background)} disabled={locked}>{copy.openReport}</Button>}
         {detail.permissions.can_cancel && <Button size="small" disabled={!canWrite() || Boolean(draft)} onClick={() => begin("work_order.cancel")}>{copy.cancelOrder}</Button>}
         {detail.permissions.can_release && <Button size="small" disabled={!canWrite() || Boolean(draft)} onClick={() => begin("work_order.release")}>{copy.release}</Button>}

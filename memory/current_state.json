@@ -1,11 +1,11 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-21T04:53:23.355979+00:00",
+  "updated_at": "2026-10-21T05:17:06.426512+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-21T04:53:23.355979+00:00",
+    "updated_at": "2026-10-21T05:17:06.426512+00:00",
     "status": "source_implemented_runtime_validation_deferred_by_user",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
@@ -15,7 +15,7 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/external-delivery-attention/",
+    "evidence": ".sop-runtime/delivery-evidence/guided-delivery-handoff/",
     "verification_status": "current_source_runtime_types_build_and_browser_unverified",
     "next_step": "run_current_pinned_runtime_types_build_browser_and_explicit_index_rebuild_checks_when_user_window_recovers",
     "production_integration_complete": false,
@@ -652,7 +652,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "外部交付待办源码阶段：真实接单与返工参与人、外部待验收、受阻可视化和精确报告导航；运行验证按用户安排后置。",
+  "current": "报告交接与任务草稿源码阶段：一次提交固定报告并交接明确工单，保护任务及父导航编辑位置；运行验证仍按用户安排后置。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -822,7 +822,7 @@
     "task_id": "T-external-delivery-attention",
     "base_commit": "0151490db2383fa43964088c2aae69f0bcc16525",
     "updated_at": "2026-10-21T04:53:23.355979+00:00",
-    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "status": "source_committed_runtime_validation_deferred_by_user",
     "design": "docs/EXTERNAL_DELIVERY_ATTENTION_DESIGN.md",
     "guide": "docs/EXTERNAL_WORK_ORDER_GUIDE.md",
     "record": "memory/external-delivery-attention-progress.md",
@@ -837,6 +837,26 @@
     "external_adapter_handshake_verified": false,
     "production_integration_complete": false,
     "full_lifecycle_complete": false,
-    "next_step": "source_phase_commit_then_run_pinned_validation_and_index_rebuild_when_window_recovers_continue_actual_integration_and_operations"
+    "next_step": "run_current_pinned_checks_and_explicit_index_rebuild_when_window_recovers",
+    "source_commit": "f05fe9c7c4ed7203f57ae987bd1b8ae9f4b13cf8"
+  },
+  "guided_delivery_handoff": {
+    "task_id": "T-guided-delivery-handoff",
+    "base_commit": "f05fe9c7c4ed7203f57ae987bd1b8ae9f4b13cf8",
+    "updated_at": "2026-10-21T05:17:06.426512+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/GUIDED_DELIVERY_HANDOFF_DESIGN.md",
+    "guide": "docs/EXTERNAL_WORK_ORDER_GUIDE.md",
+    "record": "memory/guided-delivery-handoff-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/guided-delivery-handoff/",
+    "commit_receipt": ".sop-runtime/delivery-evidence/guided-delivery-handoff/staging-reviewed/commit-receipt.json",
+    "runtime_tests_executed": false,
+    "typescript_checked": false,
+    "build_executed": false,
+    "browser_verified": false,
+    "external_adapter_handshake_verified": false,
+    "production_integration_complete": false,
+    "full_lifecycle_complete": false,
+    "next_step": "source_phase_commit_then_current_pinned_runtime_types_build_browser_validation_when_window_recovers_continue_actual_integration_and_operations"
   }
 }

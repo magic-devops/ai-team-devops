@@ -101,6 +101,46 @@ def test_transport_loss_reuses_original_without_implicit_replacement_and_conflic
     assert len(calls) == 2 and calls[0].content == calls[1].content
 
 
+def test_bound_report_preserves_exact_work_order_stop_statement_in_one_command_and_replay():
+    """Actual ManagerClient transport definition; not executed in this source stage."""
+    body = original()
+    body["payload"]["work_order"] = {"id": "W1", "order_revision": 2, "stopped_attestation": True}
+    captured = deepcopy(body)
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) == 1:
+            raise httpx.ReadError("Lost handoff receipt", request=request)
+        return httpx.Response(200, json={"result": {"submission_id": "S1", "work_order": {"id": "W1", "order_revision": 3, "state": "reported"}}})
+
+    with client_for(handler) as client:
+        with pytest.raises(SopTransportError):
+            client.delivery_task_submit(body)
+        result = client.delivery_task_submit(body)
+    assert len(calls) == 2 and calls[0].content == calls[1].content
+    assert all(call.method == "POST" and call.url.path == "/api/v1/delivery/commands" for call in calls)
+    assert json.loads(calls[0].content) == {"action": "task.delivery.submit", **captured}
+    assert result["result"]["work_order"] == {"id": "W1", "order_revision": 3, "state": "reported"}
+    assert body == captured
+
+
+def test_current_handoff_context_is_one_read_and_report_only_does_not_acquire_it_implicitly():
+    calls = []
+    context = {"id": "W1", "order_revision": 2, "executor": {"id": "tool:codex", "name": "Codex", "kind": "tool", "tool": "codex", "active": True, "available": True, "reasons": []}}
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={"work_order": context} if request.method == "GET" else {"result": {"submission_id": "S1"}})
+
+    body = original()
+    with client_for(handler) as client:
+        assert client.delivery_task_submission_current("T")["work_order"] == context
+        client.delivery_task_submit(body)
+    assert len(calls) == 2 and [call.method for call in calls] == ["GET", "POST"]
+    assert "work_order" not in json.loads(calls[1].content)["payload"]
+
+
 @pytest.mark.parametrize("change", ["version_missing", "key_missing", "payload_missing", "bool_version", "action_extra", "source_extra", "short_key", "nan", "object_key"])
 def test_original_envelope_is_strict_and_never_infers_values(change):
     body = original()

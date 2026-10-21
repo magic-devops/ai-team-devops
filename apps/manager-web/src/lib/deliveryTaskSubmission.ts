@@ -8,13 +8,16 @@ import { getSessionRevision } from "./authStorage";
 import { projectSessionKey } from "./projectPortfolio";
 import { request } from "./http";
 import { validDesignReferences } from "./designLibrary";
+import type { WorkOrderExecutor } from "./externalWorkOrders";
 
 export type SubmissionSource = { kind: "human" | "agent" | "tool"; name: string; url: string };
 export type SubmissionArtifact = { id: string; title: string; content: string; url: string; sha256: string | null };
 export type SubmissionCriterion = { source: "task" | "requirement"; index: number; text_digest: string; result: "met" | "not_met" | "unknown"; evidence_ids: string[] };
 export type SubmissionTest = { id: string; title: string; status: "passed" | "failed" | "skipped" | "not_run" | "unknown"; evidence_ids: string[] };
+export type SubmissionWorkOrderBinding = { id: string; order_revision: number; stopped_attestation: true };
+export type SubmissionWorkOrderContext = { id: string; order_revision: number; executor: WorkOrderExecutor };
 export type TaskSubmissionPayload = { task_id: string; task_basis: string; definition_digest: string; native_boundary_digest: string; source: SubmissionSource; summary: string;
-  artifacts: SubmissionArtifact[]; criteria: SubmissionCriterion[]; tests: SubmissionTest[] };
+  artifacts: SubmissionArtifact[]; criteria: SubmissionCriterion[]; tests: SubmissionTest[]; work_order?: SubmissionWorkOrderBinding | null };
 export type TaskSubmissionReviewPayload = { task_id: string; submission_id: string; submission_digest: string; task_basis: string; native_boundary_digest: string;
   decision: "accept" | "request_changes"; comment: string };
 export type SubmissionActor = { id: string; name: string };
@@ -26,7 +29,8 @@ export type SubmissionSummary = { id: string; task_id: string; created_at: strin
   counts: { artifacts: number; criteria: number; tests: number; reported_passed: number; reported_failed: number }; issue_id: string | null; review_id: string | null };
 export type SubmissionCurrent = { project_id: string; task_id: string; version: number; query_generation: number | null; as_of: string;
   task_basis: string; definition_digest: string; native_boundary_digest: string; definition: SubmissionDefinition;
-  criteria: Array<Pick<SubmissionCriterion, "source" | "index" | "text_digest"> & { text: string }>; can_submit: boolean; reasons: SubmissionReason[]; latest_submission_id: string | null };
+  criteria: Array<Pick<SubmissionCriterion, "source" | "index" | "text_digest"> & { text: string }>; can_submit: boolean; reasons: SubmissionReason[]; latest_submission_id: string | null;
+  work_order: SubmissionWorkOrderContext | null };
 export type SubmissionDetail = { project_id: string; task_id: string; version: number; as_of: string; task_basis: string | null; native_boundary_digest: string | null;
   submission: SubmissionSummary; payload: TaskSubmissionPayload; definition: SubmissionDefinition;
   decision: { id: string; review_id: string; decision: "accept" | "request_changes"; reviewer: SubmissionActor; comment: string; created_at: string } | null;
@@ -60,6 +64,14 @@ export function submissionUrl(value: unknown): value is string {
 const validSource = (value: unknown): value is SubmissionSource => record(value) && exact(value, ["kind", "name", "url"]) && ["human", "agent", "tool"].includes(value.kind) && text(value.name, 2000) && submissionUrl(value.url);
 const validActor = (value: unknown) => record(value) && submissionIdentity(value.id) && typeof value.name === "string";
 const validReasons = (value: unknown) => Array.isArray(value) && value.every((item) => record(item) && typeof item.code === "string" && typeof item.message === "string");
+const workOrderIdentity = (value: unknown): value is string => submissionIdentity(value) && !/[\ud800-\udfff]/u.test(value);
+export const validSubmissionWorkOrderBinding = (value: unknown): value is SubmissionWorkOrderBinding => record(value) && exact(value, ["id", "order_revision", "stopped_attestation"]) &&
+  workOrderIdentity(value.id) && integer(value.order_revision, 1) && value.stopped_attestation === true;
+export const validSubmissionWorkOrderContext = (value: unknown): value is SubmissionWorkOrderContext => record(value) && exact(value, ["id", "order_revision", "executor"]) &&
+  workOrderIdentity(value.id) && integer(value.order_revision, 1) && record(value.executor) && exact(value.executor, ["id", "name", "kind", "tool", "active", "available", "reasons"]) &&
+  text(value.executor.id, 100) && value.executor.id === value.executor.id.trim() && !/[\r\n\t]/.test(value.executor.id) &&
+  typeof value.executor.name === "string" && ["agent", "tool"].includes(value.executor.kind) && typeof value.executor.tool === "string" &&
+  typeof value.executor.active === "boolean" && typeof value.executor.available === "boolean" && validReasons(value.executor.reasons);
 const validDefinition = (value: unknown, taskId: string): value is SubmissionDefinition => record(value) && value.task_id === taskId && typeof value.title === "string" && typeof value.description === "string" &&
   typeof value.assigned_to === "string" && Array.isArray(value.task_acceptance_criteria) && value.task_acceptance_criteria.every((item: unknown) => text(item, 2000)) &&
   Array.isArray(value.acceptance_criteria) && value.acceptance_criteria.every((item: unknown) => text(item, 2000)) && record(value.dependency_basis) && validDesignReferences(value.designs) && digest(value.design_basis) &&
@@ -69,7 +81,8 @@ const validDefinition = (value: unknown, taskId: string): value is SubmissionDef
 export const validSubmissionDefinition = validDefinition;
 
 export function validSubmissionPayload(value: unknown, taskId: string): value is TaskSubmissionPayload {
-  if (!record(value) || !exact(value, ["task_id", "task_basis", "definition_digest", "native_boundary_digest", "source", "summary", "artifacts", "criteria", "tests"]) || value.task_id !== taskId ||
+  if (!record(value) || !exact(value, ["task_id", "task_basis", "definition_digest", "native_boundary_digest", "source", "summary", "artifacts", "criteria", "tests", ...(Object.hasOwn(value, "work_order") ? ["work_order"] : [])]) || value.task_id !== taskId ||
+    (Object.hasOwn(value, "work_order") && value.work_order !== null && !validSubmissionWorkOrderBinding(value.work_order)) ||
     !digest(value.task_basis) || !digest(value.definition_digest) || !digest(value.native_boundary_digest) || !validSource(value.source) || !text(value.summary, 2000) ||
     !Array.isArray(value.artifacts) || value.artifacts.length < 1 || value.artifacts.length > 40 || !Array.isArray(value.criteria) || value.criteria.length < 1 || value.criteria.length > 160 || !Array.isArray(value.tests) || value.tests.length > 40) return false;
   if (!value.artifacts.every((item: unknown) => record(item) && exact(item, ["id", "title", "content", "url", "sha256"]) && evidenceIdentity(item.id) && text(item.title, 2000) && text(item.content, 8000, false) &&
@@ -100,7 +113,8 @@ export async function readSubmissionCurrent(projectId: string, taskId: string, o
   inScope(origin); const value = await request<unknown>(`${base(projectId, taskId)}/current`, { headers: { "X-Project-Id": projectId }, signal }); inScope(origin);
   if (!outer(value, projectId, taskId) || !integer(value.version) || !(value.query_generation === null || integer(value.query_generation, 1)) || !digest(value.task_basis) || !digest(value.definition_digest) || !digest(value.native_boundary_digest) ||
     !validDefinition(value.definition, taskId) || !Array.isArray(value.criteria) || value.criteria.length > 160 || !value.criteria.every((item: unknown) => record(item) && ["task", "requirement"].includes(item.source) && integer(item.index) && text(item.text, 2000) && digest(item.text_digest)) ||
-    new Set(value.criteria.map((item: SubmissionCriterion) => `${item.source}:${item.index}`)).size !== value.criteria.length || typeof value.can_submit !== "boolean" || !validReasons(value.reasons) || !(value.latest_submission_id === null || evidenceIdentity(value.latest_submission_id))) throw new Error("submissionInvalid");
+    new Set(value.criteria.map((item: SubmissionCriterion) => `${item.source}:${item.index}`)).size !== value.criteria.length || typeof value.can_submit !== "boolean" || !validReasons(value.reasons) || !(value.latest_submission_id === null || evidenceIdentity(value.latest_submission_id)) ||
+    !(value.work_order === null || validSubmissionWorkOrderContext(value.work_order))) throw new Error("submissionInvalid");
   return value as SubmissionCurrent;
 }
 export async function readSubmissionDetail(projectId: string, taskId: string, submissionId: string, origin: string, signal?: AbortSignal): Promise<SubmissionDetail> {
@@ -130,12 +144,15 @@ export function validSubmissionOriginal(value: unknown, taskId: string): value i
 export function validSubmissionAck(projectId: string, taskId: string, original: SubmissionOriginal, value: unknown): value is DeliveryCommandAck {
   if (!validSubmissionOriginal(original, taskId) || !record(value) || !record(value.result)) return false;
   const result = value.result, submit = original.action === "task.delivery.submit";
-  if (!exact(result, ["task_ids", "submission_id", "submission_digest", "issue_id", ...(submit ? [] : ["decision_id", "review_id"])]) ||
+  const binding = submit ? (original.payload as TaskSubmissionPayload).work_order : null;
+  if (!exact(result, ["task_ids", "submission_id", "submission_digest", "issue_id", ...(submit ? [] : ["decision_id", "review_id"]), ...(binding ? ["work_order"] : [])]) ||
     !Array.isArray(result.task_ids) || result.task_ids.length !== 1 || result.task_ids[0] !== taskId || !evidenceIdentity(result.submission_id) || !digest(result.submission_digest) || !(result.issue_id === null || submissionIdentity(result.issue_id))) return false;
+  if (binding && (!record(result.work_order) || !exact(result.work_order, ["id", "order_revision", "state"]) || result.work_order.id !== binding.id ||
+    !integer(result.work_order.order_revision, 1) || result.work_order.order_revision !== binding.order_revision + 1 || result.work_order.state !== "reported")) return false;
   if (!submit) { const p = original.payload as TaskSubmissionReviewPayload; if (result.submission_id !== p.submission_id || result.submission_digest !== p.submission_digest || !evidenceIdentity(result.decision_id) || !evidenceIdentity(result.review_id)) return false; }
   const resourceId = submit ? result.submission_id : result.review_id, kind = submit ? "task_submission" : "task_review";
   if (!validDeliveryCommandAck(projectId, original, value, kind, resourceId) || !exact(value, ["project_id", "action", "resource", "result", "affected_refs", "applied_version", "version", "query_generation", "replayed"])) return false;
-  const expected = [`${kind}:${resourceId}`, `task:${taskId}`, ...(!submit ? [`task_submission:${result.submission_id}`] : []), ...(result.issue_id ? [`issue:${result.issue_id}`] : [])];
+  const expected = [`${kind}:${resourceId}`, `task:${taskId}`, ...(!submit ? [`task_submission:${result.submission_id}`] : []), ...(result.issue_id ? [`issue:${result.issue_id}`] : []), ...(binding ? [`work_order:${binding.id}`] : [])];
   const refs = value.affected_refs.map((ref) => `${ref.kind}:${ref.id}`);
   return refs.length === expected.length && new Set(refs).size === refs.length && expected.every((ref) => refs.includes(ref));
 }

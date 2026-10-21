@@ -13,6 +13,8 @@ import {
   type DeliveryCommandAck,
 } from "@/lib/deliveryQuery";
 import { useEffect, useState } from "react";
+import { useDeliveryDraftState } from "@/lib/useDeliveryDraftState";
+import { deliveryDraftCopy } from "@/i18n/delivery-drafts";
 import "./delivery-scheduling.css";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -64,18 +66,13 @@ export function DeliveryTaskPlanMaintenance({
   onClose?: () => void;
   onUnresolvedChange?: (value: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const source = useDiscussionAdoptionSource(initialSource);
   const identity = useMemberIdentity();
   const tr = (key: string) => t(`delivery.${key}`);
-  const [editor, setEditor] = useState<EditorSpec | null>(null);
+  const [editor, setEditor] = useDeliveryDraftState<EditorSpec | null>(null, onEditingChange);
   const [error, setError] = useState("");
-  useEffect(() => {
-    if (!editor) return;
-    onEditingChange?.(true);
-    return () => onEditingChange?.(false);
-  }, [Boolean(editor), onEditingChange]);
   const requirement = data.requirement || undefined;
   async function edit() {
     if (!task.basis) {
@@ -179,16 +176,16 @@ export function DeliveryTaskPlanMaintenance({
           source.current.current?.reference,
         );
         try {
-          onSaved(
-            await saveDelivery(
-              data.project.id,
-              "task.update",
-              payload,
-              intent.version,
-              intent.key,
-              source.current.current?.reference,
-            ),
+          const ack = await saveDelivery(
+            data.project.id,
+            "task.update",
+            payload,
+            intent.version,
+            intent.key,
+            source.current.current?.reference,
           );
+          setEditor(null);
+          try { onSaved(ack); } catch { setError(deliveryDraftCopy(i18n?.language).refreshFailed); }
           for (const name of [
             "delivery-task-reviews",
             "delivery-progress",
@@ -331,7 +328,7 @@ export function DeliveryTaskPlanMaintenance({
       {editor && (
         <DeliveryEditor
           spec={editor}
-          sourceAware={Boolean(initialSource)}
+          sourceAware
           header={(blocked) => (
             <DiscussionAdoptionSource
               projectId={data.project.id}

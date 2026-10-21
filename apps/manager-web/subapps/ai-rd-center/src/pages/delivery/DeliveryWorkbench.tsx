@@ -39,6 +39,7 @@ import {
   Users,
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -127,6 +128,7 @@ import { TaskExecutionHandoffRecovery, TaskQueueOriginalRecovery } from "./TaskE
 import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
 import { executionDispatchRecoveryPending } from "@/lib/executionDispatchCommand";
 import { useExecutionExitGuard } from "@/lib/executionExitGuard";
+import { deliveryDraftCopy } from "@/i18n/delivery-drafts";
 import { parseExecutionSelection } from "@/lib/executionRuntime";
 import { DeliveryReleaseWorkbench } from "./DeliveryReleaseWorkbench";
 import {
@@ -174,6 +176,9 @@ function ProjectDelivery() {
   const qc = useQueryClient();
   const queryKey = ["delivery-context", projectId, sessionId];
   const executionExit = useExecutionExitGuard();
+  const draftExit = useExecutionExitGuard();
+  const canNavigate = useCallback(() => executionExit.canNavigate() && draftExit.canNavigate(), [executionExit.canNavigate, draftExit.canNavigate]);
+  const navigationPending = executionExit.pending || draftExit.pending;
   const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
     useState<DeliveryContext>();
   const executionPending = (identity: string, value: boolean) => {
@@ -219,6 +224,8 @@ function ProjectDelivery() {
     `${projectId}:${sessionId}`,
     requestedTaskId,
   );
+  const inspectorDraftChanged = useCallback((value: boolean) => { draftExit.setPending(`${projectId}:${sessionId}:inspector:${taskInspector.displayId}`, value); }, [projectId, sessionId, taskInspector.displayId, draftExit.setPending]);
+  const requirementTaskDraftChanged = useCallback((value: boolean) => { draftExit.setPending(`${projectId}:${sessionId}:requirement:${selectedId}:task:${selectedTaskId}`, value); }, [projectId, sessionId, selectedId, selectedTaskId, draftExit.setPending]);
   const [selectedIssueId, setSelectedIssueId] = useState(
     () => parseDeliveryRoute(location.hash).issue,
   );
@@ -375,7 +382,7 @@ function ProjectDelivery() {
     filters: Partial<DeliveryRoute> = {},
     deliverySelection?: Pick<DeliveryInboxTarget, "submission_id" | "work_order_id">,
   ) => {
-    if (!executionExit.canNavigate()) return;
+    if (!canNavigate()) return;
     if (["quality", "releases", "discussions"].includes(nextView)) {
       id = "";
       detail = "details";
@@ -412,7 +419,7 @@ function ProjectDelivery() {
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const setIssueRoute = (id: string) => {
-    if (!executionExit.canNavigate()) return;
+    if (!canNavigate()) return;
     const destination = deliveryInboxHash({ view: "issues", requirement_id: "", detail: "details", issue_id: id }, {}, location.hash, projectId);
     const params = new URLSearchParams(destination.split("?")[1]);
     params.delete("diagnosis_id");
@@ -489,7 +496,7 @@ function ProjectDelivery() {
     executionPending("task-locator-recovery", value || retained);
   };
   const openTarget = (target: DeliveryInboxTarget) => {
-    if (!executionExit.canNavigate()) return;
+    if (!canNavigate()) return;
     target = normalizeInboxTarget(target);
     if (
       target.task_id &&
@@ -606,17 +613,17 @@ function ProjectDelivery() {
     scope: inboxScope,
     category: inboxCategory,
     cursor: route.inboxCursor,
-    canNavigate: executionExit.canNavigate,
+    canNavigate,
     onOpen: openTarget,
   });
   const releaseReturn = releaseReturnFromHash(location.hash);
   const agentReturn = agentExecutionReturn(location.hash, projectId);
   const requirementReturn = requirementPlanningReturn(location.hash, projectId);
-  const returnToRequirements = bindRequirementPlanningBack(executionExit.canNavigate);
+  const returnToRequirements = bindRequirementPlanningBack(canNavigate);
   const requirementBack = requirementReturn ? (
     <Button
       icon={<ArrowLeft size={14} />}
-      disabled={executionExit.pending}
+      disabled={navigationPending}
       onClick={returnToRequirements}
     >
       {t("nav.requirements")}
@@ -634,7 +641,7 @@ function ProjectDelivery() {
     projectId,
   );
   const collaborationNavigate = (href: string) => {
-    if (!executionExit.canNavigate()) return;
+    if (!canNavigate()) return;
     const [path, query] = href.split("?");
     if (path !== "#/dev-flow") return;
     const params = new URLSearchParams(query);
@@ -1164,6 +1171,7 @@ function ProjectDelivery() {
           title={t("deliveryExecutionRuntime.pendingNavigation")}
         />
       )}
+      {draftExit.blocked && <Alert type="warning" role="status" title={deliveryDraftCopy(i18n?.language).navigationBlocked} />}
       <div className="delivery-metrics">
         {(
           [
@@ -1192,8 +1200,8 @@ function ProjectDelivery() {
         ))}
       </div>
       {agentReturn && (
-        <Button disabled={executionExit.pending} onClick={() => {
-          if (executionExit.canNavigate()) location.hash = agentReturn;
+        <Button disabled={navigationPending} onClick={() => {
+          if (canNavigate()) location.hash = agentReturn;
         }}>{t("deliveryExecutionRuntime.backAgentOps")}</Button>
       )}
       {releaseReturn && (
@@ -1208,7 +1216,7 @@ function ProjectDelivery() {
       {eventReturn && (
         <Button
           onClick={() => {
-            if (executionExit.canNavigate()) location.hash = eventReturn;
+            if (canNavigate()) location.hash = eventReturn;
           }}
         >
           {t("eventReceipts.back")}
@@ -1275,7 +1283,7 @@ function ProjectDelivery() {
               void inboxQuery.refetch();
             }}
             onInboxCategory={(category) => {
-              if (!executionExit.canNavigate()) return;
+              if (!canNavigate()) return;
               setInboxScope("mine");
               setInboxCategory(category);
               navigate("inbox", "", "details", "", true, {
@@ -1401,7 +1409,7 @@ function ProjectDelivery() {
             void inboxQuery.refetch();
           }}
           onScope={(scope) => {
-            if (!executionExit.canNavigate()) return;
+            if (!canNavigate()) return;
             setInboxScope(scope);
             navigate("inbox", "", "details", "", true, {
               inboxScope: scope,
@@ -1410,7 +1418,7 @@ function ProjectDelivery() {
             });
           }}
           onCategory={(category) => {
-            if (!executionExit.canNavigate()) return;
+            if (!canNavigate()) return;
             setInboxCategory(category);
             navigate("inbox", "", "details", "", true, {
               inboxCategory: category,
@@ -1419,7 +1427,7 @@ function ProjectDelivery() {
             });
           }}
           onFirstPage={() => {
-            if (!executionExit.canNavigate()) return;
+            if (!canNavigate()) return;
             navigate("inbox", "", "details", "", true, {
               inboxPage: 1,
               inboxCursor: "",
@@ -1466,9 +1474,9 @@ function ProjectDelivery() {
       )}
       <Drawer
         open={Boolean(requestedTaskId)}
-        closable={!executionExit.pending}
-        maskClosable={!executionExit.pending}
-        keyboard={!executionExit.pending}
+        closable={!navigationPending}
+        maskClosable={!navigationPending}
+        keyboard={!navigationPending}
         afterOpenChange={taskInspector.afterOpenChange}
         onClose={() =>
           collaborationReturn
@@ -1486,6 +1494,7 @@ function ProjectDelivery() {
             projectId={projectId}
             sessionId={sessionId}
             taskId={taskInspector.displayId}
+            onDraftChange={inspectorDraftChanged}
             onUnresolvedChange={(value) =>
               executionPending(`task:${taskInspector.displayId}`, value)
             }
@@ -1508,7 +1517,7 @@ function ProjectDelivery() {
         }
         onCommand={(action, payload) => commit(action, payload, false)}
         onClose={() => {
-          if (!executionExit.canNavigate()) return;
+          if (!canNavigate()) return;
           if (agentReturn) { location.hash = agentReturn; return; }
           if (collaborationReturn) {
             collaborationNavigate(collaborationReturn);
@@ -1524,11 +1533,11 @@ function ProjectDelivery() {
       />
       <Drawer
         open={Boolean(selectedId)}
-        closable={!executionExit.pending}
-        maskClosable={!executionExit.pending}
-        keyboard={!executionExit.pending}
+        closable={!navigationPending}
+        maskClosable={!navigationPending}
+        keyboard={!navigationPending}
         onClose={() => {
-          if (executionExit.canNavigate()) {
+          if (canNavigate()) {
             if (collaborationReturn) collaborationNavigate(collaborationReturn);
             else if (releaseReturn) location.hash = releaseReturn;
             else if (requirementReturn) returnToRequirements();
@@ -1733,6 +1742,7 @@ function ProjectDelivery() {
                         route={route}
                         queryGeneration={data.query_generation}
                         onRoute={changeQueryRoute}
+                        onDraftChange={requirementTaskDraftChanged}
                         onUnresolvedChange={(value) =>
                           executionPending(`task:${selectedTaskId}`, value)
                         }
@@ -1844,7 +1854,7 @@ function ProjectDelivery() {
           requirementVersion={planVersion.current}
           onUnresolvedChange={(value) => executionPending(`plan:${planRequirement.id}`, value)}
           onClose={() => {
-            if (executionExit.canNavigate()) setPlanRequirement(null);
+            if (canNavigate()) setPlanRequirement(null);
           }}
           onSaved={(updated) => {
             if (originScope.current !== sessionSnapshot()) return;

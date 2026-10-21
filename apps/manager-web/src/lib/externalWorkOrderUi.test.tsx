@@ -51,7 +51,7 @@ beforeEach(() => {
   const source = { kind: "tool", name: "Actual Codex report", url: "" };
   const submission = { id: "S", task_id: "T", created_at: now, submitted_by: { id: "U", name: "Claimant" }, source, summary: "Actual delivery", digest, task_basis: digest, definition_digest: digest, native_boundary_digest: digest,
     status: "awaiting_review", invalidated: false, invalidated_at: null, invalidated_reason: "", counts: { artifacts: 1, criteria: 1, tests: 1, reported_passed: 1, reported_failed: 0 }, issue_id: null, review_id: null };
-  h.reportCurrent = { ...h.current, criteria: [{ source: "task", index: 0, text_digest: digest, text: "Criterion" }], can_submit: true, latest_submission_id: "S" };
+  h.reportCurrent = { ...h.current, criteria: [{ source: "task", index: 0, text_digest: digest, text: "Criterion" }], can_submit: true, latest_submission_id: "S", work_order: null };
   h.reportDetail = { project_id: "P", task_id: "T", version: 3, as_of: now, task_basis: digest, native_boundary_digest: digest, submission, definition, decision: null,
     permissions: { can_review: false, can_accept: false, reasons: [] }, payload: { task_id: "T", task_basis: digest, definition_digest: digest, native_boundary_digest: digest, source, summary: "Actual delivery", artifacts: [{ id: "A", title: "Actual test output", content: "Actual reported output", url: "", sha256: null }], criteria: [{ source: "task", index: 0, text_digest: digest, result: "met", evidence_ids: ["A"] }], tests: [{ id: "Test", title: "Actual test", status: "passed", evidence_ids: ["A"] }] } };
   vi.mocked(request).mockReset().mockImplementation(async (path, init) => {

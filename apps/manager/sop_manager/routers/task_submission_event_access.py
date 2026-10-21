@@ -18,10 +18,28 @@ def plan_submission_event(db, project, event):
         return {"kind": PLAN_KIND, "unavailable": True}
     try:
         context = _context(db, project, task_id)
-        scopes = sorted({entry["workspace_id"] for entry in context.data.get("executions", [])
-                         if entry.get("task_id") == task_id and entry.get("workspace_id")})
-        return {"kind": PLAN_KIND, "runtime_scopes": scopes}
-    except HTTPException:
+        scopes = {entry["workspace_id"] for entry in context.data.get("executions", [])
+                  if entry.get("task_id") == task_id and entry.get("workspace_id")}
+        binding = report.get("work_order") if isinstance(report, dict) else None
+        if binding is not None:
+            from sqlalchemy import select
+            from .delivery_external_work_order_model import DeliveryExternalWorkOrder as Order
+            from .delivery_external_work_order_service import byte_size
+            from .delivery_task_submission_contract import SubmissionWorkOrderBinding
+
+            selected = SubmissionWorkOrderBinding.model_validate(binding)
+            predicate = (Order.tenant_id == project.tenant_id, Order.project_id == project.id,
+                         Order.task_id == task_id, Order.id == selected.id)
+            size = db.scalar(select(byte_size(db, Order.runtime_scopes)).where(*predicate))
+            if size is None or size > 1024 * 1024:
+                return {"kind": PLAN_KIND, "unavailable": True}
+            original_scopes = db.scalar(select(Order.runtime_scopes).where(*predicate))
+            if (not isinstance(original_scopes, list)
+                    or any(not isinstance(value, str) or not value or len(value) > 64 for value in original_scopes)):
+                return {"kind": PLAN_KIND, "unavailable": True}
+            scopes.update(original_scopes)
+        return {"kind": PLAN_KIND, "runtime_scopes": sorted(scopes)}
+    except (HTTPException, ValueError, TypeError):
         # Durable intake still retains an invalid/unavailable report. No guessed
         # empty runtime scope permits reading that original as project-only data.
         return {"kind": PLAN_KIND, "unavailable": True}
