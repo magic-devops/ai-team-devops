@@ -44,7 +44,9 @@ def preview(db, project, user, task_id, body, *, store=None, execution=None):
     try:
         proposal = prepare(db, project, user, task_id, body, store=store, execution=execution)
         _same(db, project, {key: view[key] for key in ("project_id", "version", "query_generation")})
-        return {**view, "complete": True, "allowed": True, "preview_basis": proposal["preview_basis"],
+        from .delivery_feedback_service import context_fields
+
+        return {**view, **context_fields(proposal), "complete": True, "allowed": True, "preview_basis": proposal["preview_basis"],
             "packet_digest": proposal["packet_digest"], "executor": proposal["executor"], "max_packet_bytes": MAX_PACKET_BYTES}
     except HTTPException as exc:
         if exc.status_code not in {409, 413} or not isinstance(exc.detail, dict):
@@ -120,6 +122,8 @@ def catalogue(db, project, user, *, task_id="", state="", limit=20, cursor="", s
 
 
 def detail(db, project, user, identity, *, store=None, execution=None):
+    from .delivery_feedback_service import context_fields
+
     actor, permissions = access(db, project, user)
     stamp = _metadata(db, project)
     row = load_order(db, project, identity)
@@ -140,7 +144,7 @@ def detail(db, project, user, identity, *, store=None, execution=None):
     if row.state == "queued" and project.status != "active":
         reasons.append({"code": "project_not_active", "message": "Activate the project before claiming new external work."})
     _same(db, project, stamp)
-    return {**stamp, "as_of": _now(), "work_order": summary(row, _delivery_states(db, project, [row])),
+    return {**stamp, **context_fields(row.original["packet"]), "as_of": _now(), "work_order": summary(row, _delivery_states(db, project, [row])),
         "definition": deepcopy(row.original["packet"]["definition"]), "instructions": row.original["packet"]["instructions"],
         "permissions": {"can_claim": fresh and row.state == "queued" and project.status == "active", "can_progress": fresh and own and holding,
             "can_cancel": writable and row.state in {"queued", "claimed"}, "can_release": writable and own and holding,

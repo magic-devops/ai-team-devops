@@ -1,3 +1,5 @@
+import { taskDispatchHref } from "@/lib/taskDispatchRoute";
+import { taskDispatchCopy } from "@/i18n/task-dispatch";
 import { Alert, Button, Checkbox, Input, Modal, Select, Skeleton, Space, Tag } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -244,6 +246,7 @@ export function SubmissionFacts({ detail }: { detail: SubmissionDetail }) {
     <details className="runtime-help"><summary>{copy.artifacts} · {payload.artifacts.length}</summary>{payload.artifacts.map((item) => <article className="space-y-1 py-2" key={item.id}><strong>{item.title}</strong>{item.url && submissionUrl(item.url) && <a className="block break-all" href={item.url} target="_blank" rel="noopener noreferrer">{item.url}</a>}{item.content && <pre className="runtime-output whitespace-pre-wrap">{item.content}</pre>}{item.sha256 && <p className="break-all">{copy.hash}: {item.sha256}</p>}</article>)}</details>
     {detail.decision && <blockquote><p>{detail.decision.comment}</p><footer>{copy.reviewer}: {detail.decision.reviewer.name} · {detail.decision.created_at}</footer></blockquote>}
     {payload.work_order && <div className="space-y-1 rounded-lg border border-[var(--border)] p-2"><p className="runtime-help">{copy.stoppedReported}</p><Button size="small" href={externalWorkOrderTaskHref(detail.project_id, detail.task_id, payload.work_order.id, s.id, typeof location === "undefined" ? "" : location.hash)}>{copy.openWorkOrder}</Button></div>}
+    {detail.decision?.decision === "request_changes" && <Button size="small" type="primary" href={taskDispatchHref(detail.project_id, { id: detail.task_id }, typeof location === "undefined" ? "" : location.hash, { submission_id: s.id, submission_digest: s.digest, decision_id: detail.decision.id })}>{taskDispatchCopy(i18n?.language).feedback}</Button>}
     {s.issue_id && <Button size="small" href={executionIssueHref(s.issue_id, typeof location === "undefined" ? "" : location.hash, detail.project_id)}>{copy.issue}</Button>}
     <details className="runtime-help"><summary>{copy.details}</summary><dl className="grid grid-cols-[auto_1fr] gap-x-3 break-all"><dt>{copy.submission}</dt><dd>{s.id}</dd><dt>{copy.digest}</dt><dd>{s.digest}</dd><dt>{copy.task}</dt><dd>{s.task_id}</dd></dl></details>
   </section>;

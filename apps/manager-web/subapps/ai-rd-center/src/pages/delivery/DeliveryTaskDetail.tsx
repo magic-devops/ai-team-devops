@@ -1,3 +1,6 @@
+import { TaskDispatchHost, type ExternalDispatchRequest } from "./TaskDispatchHost";
+import { taskDispatchRequest, taskDispatchRouteEvent, taskDispatchOrderHref, closeTaskDispatchRoute } from "@/lib/taskDispatchRoute";
+import type { FeedbackReference } from "@/lib/deliveryFeedback";
 import { EventReceiptReturn } from "@/components/EventReceiptReturn";
 import {
   fetchDeliveryTaskData,
@@ -42,7 +45,7 @@ import { taskEditRecoveryPending, useTaskEditCommand, validTaskEditOriginal } fr
 import { taskDefinitionRequest, taskDefinitionRouteClosedEvent } from "@/lib/taskDefinitionRoute";
 import { DeliveryTaskDefinitionHost } from "./DeliveryTaskDefinitionHost";
 
-type TaskDraftScope = "execution" | "planning" | "work-order" | "design" | "submission" | "manual";
+type TaskDraftScope = "execution" | "planning" | "work-order" | "design" | "submission" | "manual" | "dispatch";
 type TaskPendingScope = "execution" | "planning" | "collaboration";
 
 type TaskContentProps = {
@@ -65,6 +68,7 @@ type TaskContentProps = {
   onExecutionRecovery?: (executionId: string) => void;
   onEditTask?: () => void;
   shortcutBlocked?: boolean;
+  onDispatch?: () => void;
 };
 export function TaskDetailContent({
   detail,
@@ -83,6 +87,7 @@ export function TaskDetailContent({
   onExecutionRecovery,
   onEditTask,
   shortcutBlocked = false,
+  onDispatch,
 }: TaskContentProps) {
   const { t } = useTranslation();
   const executionEditingChanged = (editing: boolean) => onEditingChange("execution", editing);
@@ -112,6 +117,7 @@ export function TaskDetailContent({
   );
   const execution = (
     <DeliveryExecutionPanel
+      onDispatch={onDispatch}
       disabled={!editable}
       data={data}
       task={task}
@@ -311,6 +317,17 @@ export function DeliveryTaskDetail({
     for (const event of ["hashchange", "popstate", taskDefinitionRouteClosedEvent]) window.addEventListener(event, changed);
     return () => { for (const event of ["hashchange", "popstate", taskDefinitionRouteClosedEvent]) window.removeEventListener(event, changed); };
   }, [projectId, sessionId, taskId]);
+  const dispatchRouteSignature = () => { const route = taskDispatchRequest(typeof location === "undefined" ? "" : location.hash, projectId, taskId); return route.open ? JSON.stringify(route.feedback || null) : ""; };
+  const [dispatchRequest, setDispatchRequest] = useState(() => dispatchRouteSignature() ? 1 : 0);
+  const [dispatchFeedback, setDispatchFeedback] = useState<FeedbackReference | undefined>(() => taskDispatchRequest(typeof location === "undefined" ? "" : location.hash, projectId, taskId).feedback);
+  const [externalDispatch, setExternalDispatch] = useState<(ExternalDispatchRequest & { token: number }) | undefined>();
+  const externalDispatchLive = useRef(externalDispatch); externalDispatchLive.current = externalDispatch;
+  const dispatchSignature = useRef(dispatchRouteSignature()), dispatchHash = useRef(typeof location === "undefined" ? "" : location.hash);
+  useEffect(() => { const changed = () => {
+    if (!mounted.current || origin.current !== projectSessionKey() || activeIdentity.current !== identity || dispatchHash.current === location.hash) return;
+    dispatchHash.current = location.hash; const route = taskDispatchRequest(location.hash, projectId, taskId), next = route.open ? JSON.stringify(route.feedback || null) : "";
+    if (next && next !== dispatchSignature.current) { setDispatchFeedback(route.feedback); setDispatchRequest((value) => value + 1); } dispatchSignature.current = next; renderTaskRoute((value) => value + 1);
+  }; for (const event of ["hashchange", "popstate", taskDispatchRouteEvent]) window.addEventListener(event, changed); return () => { for (const event of ["hashchange", "popstate", taskDispatchRouteEvent]) window.removeEventListener(event, changed); }; }, [projectId, sessionId, taskId]);
   const [pinnedWorkspace, setPinnedWorkspace] = useState<DeliveryTaskData>();
   const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
     useState<DeliveryTaskData>();
@@ -371,6 +388,7 @@ export function DeliveryTaskDetail({
     submission: (editing: boolean) => editingChanged("submission", editing),
     manual: (editing: boolean) => editingChanged("manual", editing),
     planning: (editing: boolean) => editingChanged("planning", editing),
+    dispatch: (editing: boolean) => editingChanged("dispatch", editing),
   }), [editingChanged]);
   useEffect(() => {
     draftNotify.current?.(draftActive.current);
@@ -541,9 +559,14 @@ export function DeliveryTaskDetail({
         current={query.error ? undefined : query.data} readError={query.error} requestEdit={editRequest} canEdit={Boolean(query.data?.permissions.write) && !query.isError && !busy && !definitionStageLocked && !definitionRelationChanged}
         freshBlockReason={definitionStageLocked ? taskDefinitionCopy(i18n?.language).stageLocked : definitionRelationChanged ? t("deliveryQuery.relationChanged") : undefined}
         isActive={isActive} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.planning} />
-      <ExternalWorkOrderPanel key={`${projectId}:${sessionId}:${taskId}:work-orders`} projectId={projectId} taskId={taskId} sessionId={sessionId} selectedOrderId={selectedWorkOrderId} invalidSelection={invalidWorkOrderSelection}
+      <TaskDispatchHost projectId={projectId} taskId={taskId} sessionId={sessionId} requestOpen={dispatchRequest} feedbackReference={dispatchFeedback} queueCommand={queueCommand}
+        isActive={isActive} canSubmit={canWriteExternal} canStart={() => !draftActive.current} onSaved={saved} onEditingChange={draftCallbacks.dispatch}
+        onUnresolvedChange={(value) => { notifyTaskPending(setTaskPending(`execution:${taskId}`, value)); }}
+        onExternal={(request) => { if (!canWriteExternal()) return false; editingChanged("work-order", true); const next = { ...request, token: (externalDispatchLive.current?.token || 0) + 1 }; externalDispatchLive.current = next; setExternalDispatch(next); return true; }} />
+      <ExternalWorkOrderPanel key={`${projectId}:${sessionId}:${taskId}:work-orders`} projectId={projectId} taskId={taskId} sessionId={sessionId} requestCreate={externalDispatch} onComposeSettled={(token, started) => { if (token === externalDispatchLive.current?.token && !started) editingChanged("work-order", false); }} onComposeClosed={(token) => { if (token === externalDispatchLive.current?.token && canWriteExternal() && !draftActive.current) closeTaskDispatchRoute(projectId, taskId); }} onDispatch={() => { if (canWriteExternal() && !draftActive.current) { setDispatchFeedback(undefined); setDispatchRequest((value) => value + 1); } }} selectedOrderId={selectedWorkOrderId} invalidSelection={invalidWorkOrderSelection}
         disabled={executionExit.pending || hasExternalPending() || hasDesignPending() || queueLocked || Boolean(displayedOperationRecovery) || busy}
         isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.workOrder}
+        onSelect={(orderId) => { if (!canWriteExternal() || draftActive.current) return; const href = taskDispatchOrderHref(location.hash, projectId, taskId, orderId); if (href && href !== location.hash) location.hash = href; }}
         onWriteReport={(order) => { if (isActive() && !hasWorkOrderPending() && !hasExternalPending() && !queueLocked) { setReportOrder(order); setReportRequest((value) => value + 1); } }}
         onUnresolvedChange={(value) => { workOrderPending.current = value || workOrderRecoveryPending(projectId, taskId); notifyTaskPending(setTaskPending(`work-order:${taskId}`, workOrderPending.current)); }} />
       <TaskDetailContent
@@ -562,6 +585,7 @@ export function DeliveryTaskDetail({
         isActive={() => isActive() && !writePending.current && !hasExternalPending() && !hasDesignPending() && !hasWorkOrderPending()}
         canSubmitQueue={canUseQueueEditor}
         onExecutionRecovery={rememberRecovery}
+        onDispatch={() => { if (canWriteExternal() && !draftActive.current) { setDispatchFeedback(undefined); setDispatchRequest((value) => value + 1); } }}
         shortcutBlocked={taskEditCommand.state.phase !== "idle"}
         onEditTask={() => { if (canWriteExternal()) setEditRequest((value) => value + 1); }}
         onEditingChange={editingChanged}

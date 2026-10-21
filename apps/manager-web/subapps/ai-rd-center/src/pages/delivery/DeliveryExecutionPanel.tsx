@@ -1,3 +1,4 @@
+import { taskDispatchCopy } from "@/i18n/task-dispatch";
 import {
   fetchDeliveryReferences,
   fetchExecutionDetail,
@@ -43,6 +44,7 @@ type Props = {
   queueCommand?: ExecutionDispatchCommand;
   isActive?: () => boolean;
   canSubmitQueue?: () => boolean;
+  onDispatch?: () => void;
   onExecutionRecovery?: (executionId: string) => void;
 };
 const closed = ["accepted", "changes_requested", "cancelled"];
@@ -59,9 +61,10 @@ export function DeliveryExecutionPanel({
   queueCommand,
   isActive,
   canSubmitQueue,
+  onDispatch,
   onExecutionRecovery,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tr = (key: string) => t(`deliveryRuntime.${key}`);
   const origin = useRef(projectSessionKey());
   const identity = `${data.project.id}:${sessionId}:${task.id}`, live = useRef({ identity, executionId: task.execution_id || "", isActive });
@@ -201,15 +204,16 @@ export function DeliveryExecutionPanel({
         <Button
           size="small"
           icon={<Send size={14} />}
-          disabled={!canDispatch}
+          disabled={onDispatch ? disabled || controlLocked || Boolean(retainedExecutionId) || !data.permissions.write || Boolean(queueCommand?.locked) : !canDispatch}
           onClick={() => {
+            if (onDispatch) { if (!disabled && !controlLocked && !retainedExecutionId && data.permissions.write && origin.current === projectSessionKey() && isActive?.() !== false && canSubmitQueue?.() !== false && queueCommand?.current()) onDispatch(); return; }
             if (!canDispatch || freshReads.current.error || live.current.executionId !== (task.execution_id || "") || !handoffAccess.current.readable || !canReplaceHandoff() || pendingControls.current.size || origin.current !== projectSessionKey() || isActive?.() === false || canSubmitQueue?.() === false || !queueCommand?.current()) return;
             if (queueCommand.snapshot().phase === "refused") { queueCommand.reset(); if (queueCommand.snapshot().phase !== "idle") return; }
             if (queueCommand.snapshot().phase !== "idle") return;
             setDraft(openExecutionDraft(data, task.id, crypto.randomUUID()));
           }}
         >
-          {tr(current ? "redispatch" : "dispatch")}
+          {onDispatch ? taskDispatchCopy(i18n?.language).title : tr(current ? "redispatch" : "dispatch")}
         </Button>
       </div>
       {targets.isPending && (

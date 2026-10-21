@@ -1,3 +1,4 @@
+import { taskDispatchReason } from "./task-dispatch";
 import { taskSubmissionReason } from "./task-submission";
 
 const words = {
@@ -156,7 +157,7 @@ export function externalWorkOrderCopy(language = "zh-CN") {
 export function externalWorkOrderReason(language: string, reason: { code: string; message: string }) {
   const index = language.startsWith("en") ? 1 : language.startsWith("ja") ? 2 : 0;
   const known = reasonWords[reason.code as keyof typeof reasonWords];
-  return known ? known[index] : taskSubmissionReason(language, reason);
+  return known ? known[index] : taskDispatchReason(language, reason.code) || taskSubmissionReason(language, reason);
 }
 
 function nav(language: string) {

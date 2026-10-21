@@ -6,6 +6,7 @@ from hermes_core.models import Node
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from .delivery_team_runtime_contract import ExecutorSnapshot
+from .delivery_feedback_contract import FeedbackDigest, FeedbackReference
 from .design_contract import DesignReference
 
 OutputText = Annotated[str, StringConstraints(strip_whitespace=False)]
@@ -54,6 +55,7 @@ class ExecutionQueue(ExecutionInput):
     nodes: list[Node] = Field(default_factory=list, max_length=32)
     test_nodes: list[Node] = Field(default_factory=list, max_length=32)
     test_node_ids: list[str] = Field(default_factory=list, max_length=32)
+    feedback_reference: FeedbackReference | None = None
 
     @model_validator(mode="after")
     def plan_valid(self):
@@ -183,6 +185,8 @@ class ExecutionPreviewResponse(ExecutionInput):
     executor_snapshot: ExecutorSnapshot | None
     nodes: list[Node]
     test_node_ids: list[str]
+    feedback_context: dict | None = None
+    feedback_context_sha256: FeedbackDigest | None = None
 
 
 class ExecutionAgentEvidence(ExecutionInput):

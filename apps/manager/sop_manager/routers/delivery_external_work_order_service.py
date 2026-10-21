@@ -150,17 +150,19 @@ def prepare(db, project, user, task_id, body, *, store=None, execution=None):
     if reasons:
         fail(reasons[0]["code"], reasons[0]["message"])
     from .delivery_execution_design_context import execution_design_context
+    from .delivery_feedback_service import context_fields, freeze_feedback
 
+    feedback = freeze_feedback(db, project, actor, task_id, body.feedback_reference, store=store)
     packet = {"schema": "manager.external-work-order.v1", "project_id": project.id, "task_id": task_id,
         "definition": fixed["definition"], "definition_digest": fixed["definition_digest"], "native_boundary_digest": boundary["digest"],
         "executor": executor, "instructions": body.instructions, "design_context": execution_design_context(db, project, fixed["definition"]),
-        "repositories": _repositories(db, project)}
+        "repositories": _repositories(db, project), **context_fields(feedback)}
     if len(json.dumps(packet, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")) > MAX_PACKET_BYTES:
         fail("work_order_packet_budget", "The complete fixed external packet exceeds 512 KiB; no content was truncated.", 413)
     packet_digest = digest(packet)
     preview_basis = digest({"task_basis": fixed["task_basis"], "packet_digest": packet_digest, "executor_basis": executor_basis(executor)})
     return {"actor": actor, "context": context, "fixed": fixed, "boundary": boundary, "executor": executor,
-        "packet": packet, "packet_digest": packet_digest, "preview_basis": preview_basis}
+        "packet": packet, "packet_digest": packet_digest, "preview_basis": preview_basis, **feedback}
 
 
 def load_order(db, project, identity):
@@ -174,7 +176,7 @@ def load_order(db, project, identity):
     original = row.original
     try:
         packet = original["packet"]
-        request = WorkOrderCreate.model_validate(original["request"]).model_dump(mode="json")
+        request = WorkOrderCreate.model_validate(original["request"]).model_dump(mode="json", exclude_unset=True)
         valid = (original["schema"] == "manager.external-work-order-original.v1" and digest(original) == row.request_digest
             and all(original[key] == getattr(row, key) for key in ("id", "tenant_id", "project_id", "task_id", "requested_by"))
             and original["request"]["task_basis"] == row.task_basis
@@ -198,6 +200,13 @@ def load_order(db, project, identity):
         valid = False
     if not valid:
         fail("work_order_original_invalid", "The complete fixed work order original cannot be verified.")
+    from .delivery_feedback_service import context_fields, validate_fixed_feedback
+
+    feedback = context_fields(packet)
+    if "feedback_runtime_scopes" in original:
+        feedback["feedback_runtime_scopes"] = original["feedback_runtime_scopes"]
+    validate_fixed_feedback(feedback,
+        project_id=project.id, task_id=row.task_id, reference=request.get("feedback_reference"))
     return row
 
 
@@ -210,7 +219,13 @@ def assert_order_access(db, project, user, row, *, store=None):
 def _fresh(db, project, user, row, store, execution):
     from .delivery_task_submission_query import _context
     from .delivery_task_submission_service import native_boundary, submission_definition, submission_reasons
+    from .delivery_feedback_service import assert_fixed_feedback_access, context_fields
 
+    feedback = context_fields(row.original["packet"])
+    if "feedback_runtime_scopes" in row.original:
+        feedback["feedback_runtime_scopes"] = row.original["feedback_runtime_scopes"]
+    assert_fixed_feedback_access(project, user, feedback,
+        task_id=row.task_id, reference=row.original["request"].get("feedback_reference"), store=store)
     context = _context(db, project, row.task_id)
     fixed = submission_definition(context, row.task_id)
     boundary = native_boundary(db, project, user, context.data, row.task_id, store, execution)
@@ -287,13 +302,16 @@ def apply_work_order(db, project, user, data, action, body, *, command_key, stor
             "project_id": project.id, "task_id": body.task_id, "requested_by": {"id": actor.id, "name": actor.username},
             "created_at": date(instant), "command_key": command_key, "request": body.model_dump(mode="json"),
             "accepted_version": db.connection().scalar(select(DeliveryWorkspace.version).where(*scope(project, DeliveryWorkspace))),
-            "packet": prepared["packet"], "native_boundary": prepared["boundary"]["boundary"], "runtime_scopes": prepared["boundary"]["runtime_scopes"]}
+            "packet": prepared["packet"], "native_boundary": prepared["boundary"]["boundary"],
+            "runtime_scopes": sorted(set(prepared["boundary"]["runtime_scopes"] + prepared.get("feedback_runtime_scopes", [])))}
+        if "feedback_context" in prepared:
+            original["feedback_runtime_scopes"] = prepared["feedback_runtime_scopes"]
         row = Order(id=identity, tenant_id=project.tenant_id, project_id=project.id, task_id=body.task_id, active_task_id=body.task_id,
             task_title=prepared["fixed"]["definition"]["title"], task_basis=body.task_basis,
             original=original, request_digest=digest(original), packet_digest=prepared["packet_digest"],
             definition_digest=body.definition_digest, native_boundary_digest=body.native_boundary_digest,
             native_identity_digest=digest(prepared["boundary"]["boundary"]["identities"]),
-            runtime_scopes=prepared["boundary"]["runtime_scopes"], executor=prepared["executor"],
+            runtime_scopes=original["runtime_scopes"], executor=prepared["executor"],
             executor_basis=executor_basis(prepared["executor"]), requested_by=original["requested_by"], created_at=instant, updated_at=instant,
             state="queued", revision=1, claimed_by=None, claimed_at=None, progress=None, submission_id=None, submission_digest=None,
             closure=None, invalidated=False, invalidated_reason=None)

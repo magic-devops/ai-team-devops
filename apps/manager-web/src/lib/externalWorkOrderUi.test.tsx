@@ -5,13 +5,17 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { request } from "./http";
 import { setSession, USER_KEY } from "./authStorage";
 import { externalWorkOrderCopy } from "../i18n/external-work-orders";
-import { ExternalWorkOrderPanel, WorkOrderFacts } from "../components/ExternalWorkOrderPanel";
+import { ExternalWorkOrderPanel, WorkOrderFacts, DefinitionFacts } from "../components/ExternalWorkOrderPanel";
 import { WorkOrderStatusBadges, WorkOrderReportedProgress } from "../components/ExternalWorkOrderPresentation";
 import { ActivitySourceLinks } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryActivityFeed";
 import { parseExternalWorkOrderRoute } from "./externalWorkOrderRoute";
 import { ProjectWorkOrders } from "../../subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench";
 import { DeliveryTaskDetail, TaskDetailContent } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskDetail";
-import { DeliveryTaskSubmissionPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskSubmissionPanel";
+import { TaskDispatchFeedback } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDispatchFeedback";
+import { taskDispatchRequest } from "./taskDispatchRoute";
+import { taskDispatchCopy, taskDispatchReason } from "../i18n/task-dispatch";
+import { externalWorkOrderReason } from "../i18n/external-work-orders";
+import { DeliveryTaskSubmissionPanel, SubmissionFacts } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskSubmissionPanel";
 import { workOrderStorageKey } from "./externalWorkOrderCommand";
 import { installExecutionExitGuard } from "./executionExitGuard";
 const h = vi.hoisted(() => ({ frame: "", next: 0, frames: {} as Record<string, any[]>, local: new Map<string, string>(), storage: new Map<string, string>(), queries: [] as any[], current: {} as any, detail: {} as any, reportCurrent: {} as any, reportDetail: {} as any,
@@ -265,4 +269,31 @@ it("carries an explicit work-order report request into the existing Task report 
   const tree = frame("task", () => DeliveryTaskDetail({ projectId: "P", taskId: "T", sessionId: "session" }));
   expect(find(tree, DeliveryTaskSubmissionPanel).requestCreate).toBe(1);
   expect(find(tree, DeliveryTaskSubmissionPanel)).not.toHaveProperty("source");
+});
+
+it("shows fixed W definition/instructions in the detail and claim dialog without downloading JSON", () => {
+  h.detail.instructions = "Keep the checked release path";
+  let tree = panel(); expect(find(tree, DefinitionFacts).definition).toEqual(h.detail.definition);
+  const instruction = nodes(tree).find((node) => node.props["aria-label"] === taskDispatchCopy("zh-CN").instructions); expect(instruction).toBeDefined();
+  expect(nodes(instruction).some((node) => node.props.children === "Keep the checked release path")).toBe(true);
+  button(tree, copy.claim).onClick(); tree = panel(); const modal = find(tree, Modal);
+  expect(find(modal.children, DefinitionFacts).definition).toEqual(h.detail.definition);
+  expect(nodes(modal.children).some((node) => node.props.children === "Keep the checked release path")).toBe(true); expect(request).not.toHaveBeenCalled();
+});
+it("produces an exact historical S return CTA on the independent current Task rather than its old requirement", () => {
+  h.reportDetail.submission.invalidated = true; h.reportDetail.submission.status = "invalidated";
+  h.reportDetail.definition.requirement = { id: "OldRequirement" }; h.reportDetail.decision = { id: "D", review_id: "Review", decision: "request_changes", comment: "Fix the path", reviewer: { id: "R", name: "Reviewer" }, created_at: now };
+  const tree = frame("S-facts", () => SubmissionFacts({ detail: h.reportDetail })), href = button(tree, taskDispatchCopy("zh-CN").feedback).href;
+  expect(taskDispatchRequest(href, "P", "T")).toMatchObject({ open: true, feedback: { submission_id: "S", submission_digest: digest, decision_id: "D" } });
+  expect(href).toContain("#/tasks/execution?"); expect(href).not.toContain("OldRequirement"); expect(href).not.toContain("Fix+the+path");
+});
+it("shows fixed historical title, issue, full original and safe artifact links apart from current acceptance", () => {
+  const context: any = { schema: "manager.delivery-feedback.v1", project_id: "P", task_id: "T", reference: { submission_id: "S", submission_digest: digest, decision_id: "D" }, submission: { definition: h.detail.definition, payload: h.reportDetail.payload }, decision: { decision: "request_changes", review_id: "Review", comment: "Earlier feedback", reviewer: { id: "R", name: "Reviewer" }, created_at: now, issue_id: "Issue-original" } };
+  context.submission.payload.artifacts[0].url = "https://example.test/evidence";
+  const tree = frame("fixed-feedback", () => TaskDispatchFeedback({ context, fixed: true }));
+  expect(nodes(tree).some((node) => node.props.children === h.detail.definition.title)).toBe(true);
+  expect(nodes(tree).some((node) => Array.isArray(node.props.children) && node.props.children.includes("Issue-original"))).toBe(true);
+  expect(nodes(tree).some((node) => node.type === "a" && node.props.href === "https://example.test/evidence" && node.props.rel === "noopener noreferrer")).toBe(true);
+  expect(nodes(tree).some((node) => node.type === "pre" && node.props.children === JSON.stringify(context, null, 2))).toBe(true);
+  for (const language of ["zh-CN", "en-US", "ja-JP"]) expect(externalWorkOrderReason(language, { code: "feedback_context_budget", message: "raw diagnostic" })).toBe(taskDispatchReason(language, "feedback_context_budget"));
 });

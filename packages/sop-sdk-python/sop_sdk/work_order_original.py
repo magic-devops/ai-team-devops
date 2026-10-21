@@ -38,6 +38,17 @@ def _digest(value):
         raise ValueError("Retain the exact original source digest")
 
 
+def _feedback_reference(value):
+    if value is None:
+        return
+    if not isinstance(value, Mapping) or set(value) != {"submission_id", "submission_digest", "decision_id"}:
+        raise ValueError("Feedback requires the exact original submission, digest and decision reference")
+    _digest(value["submission_digest"])
+    for field in ("submission_id", "decision_id"):
+        if not isinstance(value[field], str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", value[field]) is None:
+            raise ValueError("Retain the exact canonical submission and decision identities")
+
+
 def _bounded(value, budget=MAX_COMMAND_BYTES):
     try:
         result = _json_value(value)
@@ -50,12 +61,15 @@ def _bounded(value, budget=MAX_COMMAND_BYTES):
 
 
 def work_order_preview_body(body):
-    if not isinstance(body, Mapping) or set(body) != {"task_basis", "executor_member_id", "instructions"}:
+    required = {"task_basis", "executor_member_id", "instructions"}
+    if not isinstance(body, Mapping) or set(body) not in (required, required | {"feedback_reference"}):
         raise ValueError("A preview requires the complete task basis, executor and instructions")
     try:
         _digest(body["task_basis"])
         _member_identity(body["executor_member_id"])
         _text(body["instructions"], 4000, required=False)
+        if "feedback_reference" in body:
+            _feedback_reference(body["feedback_reference"])
         return _bounded(body)[0]
     except UnicodeError as exc:
         raise ValueError("Provide strict UTF-8 work-order text") from exc
@@ -82,10 +96,10 @@ def work_order_command_body(body):
     try:
         if action == "work_order.create":
             expected = {"task_id", "task_basis", "definition_digest", "native_boundary_digest", "executor_member_id", "preview_basis", "instructions"}
-            if set(payload) != expected:
+            if set(payload) not in (expected, expected | {"feedback_reference"}):
                 raise ValueError("A dispatch requires the complete approved work-package source")
             _identity(payload["task_id"])
-            work_order_preview_body({field: payload[field] for field in ("task_basis", "executor_member_id", "instructions")})
+            work_order_preview_body({field: payload[field] for field in ("task_basis", "executor_member_id", "instructions", "feedback_reference") if field in payload})
             for field in ("definition_digest", "native_boundary_digest", "preview_basis"): _digest(payload[field])
         else:
             if set(payload) != {"id", "order_revision"} | extra[action]:

@@ -1339,7 +1339,7 @@ def execution_targets(
     )
 
 
-@router.post("/execution-preview", response_model=ExecutionPreviewResponse)
+@router.post("/execution-preview", response_model=ExecutionPreviewResponse, response_model_exclude_unset=True)
 def execution_preview(
     body: ExecutionQueue,
     request: Request,
@@ -1367,7 +1367,8 @@ def execution_preview(
             getattr(request.app.state, "hermes_store", None),
             getattr(request.app.state, "hermes_execution", None),
         )
-        return {"project_id": project.id, "version": row.version if row else 0, **{key: value for key, value in plan.items() if key != "design_context"}}
+        return {"project_id": project.id, "version": row.version if row else 0,
+            **{key: value for key, value in plan.items() if key not in {"design_context", "feedback_runtime_scopes"}}}
     except CoreError as exc:
         raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc
 
@@ -2308,7 +2309,7 @@ def external_work_order_current(task_id: str, request: Request, user: Annotated[
         return current(db, _project(db, user, project_id), user, task_id, store=getattr(request.app.state, "hermes_store", None), execution=getattr(request.app.state, "hermes_execution", None))
 
 
-@router.post("/tasks/{task_id}/work-order-preview", response_model=WorkOrderPreview)
+@router.post("/tasks/{task_id}/work-order-preview", response_model=WorkOrderPreview, response_model_exclude_unset=True)
 def external_work_order_preview(task_id: str, body: WorkOrderPreviewInput, request: Request, user: Annotated[User, Depends(current_user)],
         db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id")):
     from .delivery_external_work_order_query import preview
@@ -2327,7 +2328,7 @@ def external_work_orders(request: Request, user: Annotated[User, Depends(current
         return catalogue(db, _project(db, user, project_id), user, task_id=task_id, state=state, limit=limit, cursor=cursor, store=getattr(request.app.state, "hermes_store", None))
 
 
-@router.get("/work-orders/{work_order_id}", response_model=WorkOrderDetail)
+@router.get("/work-orders/{work_order_id}", response_model=WorkOrderDetail, response_model_exclude_unset=True)
 def external_work_order_detail(work_order_id: str, request: Request, user: Annotated[User, Depends(current_user)],
         db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id")):
     from .delivery_external_work_order_query import detail

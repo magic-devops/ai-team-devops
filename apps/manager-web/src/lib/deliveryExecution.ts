@@ -1,3 +1,4 @@
+import { verifyFeedbackFields, type FeedbackReference, type FeedbackFields } from "./deliveryFeedback";
 import { request } from "./http";
 import type { DesignReference } from "./designLibrary";
 import {
@@ -66,6 +67,7 @@ export type DeliveryTargets = {
   workspaces: ExecutionWorkspace[];
 };
 export type ExecutionPayload = {
+  feedback_reference?: FeedbackReference | null;
   executor_member_id: string;
   executor_binding_basis: string;
   task_id: string;
@@ -90,7 +92,7 @@ export type ExecutionPayload = {
   test_nodes: ExecutionCommand[];
   test_node_ids: string[];
 };
-export type ExecutionPreview = {
+export type ExecutionPreview = FeedbackFields & {
   executor_snapshot: ExecutorSnapshot | null;
   project_id: string;
   version: number;
@@ -216,17 +218,19 @@ export function fetchDeliveryTargets(projectId: string, signal?: AbortSignal) {
     signal,
   });
 }
-export function previewDeliveryExecution(
+export async function previewDeliveryExecution(
   projectId: string,
   payload: ExecutionPayload,
   signal?: AbortSignal,
 ) {
-  return request<ExecutionPreview>("/api/v1/delivery/execution-preview", {
+  const result = await request<ExecutionPreview>("/api/v1/delivery/execution-preview", {
     method: "POST",
     headers: scope(projectId),
     body: JSON.stringify(payload),
     signal,
   });
+  await verifyFeedbackFields(result, projectId, payload.task_id, payload.feedback_reference);
+  return result;
 }
 export function fetchExecutionObservations(
   projectId: string,
@@ -244,6 +248,7 @@ export function fetchExecutionObservations(
   );
 }
 export type ExecutionDraftSession = {
+  feedback_reference?: FeedbackReference | null;
   executorMemberId: string;
   executorBindingBasis: string;
   projectId: string;
@@ -319,6 +324,7 @@ export function executionPayload(
     });
   }
   return {
+    ...(session.feedback_reference ? { feedback_reference: structuredClone(session.feedback_reference) } : {}),
     executor_member_id: session.executorMemberId,
     executor_binding_basis: session.executorBindingBasis,
     task_id: session.taskId,

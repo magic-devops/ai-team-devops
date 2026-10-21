@@ -374,3 +374,19 @@ describe("dispatch durable identity, recovery probe and actual hook transport", 
     await other.run(original("execution.sync")); expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+it("carries the selected feedback through actual E preview matching, detached queue original and cold original replay", async () => {
+  const reference = { submission_id: "S", submission_digest: "d".repeat(64), decision_id: "D" };
+  const prepared = preparedQueue(); prepared.session.feedback_reference = reference; prepared.payload.feedback_reference = reference;
+  const value = prepared.session.preview!;
+  value.feedback_context = { schema: "manager.delivery-feedback.v1", project_id: "P", task_id: "T", reference,
+    submission: { definition: { ...structuredClone(value.snapshot), task_acceptance_criteria: ["Earlier criterion"], acceptance_criteria: ["Earlier criterion"] }, payload: { task_id: "T", task_basis: "a".repeat(64), definition_digest: "a".repeat(64), native_boundary_digest: "a".repeat(64), source: { kind: "tool", name: "Earlier tool", url: "" }, summary: "Earlier report", artifacts: [{ id: "A", title: "Earlier output", content: "Failing path", url: "", sha256: null }], criteria: [{ source: "task", index: 0, text_digest: "a".repeat(64), result: "not_met", evidence_ids: ["A"] }], tests: [] } },
+    decision: { decision: "request_changes", review_id: "Review", comment: "Fix this path", reviewer: { id: "U", name: "Reviewer" }, created_at: "2026-10-21T04:00:00Z", issue_id: "I" } };
+  value.feedback_context_sha256 = "e".repeat(64); // Structural matcher; actual API verifies the canonical hash before handing this object to the editor.
+  expect(validExecutionQueuePreview("P", prepared, value)).toBe(true);
+  const retained = queueOriginal(prepared); expect(retained.payload.feedback_reference).toEqual(reference); expect(retained.payload).not.toHaveProperty("feedback_context");
+  const missing = { ...value, feedback_context: undefined }; expect(validExecutionQueuePreview("P", prepared, missing)).toBe(false);
+  expect(validExecutionQueuePreview("P", prepared, { ...value, feedback_context: { ...value.feedback_context, reference: { ...reference, submission_id: "Other" } } })).toBe(false);
+  const sent: unknown[] = [], fixture = harness("execution.queue", async (original) => { sent.push(original); if (sent.length === 1) throw new Error("Lost response"); return ack(original); });
+  await fixture.create().run(retained); await fixture.create().replay(); expect(sent).toEqual([retained, retained]);
+});

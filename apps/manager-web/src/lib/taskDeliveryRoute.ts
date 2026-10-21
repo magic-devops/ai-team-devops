@@ -4,7 +4,7 @@ export type TaskDeliverySelection = {
   work_order_id?: string | null;
 };
 const selectionKeys = ["submission_id", "work_order_id", "delivery_report"] as const;
-const taskEditKeys = ["task_edit", "task_edit_task", "task_source_thread", "task_source_message", "task_source_version", "task_source_revision", "task_source_resolution", "task_source_field"];
+const taskEditKeys = ["task_dispatch", "dispatch_task", "feedback_submission", "feedback_digest", "feedback_decision", "task_edit", "task_edit_task", "task_source_thread", "task_source_message", "task_source_version", "task_source_revision", "task_source_resolution", "task_source_field"];
 const identity = (value: unknown, max = 64): value is string => typeof value === "string" && Boolean(value) && Array.from(value).length <= max && value === value.trim() &&
   !/[\u0000-\u001f\u007f-\u009f/\\]/.test(value) && ![".", ".."].includes(value) &&
   !Array.from(value).some((char) => { const code = char.codePointAt(0)!; return code >= 0xd800 && code <= 0xdfff; });

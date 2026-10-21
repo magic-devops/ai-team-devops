@@ -7,6 +7,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstra
 
 from .delivery_execution_contract import ExecutionSnapshot
 from .delivery_issue_contract import human_text
+from .delivery_feedback_contract import FeedbackDigest, FeedbackReference
 
 
 def work_order_text(value):
@@ -102,6 +103,7 @@ class PreviewInput(Contract):
     task_basis: Digest
     executor_member_id: MemberIdentity
     instructions: str = Field(default="", max_length=4000)
+    feedback_reference: FeedbackReference | None = None
 
 
 class WorkOrderCreate(PreviewInput):
@@ -181,6 +183,8 @@ class Preview(Current):
     packet_digest: Digest | None
     executor: Executor | None
     max_packet_bytes: int
+    feedback_context: dict | None = None
+    feedback_context_sha256: FeedbackDigest | None = None
 
 
 class ReportedProgress(Contract):
@@ -248,6 +252,8 @@ class Detail(Envelope):
     definition: ExecutionSnapshot
     instructions: str
     permissions: Permissions
+    feedback_context: dict | None = None
+    feedback_context_sha256: FeedbackDigest | None = None
 
 
 class PacketView(Envelope):

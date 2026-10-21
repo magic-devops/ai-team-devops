@@ -1,3 +1,5 @@
+import { taskDispatchHref } from "@/lib/taskDispatchRoute";
+import { taskDispatchCopy } from "@/i18n/task-dispatch";
 import { useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Empty, Input, Select, Space, Table } from "antd";
@@ -64,7 +66,7 @@ export function ProjectWorkOrders() {
         onEditingChange={(value) => exit.setPending(`work-order-draft:${route.taskId}`, value)} onUnresolvedChange={(value) => exit.setPending(`work-order:${route.taskId}`, value)} />
     </> : route.view === "dispatch" ? <WorkbenchPanel title={copy.chooseTask}>
       <div className="space-y-3"><Input.Search aria-label={copy.taskSearch} placeholder={copy.taskSearch} value={search} onChange={(event) => setSearch(event.target.value)} maxLength={200} onSearch={(value) => { if (active()) { setQuery(value); setTaskCursor(""); } }} enterButton />
-        {tasks.error ? failure(tasks.error, tasks.refetch) : tasks.isPending ? <p role="status">{copy.loading}</p> : <ul className="divide-y divide-[var(--border)]">{tasks.data?.items.map((task) => <li key={task.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div><strong className="text-sm">{task.title}</strong><p className="text-xs text-[var(--muted)]">{task.id}</p></div><Button size="small" onClick={() => go({ taskId: task.id, workOrderId: "" })}>{copy.create}</Button></li>)}</ul>}
+        {tasks.error ? failure(tasks.error, tasks.refetch) : tasks.isPending ? <p role="status">{copy.loading}</p> : <ul className="divide-y divide-[var(--border)]">{tasks.data?.items.map((task) => <li key={task.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div><strong className="text-sm">{task.title}</strong><p className="text-xs text-[var(--muted)]">{task.id}</p></div><Button size="small" href={taskDispatchHref(projectId, task, location.hash)} onClick={(event) => { if (!active() || !exit.canNavigate()) event.preventDefault(); }}>{taskDispatchCopy(i18n.language).title}</Button></li>)}</ul>}
         {tasks.data && !tasks.error && !tasks.data.items.length && <Empty description={copy.noTask} />}
         <Space wrap>{taskCursor && <Button onClick={() => setTaskCursor("")}>{copy.first}</Button>}{tasks.data?.next_cursor && !tasks.error && <Button disabled={tasks.isFetching} onClick={() => setTaskCursor(tasks.data!.next_cursor!)}>{copy.next}</Button>}</Space>
       </div>

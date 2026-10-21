@@ -14,6 +14,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .agents import AgentDispatch, Agents
+from .agent_input import validate_feedback_context
 from .delivery import Delivery
 from .models import CoreError, Principal, TaskDispatch, TaskEnvelope
 from .repository import Repository
@@ -59,9 +60,10 @@ def _request(principal, workspace, *, operation_id, project_id, execution_id, en
         raise CoreError("invalid_handoff", "An immutable plan basis is required", 422)
     if not re.fullmatch(r"[0-9a-f]{64}", frozen_body.target_basis):
         raise CoreError("invalid_handoff", "An immutable execution target basis is required", 422)
-    if (not isinstance(envelope, dict) or set(envelope) not in (
-            {"title", "description", "acceptance_criteria", "source"},
-            {"title", "description", "acceptance_criteria", "source", "design_context"})
+    if (not isinstance(envelope, dict)
+            or not {"title", "description", "acceptance_criteria", "source"} <= set(envelope)
+            or not set(envelope) <= {"title", "description", "acceptance_criteria", "source", "design_context",
+                                     "feedback_context", "feedback_context_sha256"}
             or any(not isinstance(envelope.get(key), str) for key in ("title", "description", "acceptance_criteria"))
             or not envelope["title"].strip() or not envelope["acceptance_criteria"].strip()
             or not isinstance(envelope.get("source"), dict)
@@ -72,6 +74,7 @@ def _request(principal, workspace, *, operation_id, project_id, execution_id, en
         TaskEnvelope.model_validate(envelope)
     except ValueError as exc:
         raise CoreError("invalid_handoff", "Use the complete typed original managed task envelope", 422) from exc
+    validate_feedback_context(envelope, project_id=project_id)
     request = {"schema": "manager.execution-handoff.v1", "tenant": principal.tenant,
                "business": principal.business, "workspace": workspace, "actor": principal.actor,
                "operation_id": operation_id, "project_id": project_id, "execution_id": execution_id,

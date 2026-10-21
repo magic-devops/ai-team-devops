@@ -13,6 +13,8 @@ import { DeliveryDesignContextPanel } from "../../subapps/ai-rd-center/src/pages
 import { DeliveryTaskSubmissionPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskSubmissionPanel";
 import { DeliveryManualReviewPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryManualReviewPanel";
 import { ExternalWorkOrderPanel } from "../components/ExternalWorkOrderPanel";
+import { TaskDispatchHost } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDispatchHost";
+import { closeTaskDispatchRoute, taskDispatchRouteEvent } from "./taskDispatchRoute";
 import { closeTaskDefinitionRoute, taskDefinitionRouteClosedEvent } from "./taskDefinitionRoute";
 import { useDeliveryDraftState } from "./useDeliveryDraftState";
 import { setSession, USER_KEY } from "./authStorage";
@@ -293,5 +295,47 @@ describe("synchronous task draft ownership", () => {
     setFirst(true); setSecond(true); unmount("draft-a"); setFirst(false);
     expect(first.mock.calls).toEqual([[true], [false]]); expect(second.mock.calls).toEqual([[true]]);
     setSecond(false); expect(second.mock.calls).toEqual([[true], [false]]);
+  });
+});
+
+describe("actual Task dispatch host navigation and W transfer", () => {
+  const route = (submission = "S") => `#/tasks/execution?project_id=P&task_id=T&task_dispatch=1&dispatch_task=T&feedback_submission=${submission}&feedback_digest=${"a".repeat(64)}&feedback_decision=D`;
+  const navigate = (hash: string, event = "hashchange") => { location.hash = hash; location.href = `http://local/${hash}`; window.dispatchEvent(new Event(event)); };
+  it("recognizes same-Task A to B, skips ordinary S/W changes and opens a closed identical signature again", () => {
+    host(); navigate(route()); expect(find(host(), TaskDispatchHost).props).toMatchObject({ requestOpen: 1, feedbackReference: { submission_id: "S" } });
+    navigate(route("S2"), "popstate"); expect(find(host(), TaskDispatchHost).props.requestOpen).toBe(2);
+    navigate(`${location.hash}&submission_id=View&work_order_id=W`); expect(find(host(), TaskDispatchHost).props.requestOpen).toBe(2);
+    closeTaskDispatchRoute("P", "T"); host(); navigate(route("S2")); expect(find(host(), TaskDispatchHost).props.requestOpen).toBe(3);
+  });
+  it("cleans up/reinstalls dispatch listeners without double-opening the first route", () => {
+    navigate(route()); const add = vi.spyOn(window, "addEventListener"), remove = vi.spyOn(window, "removeEventListener");
+    expect(find(host(), TaskDispatchHost).props.requestOpen).toBe(1); strictEffectCycle("task"); expect(find(host(), TaskDispatchHost).props.requestOpen).toBe(1);
+    navigate(route("S2")); expect(find(host(), TaskDispatchHost).props.requestOpen).toBe(2);
+    const added = add.mock.calls.filter(([event]) => event === taskDispatchRouteEvent).map(([, listener]) => listener); unmount("task");
+    expect(remove.mock.calls.filter(([event]) => event === taskDispatchRouteEvent).map(([, listener]) => listener)).toEqual(added);
+    navigate(route("S3")); expect(find(host(), TaskDispatchHost).props.requestOpen).toBe(1); add.mockRestore(); remove.mockRestore();
+  });
+  it("protects dispatch drafts and unknown operations from same-Task feedback navigation", () => {
+    const tree = host(), base = location.hash; h.taskEditPending!(true); navigate(route()); expect(location.hash).toBe(base);
+    h.taskEditPending!(false); const dispatch = find(tree, TaskDispatchHost); dispatch.props.onEditingChange(true); navigate(route()); expect(location.hash).toBe(base); expect(beforeUnload().defaultPrevented).toBe(true);
+    dispatch.props.onEditingChange(false); navigate(route()); expect(find(host(), TaskDispatchHost).props.requestOpen).toBe(1);
+  });
+  it("transfers draft ownership into W without changing its guarded hash and only clears flags after W cancel or confirmation", () => {
+    navigate(route()); const tree = host(), dispatch = find(tree, TaskDispatchHost), before = location.hash;
+    dispatch.props.onEditingChange(true); expect(dispatch.props.onExternal({ executorId: "Tool", feedback_reference: dispatch.props.feedbackReference })).toBe(true); dispatch.props.onEditingChange(false);
+    let w = find(host(), ExternalWorkOrderPanel); expect(w.props.requestCreate).toMatchObject({ executorId: "Tool", token: 1 }); expect(beforeUnload().defaultPrevented).toBe(true);
+    navigate("#/projects"); expect(location.hash).toBe(before); // Handoff did not make the guard retain an obsolete dispatch route.
+    w.props.onEditingChange(true); w.props.onComposeSettled(1, true); w.props.onSelect("W-new"); expect(location.hash).toBe(before);
+    w.props.onEditingChange(false); w.props.onComposeClosed(1); expect(location.hash).not.toContain("task_dispatch"); expect(beforeUnload().defaultPrevented).toBe(false);
+    navigate(route()); const dispatch2 = find(host(), TaskDispatchHost); dispatch2.props.onEditingChange(true); dispatch2.props.onExternal({ executorId: "Tool", feedback_reference: dispatch2.props.feedbackReference }); dispatch2.props.onEditingChange(false);
+    w = find(host(), ExternalWorkOrderPanel); w.props.onEditingChange(true); w.props.onEditingChange(false); w.props.onSelect("W-new");
+    expect(location.hash).toContain("work_order_id=W-new"); expect(location.hash).not.toContain("feedback_submission"); expect(location.hash).not.toContain("task_dispatch");
+  });
+  it("releases a failed W transfer and ignores late settlement from a previous transfer", () => {
+    const first = find(host(), TaskDispatchHost); first.props.onEditingChange(true); first.props.onExternal({ executorId: "Tool" }); first.props.onEditingChange(false);
+    const old = find(host(), ExternalWorkOrderPanel); old.props.onComposeSettled(1, false); expect(beforeUnload().defaultPrevented).toBe(false);
+    const second = find(host(), TaskDispatchHost); second.props.onEditingChange(true); second.props.onExternal({ executorId: "Tool" }); second.props.onEditingChange(false); host();
+    old.props.onComposeSettled(1, false); expect(beforeUnload().defaultPrevented).toBe(true);
+    find(host(), ExternalWorkOrderPanel).props.onComposeSettled(2, false); expect(beforeUnload().defaultPrevented).toBe(false);
   });
 });

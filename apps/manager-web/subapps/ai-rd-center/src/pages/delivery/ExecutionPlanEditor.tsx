@@ -1,3 +1,5 @@
+import { taskDispatchCopy, taskDispatchReason } from "@/i18n/task-dispatch";
+import { TaskDispatchFeedback } from "./TaskDispatchFeedback";
 import {
   fetchDeliveryTaskEditData,
   type DeliveryCommandAck,
@@ -62,6 +64,7 @@ export function ExecutionPlanEditor({
   queueCommand,
   isActive,
   canSubmit,
+  contextWarning,
   onUnresolvedChange,
 }: {
   initial: ExecutionDraftSession;
@@ -74,6 +77,7 @@ export function ExecutionPlanEditor({
   queueCommand: ExecutionDispatchCommand;
   isActive?: () => boolean;
   canSubmit?: () => boolean;
+  contextWarning?: string;
   onUnresolvedChange?: (value: boolean) => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -97,6 +101,7 @@ export function ExecutionPlanEditor({
   const [targets, setTargets] = useState(initialTargets);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [feedbackDiagnostic, setFeedbackDiagnostic] = useState("");
   const [conflict, setConflict] = useState(false);
   const [candidate, setCandidate] = useState<{
     workspace: DeliveryTaskData;
@@ -143,7 +148,11 @@ export function ExecutionPlanEditor({
   };
   const fail = (failure: unknown) => {
     const message = (failure as Error).message;
+    if (message === "feedbackInvalid") { setError(taskDispatchCopy(i18n.language).feedbackInvalid); return; }
     const parsed = planError(failure);
+    const feedbackMessage = taskDispatchReason(i18n.language, parsed.code || "");
+    if (feedbackMessage) { setError(feedbackMessage); setFeedbackDiagnostic(`${parsed.code}: ${parsed.message}`); setConflict(false); setCandidate(undefined); return; }
+    setFeedbackDiagnostic("");
     setError(
       parsed.code && /^(runtime_|executor_)/.test(parsed.code)
         ? `reasons.${parsed.code}`
@@ -156,7 +165,7 @@ export function ExecutionPlanEditor({
     if (!canChange() || policyRef.current) return;
     pending.current = true;
     setBusy(true);
-    setError("");
+    setError(""); setFeedbackDiagnostic("");
     try {
       current();
       const value = { ...draftRef.current, preview: null };
@@ -186,7 +195,7 @@ export function ExecutionPlanEditor({
     if (!canChange() || !draftRef.current.preview || conflict || policyRef.current || executorInvalid) return;
     pending.current = true;
     setBusy(true);
-    setError("");
+    setError(""); setFeedbackDiagnostic("");
     try {
       current();
       const prepared = prepareExecution(draftRef.current);
@@ -213,7 +222,7 @@ export function ExecutionPlanEditor({
     pending.current = true;
     setCandidate(undefined);
     setBusy(true);
-    setError("");
+    setError(""); setFeedbackDiagnostic("");
     try {
       current();
       setDraft({ ...draftRef.current, preview: null });
@@ -307,10 +316,13 @@ export function ExecutionPlanEditor({
       try { current(); onClose(); } catch { setError("queueRefreshAfterSaveFailed"); }
       return;
     }
-    if (!canChange() || policyRef.current) return;
+    if (pending.current || confirmed.current || isLocked() || policyRef.current) return;
+    try { current(); } catch { return; }
     if (queueCommand.snapshot().phase === "refused") { queueCommand.reset(); if (queueCommand.snapshot().phase !== "idle") return; }
     onClose();
   };
+  const queueProblem = queueCommand.state.error ? planError(new Error(queueCommand.state.error)) : undefined;
+  const queueFeedback = taskDispatchReason(i18n.language, queueProblem?.code || "");
   return (
     <>
       <Modal
@@ -359,12 +371,14 @@ export function ExecutionPlanEditor({
         {commandLocked ? <ExecutionQueueRecovery command={queueCommand} projectId={initial.projectId} taskId={initial.taskId}
           isActive={isActive} onSaved={onSaved} onResolved={() => { confirmed.current = true; setFinished(true); notify.current?.(false); onClose(); }} /> : finished ?
           <Alert type="success" title={handoffCopy.received} description={error ? tr(error) : handoffCopy.receivedHint} /> : <>
+        {contextWarning && <Alert type="warning" title={contextWarning} />}
         <p className="runtime-help">{tr("selectFirst")}</p>
-        {queueCommand.state.error && <Alert type="error" role="alert" title={queueCommand.state.error === "retainedOriginalUnavailable" ? tr("queueStorageUnavailable") : queueCommand.state.error === "retainedOriginalInvalid" ? tr("queueOriginalUnavailable") : queueCommand.state.error} />}
+        {queueCommand.state.error && <Alert type="error" role="alert" description={queueFeedback && <details><summary>{handoffCopy.details}</summary><code>{queueCommand.state.error}</code></details>} title={queueFeedback || (queueCommand.state.error === "retainedOriginalUnavailable" ? tr("queueStorageUnavailable") : queueCommand.state.error === "retainedOriginalInvalid" ? tr("queueOriginalUnavailable") : queueCommand.state.error)} />}
         {error && (
           <Alert
             role="alert"
             type="error"
+            description={feedbackDiagnostic && <details><summary>{handoffCopy.details}</summary><code>{feedbackDiagnostic}</code></details>}
             title={
               conflict
                 ? tr("conflict")
@@ -639,6 +653,7 @@ export function ExecutionPlanEditor({
               snapshot={draft.preview.executor_snapshot}
             />
             <ExecutionAcceptanceSnapshot projectId={draft.projectId} snapshot={draft.preview.snapshot} />
+            {draft.preview.feedback_context && <TaskDispatchFeedback context={draft.preview.feedback_context} fixed />}
             <div className="runtime-node-chips">
               {draft.preview.nodes.map((node) => (
                 <Tag

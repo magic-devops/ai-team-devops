@@ -114,7 +114,7 @@ def command_access(state, action, resource_id):
     """Freeze original runtime scopes; later moves must not redefine receipt access."""
     if action.startswith("execution."):
         entry = next((row for row in state.get("executions", []) if row["id"] == resource_id), None)
-        return [entry["workspace_id"]] if entry else []
+        return sorted(set([entry["workspace_id"], *entry.get("feedback_runtime_scopes", [])])) if entry else []
     if action.startswith("deployment.environment."):
         entry = next(
             (row for row in state.get("deployment_environments", []) if row["id"] == resource_id), None

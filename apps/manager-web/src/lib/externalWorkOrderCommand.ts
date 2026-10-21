@@ -1,3 +1,4 @@
+import { validFeedbackReference } from "./deliveryFeedback";
 import { useRef } from "react";
 import type { DeliveryCommandAck, DeliveryIntent } from "./delivery";
 import { createDeliveryCommandController, useDeliveryCommand, validDeliveryCommandAck, type DeliveryControllerOptions } from "./deliveryCommandController";
@@ -21,8 +22,8 @@ export function validWorkOrderOriginal(value: unknown, taskId: string): value is
     value.binding.task_id !== taskId || !submissionIdentity(taskId) || !digest(value.binding.packet_digest) || !record(value.payload)) return false;
   const p = value.payload, b = value.binding;
   if (value.action === "work_order.create") {
-    if (b.work_order_id !== null || b.request_digest !== null || b.state !== null || !exact(p, ["task_id", "task_basis", "definition_digest", "native_boundary_digest", "executor_member_id", "preview_basis", "instructions"]) || p.task_id !== taskId ||
-      ![p.task_basis, p.definition_digest, p.native_boundary_digest, p.preview_basis].every(digest) || !workOrderMemberIdentity(p.executor_member_id) || !text(p.instructions, 4000, false)) return false;
+    if (b.work_order_id !== null || b.request_digest !== null || b.state !== null || !exact(p, ["task_id", "task_basis", "definition_digest", "native_boundary_digest", "executor_member_id", "preview_basis", "instructions", ...(Object.hasOwn(p, "feedback_reference") ? ["feedback_reference"] : [])]) || p.task_id !== taskId ||
+      ![p.task_basis, p.definition_digest, p.native_boundary_digest, p.preview_basis].every(digest) || !workOrderMemberIdentity(p.executor_member_id) || !text(p.instructions, 4000, false) || Object.hasOwn(p, "feedback_reference") && p.feedback_reference !== null && !validFeedbackReference(p.feedback_reference)) return false;
   } else {
     if (!submissionIdentity(b.work_order_id) || !digest(b.request_digest) || !workOrderStates.includes(b.state) || p.id !== b.work_order_id || !integer(p.order_revision, 1)) return false;
     const keys = value.action === "work_order.progress" ? ["percent", "status", "message"] : value.action === "work_order.release" ? ["stopped_attestation", "comment"] : value.action === "work_order.cancel" ? ["comment"] : value.action === "work_order.report" ? ["submission_id", "submission_digest", "stopped_attestation"] : [];
@@ -54,7 +55,7 @@ export function validWorkOrderAck(projectId: string, taskId: string, original: W
 export function createWorkOrderOriginal(preview: WorkOrderPreview, instructions: string, key: string): WorkOrderOriginal {
   if (!preview.complete || !preview.allowed || !preview.can_dispatch || !preview.preview_basis || !preview.packet_digest || !preview.native_boundary_digest || !preview.executor?.available) throw new Error("workOrderPreviewRequired");
   const value: WorkOrderOriginal = { action: "work_order.create", payload: { task_id: preview.task_id, task_basis: preview.task_basis, definition_digest: preview.definition_digest, native_boundary_digest: preview.native_boundary_digest,
-    executor_member_id: preview.executor.id, preview_basis: preview.preview_basis, instructions }, intent: { version: preview.version, key }, binding: { task_id: preview.task_id, work_order_id: null, request_digest: null, packet_digest: preview.packet_digest, state: null } };
+    executor_member_id: preview.executor.id, preview_basis: preview.preview_basis, instructions, ...(preview.feedback_context ? { feedback_reference: structuredClone(preview.feedback_context.reference) } : {}) }, intent: { version: preview.version, key }, binding: { task_id: preview.task_id, work_order_id: null, request_digest: null, packet_digest: preview.packet_digest, state: null } };
   if (!validWorkOrderOriginal(value, preview.task_id)) throw new Error("workOrderInvalid"); return value;
 }
 export function workOrderActionOriginal(detail: WorkOrderDetail, action: Exclude<WorkOrderAction, "work_order.create">, extra: Record<string, unknown>, key: string): WorkOrderOriginal {

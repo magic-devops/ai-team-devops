@@ -70,6 +70,12 @@ def _request(row):
 
 
 def _validate_original(row):
+    from .delivery_feedback_service import validate_fixed_feedback
+
+    if not isinstance(row.original, dict):
+        raise HTTPException(409, {"code": "handoff_original_invalid", "message": "The fixed handoff original cannot be verified."})
+    validate_fixed_feedback(row.original, project_id=row.project_id, task_id=row.task_id,
+        reference=row.original.get("feedback_reference"))
     try:
         request = _request(row)
         verified = (isinstance(row.original, dict) and managed_handoff_digest(_principal(row), row.workspace_id, **request) == row.request_digest)
@@ -82,7 +88,7 @@ def _validate_original(row):
     return request
 
 
-def accept_handoff(db, project, user, entry, accepted_version=None, *, design_context=None):
+def accept_handoff(db, project, user, entry, accepted_version=None, *, design_context=None, feedback_context=None):
     """Append H inside the queue's existing SQL/CAS/receipt transaction; never dispatch."""
     from .delivery_service import identifier
     from .hermes_workspace import runtime_identity
@@ -99,6 +105,8 @@ def accept_handoff(db, project, user, entry, accepted_version=None, *, design_co
     original = deepcopy(entry)
     if design_context is not None:
         original["design_context"] = deepcopy(design_context)
+    if feedback_context is not None:
+        original["feedback_context"] = deepcopy(feedback_context)
     row = DeliveryExecutionHandoff(id=entry["handoff_id"], tenant_id=project.tenant_id, project_id=project.id,
         execution_id=entry["id"], task_id=entry["task_id"], workspace_id=entry["workspace_id"], requested_by=user.id,
         business_key=business, original=original, request_digest="", accepted_version=version,
@@ -218,6 +226,10 @@ def _authorize_new(db, project, row, state, store, execution):
     if not _role_permissions(db, user, project)["write"]:
         raise HTTPException(403, "The original dispatcher no longer has project write permission")
     principal, workspace = context(store, user, row.workspace_id, "execute")
+    from .delivery_feedback_service import assert_fixed_feedback_access
+
+    assert_fixed_feedback_access(project, user, row.original, task_id=row.task_id,
+        reference=row.original.get("feedback_reference"), store=store)
     if principal.business != row.business_key:
         raise HTTPException(403, "The original runtime business scope changed")
     original = row.original

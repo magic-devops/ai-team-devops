@@ -1,3 +1,6 @@
+import type { FeedbackReference } from "@/lib/deliveryFeedback";
+import { TaskDispatchFeedback } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDispatchFeedback";
+import { taskDispatchCopy } from "@/i18n/task-dispatch";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Checkbox, Input, InputNumber, Modal, Select, Skeleton, Space, Tag } from "antd";
@@ -15,16 +18,16 @@ import { previewWorkOrder, readWorkOrderCurrent, readWorkOrderDetail, readWorkOr
   type WorkOrderCurrent, type WorkOrderDetail, type WorkOrderPreview, type WorkOrderReason, type WorkOrderSummary } from "@/lib/externalWorkOrders";
 import { DesignReferenceFacts } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryDesignContextPanel";
 
-type Props = { projectId: string; taskId: string; sessionId: string; selectedOrderId?: string; invalidSelection?: boolean; compose?: boolean;
+type Props = { requestCreate?: { token: number; executorId: string; feedback_reference?: FeedbackReference }; onComposeSettled?: (token: number, started: boolean) => void; onComposeClosed?: (token: number) => void; onDispatch?: () => void; projectId: string; taskId: string; sessionId: string; selectedOrderId?: string; invalidSelection?: boolean; compose?: boolean;
   disabled?: boolean; isActive?: () => boolean; canSubmit?: () => boolean; onSaved?: (ack: DeliveryCommandAck) => void;
   onUnresolvedChange?: (pending: boolean) => void; onEditingChange?: (editing: boolean) => void;
   onSelect?: (orderId: string) => void; onWriteReport?: (order: { id: string; order_revision: number }) => void };
-type Draft = { action: WorkOrderAction; current?: WorkOrderCurrent; detail?: WorkOrderDetail; executorId: string; instructions: string;
+type Draft = { feedback_reference?: FeedbackReference; action: WorkOrderAction; current?: WorkOrderCurrent; detail?: WorkOrderDetail; executorId: string; instructions: string;
   comment: string; percent: number | null; knownPercent: boolean; status: "running" | "blocked"; submissionId: string; stopped: boolean };
 const newDraft = (action: WorkOrderAction): Draft => ({ action, executorId: "", instructions: "", comment: "", percent: null, knownPercent: false, status: "running", submissionId: "", stopped: false });
 
-export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedOrderId = "", invalidSelection = false, compose = false, disabled = false, isActive, canSubmit, onSaved, onUnresolvedChange, onEditingChange, onSelect, onWriteReport }: Props) {
-  const { i18n } = useTranslation(), copy = externalWorkOrderCopy(i18n.language), client = useQueryClient();
+export function ExternalWorkOrderPanel({ requestCreate, onComposeSettled, onComposeClosed, onDispatch, projectId, taskId, sessionId, selectedOrderId = "", invalidSelection = false, compose = false, disabled = false, isActive, canSubmit, onSaved, onUnresolvedChange, onEditingChange, onSelect, onWriteReport }: Props) {
+  const { i18n } = useTranslation(), copy = externalWorkOrderCopy(i18n.language), dispatchCopy = taskDispatchCopy(i18n.language), client = useQueryClient();
   const origin = useRef(projectSessionKey()), mounted = useRef(true), pending = useRef(false);
   const identity = JSON.stringify([projectId, taskId, sessionId]), live = useRef(identity); live.current = identity;
   const access = useRef({ disabled, isActive, canSubmit }); access.current = { disabled, isActive, canSubmit };
@@ -54,6 +57,7 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
   const canWrite = () => current() && !invalidSelection && !access.current.disabled && !pending.current && access.current.canSubmit?.() !== false && ["idle", "refused"].includes(command.snapshot().phase);
   const problem = (cause: unknown) => {
     const value = executionRuntimeProblem(cause);
+    if (value.message === "feedbackInvalid") return dispatchCopy.feedbackInvalid;
     if (value.message === "workOrderScopeChanged") return copy.scopeChanged;
     if (["workOrderInvalid", "ackMismatch", "retainedOriginalInvalid"].includes(value.message)) return copy.responseInvalid;
     if (["workOrderPreviewRequired", "workOrderNotAllowed"].includes(value.message)) return copy.unavailable;
@@ -67,13 +71,25 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
   const composed = useRef(false);
   useEffect(() => { if (!compose || composed.current || !facts || locked || disabled) return; composed.current = true; if (facts.can_dispatch && canWrite()) begin("work_order.create"); }, [compose, facts, locked, disabled]);
 
-  function begin(action: WorkOrderAction) {
-    if (!canWrite() || draftRef.current) return;
+  const handledCreate = useRef(0), composeDraftToken = useRef(0);
+  useEffect(() => {
+    if (!requestCreate || requestCreate.token === handledCreate.current || busy) return;
+    if (currentQ.error || invalidSelection || disabled || locked || !current()) { handledCreate.current = requestCreate.token; setError(dispatchCopy.changed); onComposeSettled?.(requestCreate.token, Boolean(draftRef.current)); return; }
+    if (!facts || !canWrite()) return;
+    handledCreate.current = requestCreate.token;
+    if (draftRef.current) { setError(dispatchCopy.changed); onComposeSettled?.(requestCreate.token, true); return; }
+    const executor = facts.executors.find((row) => row.id === requestCreate.executorId && row.active && row.available);
+    const started = Boolean(facts.can_dispatch && executor && begin("work_order.create", requestCreate));
+    if (started) composeDraftToken.current = requestCreate.token;
+    if (!started) setError(dispatchCopy.changed); onComposeSettled?.(requestCreate.token, started);
+  }, [requestCreate, facts, currentQ.error, invalidSelection, locked, busy, disabled, canSubmit]);
+  function begin(action: WorkOrderAction, seed?: { executorId: string; feedback_reference?: FeedbackReference }) {
+    if (!canWrite() || draftRef.current) return false;
     const value = reads.current;
-    if (action === "work_order.create" ? !value.facts?.can_dispatch : !value.detail) return;
-    if (state.phase === "refused") { command.reset(); if (command.snapshot().phase !== "idle") return; }
-    changeDraft({ ...newDraft(action), ...(action === "work_order.create" ? { current: structuredClone(value.facts) } : { detail: structuredClone(value.detail), status: value.detail?.work_order.state === "cancel_requested" ? "blocked" : "running" }) });
-    changePrepared(null); setPreview(null); setLatest(null); setError(""); setFeedback("");
+    if (action === "work_order.create" ? !value.facts?.can_dispatch : !value.detail) return false;
+    if (state.phase === "refused") { command.reset(); if (command.snapshot().phase !== "idle") return false; }
+    changeDraft({ ...newDraft(action), ...(action === "work_order.create" ? { current: structuredClone(value.facts), ...(seed ? { executorId: seed.executorId, feedback_reference: seed.feedback_reference } : {}) } : { detail: structuredClone(value.detail), status: value.detail?.work_order.state === "cancel_requested" ? "blocked" : "running" }) });
+    changePrepared(null); setPreview(null); setLatest(null); setError(""); setFeedback(""); return true;
   }
   const patch = (change: Partial<Draft>) => { if (canWrite() && !preparedRef.current && draftRef.current) changeDraft({ ...draftRef.current, ...change }); };
   async function prepare() {
@@ -85,7 +101,7 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
       if (value.action === "work_order.create") {
         const fresh = await readWorkOrderCurrent(projectId, taskId, origin.current); assertCurrent();
         if (!fresh.can_dispatch || !value.current || fresh.task_basis !== value.current.task_basis || fresh.definition_digest !== value.current.definition_digest || fresh.native_boundary_digest !== value.current.native_boundary_digest) { setLatest(fresh); throw new Error(copy.changed); }
-        const candidate = await previewWorkOrder(projectId, taskId, origin.current, { task_basis: fresh.task_basis, executor_member_id: value.executorId, instructions: value.instructions }); assertCurrent(); setPreview(candidate);
+        const candidate = await previewWorkOrder(projectId, taskId, origin.current, { task_basis: fresh.task_basis, executor_member_id: value.executorId, instructions: value.instructions, ...(value.feedback_reference ? { feedback_reference: value.feedback_reference } : {}) }); assertCurrent(); setPreview(candidate);
         changePrepared(createWorkOrderOriginal(candidate, value.instructions, crypto.randomUUID()));
       } else {
         if (!value.detail) throw new Error("workOrderInvalid");
@@ -111,7 +127,7 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
   async function complete(ack: DeliveryCommandAck | undefined) {
     if (!ack) return; assertCurrent(); command.reset();
     if (command.snapshot().phase !== "idle") { onUnresolvedChange?.(true); return; }
-    changeDraft(null); changePrepared(null); setLatest(null); setPreview(null); setError(""); setFeedback(copy.confirmed); onUnresolvedChange?.(false);
+    composeDraftToken.current = 0; changeDraft(null); changePrepared(null); setLatest(null); setPreview(null); setError(""); setFeedback(copy.confirmed); onUnresolvedChange?.(false);
     const id = ack.result?.work_order_id; if (typeof id === "string") setSelected(id);
     onSaved?.(ack); void invalidateDeliveryQueries(client, projectId);
     if (typeof id === "string") onSelect?.(id);
@@ -123,7 +139,7 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
     catch (cause) { fail(cause); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
-  const close = () => { if (!current() || pending.current || locked) return; if (command.snapshot().phase === "refused") command.reset(); if (command.snapshot().phase !== "idle") return; changeDraft(null); changePrepared(null); setLatest(null); setPreview(null); setError(""); };
+  const close = () => { if (!current() || pending.current || locked) return; if (command.snapshot().phase === "refused") command.reset(); if (command.snapshot().phase !== "idle") return; changeDraft(null); changePrepared(null); setLatest(null); setPreview(null); setError(""); const token = composeDraftToken.current; composeDraftToken.current = 0; if (token) onComposeClosed?.(token); };
   async function download(order: WorkOrderSummary) {
     if (!current() || pending.current) return; pending.current = true; setBusy(true); setError("");
     try { const packet = await readWorkOrderPacket(projectId, order, origin.current); assertCurrent(); const blob = new Blob([JSON.stringify(packet, null, 2) + "\n"], { type: "application/json;charset=utf-8" });
@@ -150,7 +166,7 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
   const reportSummary = !reportChoice.error && !reportCurrent.error && reportChoice.data?.submission.id === latestReportId ? reportChoice.data.submission : null;
   const eligibleReports = reportSummary && !reportSummary.invalidated && reportSummary.status === "awaiting_review" && reportSummary.review_id === null && reportSummary.definition_digest === draft?.detail?.work_order.definition_digest && reportSummary.native_boundary_digest === draft?.detail?.work_order.native_boundary_digest && reportSummary.submitted_by.id === draft?.detail?.work_order.claimed_by?.id ? [reportSummary] : [];
   return <section className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3" aria-label={copy.title}>
-    <div className="flex flex-wrap items-center justify-between gap-2"><strong>{copy.title}</strong><Space wrap>{back && <Button size="small" href={back} disabled={locked}>{copy.back}</Button>}<Button size="small" disabled={locked || busy} onClick={() => { if (current()) { void currentQ.refetch(); void page.refetch(); if (selectedId) void detailQ.refetch(); } }}>{copy.refresh}</Button><Button size="small" type="primary" disabled={!facts?.can_dispatch || disabled || locked || busy || Boolean(draft)} onClick={() => begin("work_order.create")}>{copy.create}</Button></Space></div>
+    <div className="flex flex-wrap items-center justify-between gap-2"><strong>{copy.title}</strong><Space wrap>{back && <Button size="small" href={back} disabled={locked}>{copy.back}</Button>}<Button size="small" disabled={locked || busy} onClick={() => { if (current()) { void currentQ.refetch(); void page.refetch(); if (selectedId) void detailQ.refetch(); } }}>{copy.refresh}</Button><Button size="small" type="primary" disabled={(!onDispatch && !facts?.can_dispatch) || disabled || locked || busy || Boolean(draft)} onClick={() => { if (onDispatch) { if (canWrite()) onDispatch(); } else begin("work_order.create"); }}>{onDispatch ? dispatchCopy.title : copy.create}</Button></Space></div>
     {feedback && <Alert type="success" role="status" title={feedback} />}
     {invalidSelection && <Alert type="warning" role="alert" title={copy.responseInvalid} />}
     {!draft && recovery}{error && !draft && <Alert type="warning" role="alert" title={error} />}
@@ -158,6 +174,9 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
     {detailQ.error && readFailure(detailQ.error, detailQ.refetch)}
     {detail && <div className="space-y-3 rounded-lg bg-[var(--surface-muted)] p-3">
       <div className="flex flex-wrap items-start justify-between gap-2"><div><strong>{detail.work_order.task_title}</strong><p className="text-sm text-[var(--muted)]">{detail.work_order.executor.name} · {detail.work_order.executor.tool}</p></div><Tag color={detail.work_order.invalidated || detail.work_order.state === "cancel_requested" ? "warning" : detail.work_order.state === "reported" ? "processing" : undefined}>{stateLabel(detail.work_order.state)}</Tag></div>
+      <DefinitionFacts definition={detail.definition} projectId={projectId} />
+      <section aria-label={dispatchCopy.instructions}><strong>{dispatchCopy.instructions}</strong><p className="whitespace-pre-wrap text-sm">{detail.instructions || "—"}</p></section>
+      {detail.feedback_context && <TaskDispatchFeedback context={detail.feedback_context} fixed />}
       <WorkOrderFacts order={detail.work_order} />
       {detail.work_order.state === "queued" && <p className="text-sm">{copy.queuedHint}</p>}
       {detail.work_order.state === "cancel_requested" && <Alert type="warning" title={copy.cancelRequestedHint} />}
@@ -188,7 +207,7 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
         {shown.current!.executors.find((item) => item.id === shown.executorId)?.reasons && reasonFacts(shown.current!.executors.find((item) => item.id === shown.executorId)!.reasons)}
         <label className="block text-sm">{copy.instruction}<Input.TextArea className="mt-1" aria-label={copy.instruction} value={shown.instructions} maxLength={4000} rows={3} disabled={formLocked} onChange={(event) => patch({ instructions: event.target.value })} /></label><p className="text-xs text-[var(--muted)]">{copy.instructionHint}</p>
       </>}
-      {shown?.detail && <><strong>{shown.detail.work_order.task_title}</strong><WorkOrderFacts order={shown.detail.work_order} /></>}
+      {shown?.detail && <><strong>{shown.detail.work_order.task_title}</strong><DefinitionFacts definition={shown.detail.definition} projectId={projectId} /><section aria-label={dispatchCopy.instructions}><strong>{dispatchCopy.instructions}</strong><p className="whitespace-pre-wrap">{shown.detail.instructions || "—"}</p></section>{shown.detail.feedback_context && <TaskDispatchFeedback context={shown.detail.feedback_context} fixed />}<WorkOrderFacts order={shown.detail.work_order} /></>}
       {shown?.action === "work_order.claim" && <p>{copy.claimHint}</p>}
       {shown?.action === "work_order.cancel" && <p>{shown.detail?.work_order.state === "queued" ? copy.cancelQueuedHint : copy.cancelRequestedHint}</p>}
       {shown?.action === "work_order.progress" && <>
@@ -202,6 +221,7 @@ export function ExternalWorkOrderPanel({ projectId, taskId, sessionId, selectedO
         {!reportCurrent.error && !reportCurrent.isPending && !reportChoice.error && !eligibleReports.length && <p>{copy.noReports}</p>}
       </>}
       {shown && ["work_order.report", "work_order.release"].includes(shown.action) && <><Checkbox disabled={formLocked} checked={shown.stopped} onChange={(event) => patch({ stopped: event.target.checked })}>{shown.action === "work_order.report" ? copy.reportStopConfirm : copy.stopConfirm}</Checkbox><p className="text-xs text-[var(--muted)]">{copy.stoppedHint}</p></>}
+      {preview?.feedback_context && <TaskDispatchFeedback context={preview.feedback_context} fixed />}
       {preview && reasonFacts(preview.reasons)}{prepared && <Alert type="info" title={copy.fixed} action={<Button size="small" disabled={locked || busy} onClick={() => { if (canWrite()) changePrepared(null); }}>{copy.edit}</Button>} />}{originalFacts}
       {latest && <Alert type="warning" title={copy.changed} action={<Button size="small" disabled={locked || busy} onClick={() => { if (!canWrite() || !draftRef.current) return; changeDraft({ ...draftRef.current, ...("work_order" in latest ? { detail: structuredClone(latest) } : { current: structuredClone(latest) }), stopped: false }); setLatest(null); changePrepared(null); setError(""); }}>{copy.readLatest}</Button>} />}
       </div>

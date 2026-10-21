@@ -195,11 +195,13 @@ class TaskEnvelope(BaseModel):
     acceptance_criteria: str = Field(min_length=1)
     source: dict[str, Any]
     design_context: list[TaskDesignContext] = Field(default_factory=list, max_length=3)
+    feedback_context: dict[str, Any] | None = None
+    feedback_context_sha256: str | None = None
 
     @model_validator(mode="after")
     def complete_input(self):
         from .agent_input import task_context
-        task_context(self.model_dump())
+        task_context(self.model_dump(exclude_unset=True))
         return self
 
 

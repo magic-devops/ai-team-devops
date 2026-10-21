@@ -1,3 +1,4 @@
+import { validFeedbackReference, validFeedbackFields } from "./deliveryFeedback";
 import { useRef } from "react";
 import { validDesignReferences } from "./designLibrary";
 import { saveDelivery, type DeliveryIntent } from "./delivery";
@@ -24,7 +25,8 @@ function validNode(node: unknown, approval: boolean) {
     integer(node.expected_exit_code, 0, 255) && integer(node.timeout_seconds, 1, 3600);
 }
 function validQueue(payload: Record<string, unknown>, taskId: string) {
-  if (!keys(payload, ["executor_member_id", "executor_binding_basis", "task_id", "task_basis", "workspace_id", "target_kind", "target_basis", "target_device_id", "agent_id", "agent_version", "nodes", "test_nodes", "test_node_ids"]) ||
+  if (!keys(payload, ["executor_member_id", "executor_binding_basis", "task_id", "task_basis", "workspace_id", "target_kind", "target_basis", "target_device_id", "agent_id", "agent_version", "nodes", "test_nodes", "test_node_ids", ...(Object.hasOwn(payload, "feedback_reference") ? ["feedback_reference"] : [])]) ||
+    Object.hasOwn(payload, "feedback_reference") && payload.feedback_reference !== null && !validFeedbackReference(payload.feedback_reference) ||
     payload.task_id !== taskId || !id(taskId, 64) || !digest(payload.task_basis) || !id(payload.workspace_id, 64) || !digest(payload.target_basis) ||
     (payload.target_kind !== "local" && payload.target_kind !== "device") || !(payload.target_device_id === "" || id(payload.target_device_id, 64)) ||
     (payload.target_kind === "device") !== Boolean(payload.target_device_id) || !(payload.agent_id === "" || id(payload.agent_id, 64)) || !integer(payload.agent_version, 1) ||
@@ -67,7 +69,7 @@ export function validExecutionQueuePreview(projectId: string, prepared: ReturnTy
   const p = prepared.payload;
   if (!record(value) || value.project_id !== projectId || value.version !== prepared.version || value.task_basis !== p.task_basis ||
     !digest(value.plan_basis) || value.workspace_id !== p.workspace_id || !integer(value.workspace_version, 1) ||
-    !validSnapshot(value.snapshot, p.task_id) ||
+    !validSnapshot(value.snapshot, p.task_id) || !validFeedbackFields(value, projectId, p.task_id, p.feedback_reference) ||
     !record(value.target) || value.target.kind !== p.target_kind || value.target.basis !== p.target_basis ||
     p.target_kind === "device" && value.target.id !== p.target_device_id ||
     !Array.isArray(value.nodes) || !value.nodes.every((node) => record(node) && id(node.id) && typeof node.title === "string" &&

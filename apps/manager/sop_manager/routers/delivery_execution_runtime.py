@@ -192,7 +192,9 @@ def _validate_configuration(db, project, user, state, entry, store, execution, p
     from hermes_core.execution_targets import validate_execution_target_snapshot
 
     from .delivery_plan import require_dependencies
+    from .delivery_feedback_service import assert_execution_feedback_access
 
+    assert_execution_feedback_access(db, project, user, entry, store=store)
     require_dependencies(db, project, state, entry["task_id"])
     if entry.get("executor_member_id"):
         from .delivery_team_runtime import resolve_executor_binding

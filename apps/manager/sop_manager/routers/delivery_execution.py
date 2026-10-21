@@ -102,6 +102,7 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
     from .delivery_plan import require_dependencies
     from .delivery_team_runtime import resolve_executor_binding
     from .delivery_verification import VerificationContext
+    from .delivery_feedback_service import freeze_feedback
 
     principal, workspace = context(store, user, body.workspace_id, "execute")
     task = get_record(db, Task, project, body.task_id)
@@ -157,13 +158,16 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
     from .delivery_execution_design_context import execution_design_context
 
     design_context = execution_design_context(db, project, snapshot)
+    feedback = freeze_feedback(db, project, user, task.id, body.feedback_reference, store=store)
     nodes = body.nodes
     if agent:
         from hermes_core.agents import single_agent_nodes
 
-        nodes = single_agent_nodes(agent, _envelope_data({"snapshot": snapshot, "id": "", "design_context": design_context}), body.test_nodes)
+        nodes = single_agent_nodes(agent, _envelope_data({"snapshot": snapshot, "id": "", "design_context": design_context,
+            "feedback_reference": body.feedback_reference.model_dump(mode="json") if body.feedback_reference else None, **feedback}), body.test_nodes)
     result = {
         "design_context": design_context,
+        **feedback,
         "task_basis": body.task_basis,
         "workspace_id": workspace["id"],
         "workspace_version": workspace["version"],
@@ -216,7 +220,10 @@ def _queue(db, project, user, state, body, store, execution=None):
     task.status = "in_progress"
     from .delivery_execution_handoff import accept_handoff
 
-    accept_handoff(db, project, user, entry, design_context=plan["design_context"])
+    if "feedback_context" in plan:
+        entry.update(feedback_context_sha256=plan["feedback_context_sha256"], feedback_runtime_scopes=deepcopy(plan["feedback_runtime_scopes"]))
+    accept_handoff(db, project, user, entry, design_context=plan["design_context"],
+        feedback_context=plan.get("feedback_context"))
     return entry["id"], None
 
 
@@ -225,8 +232,13 @@ def _envelope_data(entry):
     source = {"kind": "manager.delivery", "execution_id": entry["id"], "snapshot": snapshot}
     if entry.get("executor_snapshot") is not None:
         source["executor_snapshot"] = entry["executor_snapshot"]
+    if entry.get("feedback_reference") is not None:
+        source["feedback_reference"] = deepcopy(entry["feedback_reference"])
+        # Bind scopes into the existing H request digest as well as its input.
+        source["feedback_runtime_scopes"] = deepcopy(entry["feedback_runtime_scopes"])
     return {
         **({"design_context": deepcopy(entry["design_context"])} if "design_context" in entry else {}),
+        **({key: deepcopy(entry[key]) for key in ("feedback_context", "feedback_context_sha256") if key in entry}),
         "title": snapshot["title"],
         "description": "\n\n".join(
             text
