@@ -543,7 +543,9 @@ def _update_task(db, project, data, body, roster):
     resource_id = row.id
     flow = data["flows"].get(row.req_id, {})
     business_change = links_changed or (
-        "acceptance_criteria" in body.model_fields_set
+        body.title is not None
+        and body.title != before["title"]
+        or "acceptance_criteria" in body.model_fields_set
         and body.acceptance_criteria != row.acceptance_criteria
         or "owner_id" in body.model_fields_set
         and body.owner_id != row.owner_id
@@ -561,6 +563,8 @@ def _update_task(db, project, data, body, roster):
         row.owner_id = body.owner_id
     if body.status is not None:
         row.status = body.status
+    if body.title is not None:
+        row.title = body.title
     if body.description is not None:
         row.description = body.description
     if "acceptance_criteria" in body.model_fields_set:
@@ -571,7 +575,7 @@ def _update_task(db, project, data, body, roster):
         links_changed
         or any(
             before[key] != getattr(row, key)
-            for key in ("description", "status", "owner_id", "acceptance_criteria")
+            for key in ("title", "description", "status", "owner_id", "acceptance_criteria")
         )
     ):
         invalidate(flow)

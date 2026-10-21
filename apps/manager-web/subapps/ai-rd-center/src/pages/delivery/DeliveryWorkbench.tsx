@@ -96,6 +96,9 @@ import { preserveProgressRoute } from "@/lib/deliveryProgress";
 import { preserveSchedulingRoute } from "@/lib/deliveryScheduling";
 import { DeliveryScheduling } from "./DeliveryScheduling";
 import { DeliveryTaskDetail } from "./DeliveryTaskDetail";
+import { TaskDefinitionRecoveryOwner } from "./DeliveryTaskDefinitionHost";
+import { discoverTaskEditRecovery, taskEditRecoveryPending } from "@/lib/taskEditCommand";
+import { taskDefinitionCopy } from "@/i18n/task-definition";
 import {
   DeliveryActivityFeed,
   DeliveryActivityDetail,
@@ -169,6 +172,8 @@ function ProjectDelivery() {
   const { t, i18n } = useTranslation();
   const tr = (key: string) => t(`delivery.${key}`);
   const identityLabel = useMemberIdentity();
+  const taskEditCopy = taskDefinitionCopy(i18n?.language);
+  const [, refreshTaskRecovery] = useState(0);
   const tp = (key: string) => t(`deliveryProject.${key}`);
   const projectId = getProjectId() || "";
   const sessionId = useMemo(() => crypto.randomUUID(), []);
@@ -643,7 +648,7 @@ function ProjectDelivery() {
   const collaborationNavigate = (href: string) => {
     if (!canNavigate()) return;
     const [path, query] = href.split("?");
-    if (path !== "#/dev-flow") return;
+    if (!["#/dev-flow", "#/tasks/execution", "#/tasks/board"].includes(path)) return;
     const params = new URLSearchParams(query);
     if (params.has("project_id") && params.get("project_id") !== projectId)
       return;
@@ -999,6 +1004,18 @@ function ProjectDelivery() {
       {independentHistory}
     </Drawer>
   ) : null;
+  // A current/context read can disappear during a write. Keep its original owner outside those reads.
+  let taskEditIds: string[] = [], taskEditDiscoveryFailed = false;
+  try { taskEditIds = discoverTaskEditRecovery(projectId, true); } catch { taskEditDiscoveryFailed = true; }
+  const normalTaskHost = !contextFailed && !displayedRecovery ? !selectedId ? taskInspector.displayId : selected && detailTab === "tasks" ? selectedTaskId : "" : "";
+  const taskEditFallbackIds = taskEditIds.filter((id) => id !== normalTaskHost);
+  useEffect(() => { executionExit.setPending("task-definition-discovery", taskEditDiscoveryFailed); }, [taskEditDiscoveryFailed, executionExit.setPending]);
+  const taskEditFallback = <>
+    {taskEditDiscoveryFailed && <Alert type="error" title={taskEditCopy.unavailable} action={<Button onClick={() => refreshTaskRecovery((value) => value + 1)}>{taskEditCopy.retryRecovery}</Button>} />}
+    {taskEditFallbackIds.map((taskId) => <TaskDefinitionRecoveryOwner key={`${projectId}:${sessionId}:task-edit:${taskId}`} projectId={projectId} taskId={taskId} sessionId={sessionId} onSaved={saveWorkspace}
+      onPending={(value) => { if (originScope.current === sessionSnapshot()) executionPending(`task-definition:${taskId}`, value || taskEditRecoveryPending(projectId, taskId)); }}
+      onResolved={() => refreshTaskRecovery((value) => value + 1)} />)}
+  </>;
   const taskHandoffFallback = displayedRecovery ? displayedRecovery.kind === "queue" ?
     <TaskQueueOriginalRecovery key={`${projectId}:${sessionId}:queue:${displayedRecovery.taskId}`} projectId={projectId} taskId={displayedRecovery.taskId} sessionId={sessionId}
       isActive={() => originScope.current === sessionSnapshot() && locatedRecoveryLive.current === recoveryKey(displayedRecovery)} onPending={recoveryPending} onSaved={saveWorkspace} /> :
@@ -1020,6 +1037,7 @@ function ProjectDelivery() {
     );
   if (displayedRecovery) return <section className="delivery-workbench space-y-4">
     {taskHandoffFallback}
+    {taskEditFallback}
     {query.error && <Alert type="warning" title={t("deliveryQuery.readFailed")} description={query.error.message} />}
   </section>;
   if (query.isPending)
@@ -1027,6 +1045,7 @@ function ProjectDelivery() {
       <>
         {requirementBack}
         {taskHandoffFallback}
+        {taskEditFallback}
         <Skeleton active paragraph={{ rows: 12 }} />
         {requirementRecovery}
         {requirementDesign}
@@ -1038,6 +1057,7 @@ function ProjectDelivery() {
       <>
         {requirementBack}
         {taskHandoffFallback}
+        {taskEditFallback}
         <Alert
           type="error"
           showIcon
@@ -1063,6 +1083,7 @@ function ProjectDelivery() {
       <>
         {requirementBack}
         {taskHandoffFallback}
+        {taskEditFallback}
         <Alert
           type="warning"
           showIcon
@@ -1099,6 +1120,7 @@ function ProjectDelivery() {
   );
   return (
     <section className="delivery-workbench" aria-label={tr("title")}>
+      {taskEditFallback}
       {data.project.status === "archived" && (
         <Alert
           type="info"
@@ -1495,6 +1517,7 @@ function ProjectDelivery() {
             sessionId={sessionId}
             taskId={taskInspector.displayId}
             onDraftChange={inspectorDraftChanged}
+            onDefinitionPending={(value) => executionPending(`task-definition:${taskInspector.displayId}`, value)}
             onUnresolvedChange={(value) =>
               executionPending(`task:${taskInspector.displayId}`, value)
             }
@@ -1743,6 +1766,7 @@ function ProjectDelivery() {
                         queryGeneration={data.query_generation}
                         onRoute={changeQueryRoute}
                         onDraftChange={requirementTaskDraftChanged}
+                        onDefinitionPending={(value) => executionPending(`task-definition:${selectedTaskId}`, value)}
                         onUnresolvedChange={(value) =>
                           executionPending(`task:${selectedTaskId}`, value)
                         }

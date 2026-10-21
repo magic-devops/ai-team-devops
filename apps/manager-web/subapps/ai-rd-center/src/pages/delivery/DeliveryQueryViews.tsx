@@ -460,6 +460,7 @@ export function DeliveryRequirementTasks({
   route,
   onRoute,
   onUnresolvedChange,
+  onDefinitionPending,
   onDraftChange,
   onRecoveryIdentity,
   isActive,
@@ -471,6 +472,7 @@ export function DeliveryRequirementTasks({
   route: DeliveryRoute;
   onRoute: (patch: Partial<DeliveryRoute>, push?: boolean) => void;
   onUnresolvedChange: (value: boolean) => void;
+  onDefinitionPending?: (value: boolean) => void;
   onDraftChange?: (value: boolean) => void;
   onRecoveryIdentity?: (executionId: string) => void;
   isActive?: () => boolean;
@@ -555,6 +557,7 @@ export function DeliveryRequirementTasks({
           queryGeneration={queryGeneration}
           expectedRequirementId={requirementId}
           onUnresolvedChange={onUnresolvedChange}
+          onDefinitionPending={onDefinitionPending}
           onDraftChange={onDraftChange}
           onRecoveryIdentity={onRecoveryIdentity}
           isActive={isActive}

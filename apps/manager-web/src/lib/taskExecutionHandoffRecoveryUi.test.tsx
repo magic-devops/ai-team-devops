@@ -35,7 +35,7 @@ vi.mock("react", async () => {
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en-US" } }) }));
 vi.mock("./authStorage", async () => ({ ...await vi.importActual<typeof import("./authStorage")>("./authStorage"), getProjectId: () => h.activeProject, getToken: () => "controlled" }));
 vi.mock("./projectPortfolio", async () => ({ ...await vi.importActual<typeof import("./projectPortfolio")>("./projectPortfolio"), projectSessionKey: () => h.scope }));
-vi.mock("./http", () => ({ request: vi.fn() }));
+vi.mock("./http", async () => ({ ...await vi.importActual<typeof import("./http")>("./http"), request: vi.fn() }));
 vi.mock("../components/DeliveryMemberIdentity", async () => ({ ...await vi.importActual<typeof import("../components/DeliveryMemberIdentity")>("../components/DeliveryMemberIdentity"), useMemberIdentity: () => (_members: unknown, id: string) => id }));
 vi.mock("./deliveryAttention", () => ({ useDeliveryInboxQuery: () => ({ data: undefined }), useDeliveryInboxNavigation: () => ({ open: vi.fn(), retry: vi.fn() }) }));
 vi.mock("@tanstack/react-query", () => ({

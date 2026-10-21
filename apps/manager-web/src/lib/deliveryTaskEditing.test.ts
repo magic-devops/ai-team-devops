@@ -63,6 +63,7 @@ describe("one task plan editor", () => {
     });
     expect(payload).toEqual({
       id: "T-alone",
+      title: "Standalone work",
       task_basis: "basis-old",
       planning_basis: "planning-old",
       description: "Edited scope",

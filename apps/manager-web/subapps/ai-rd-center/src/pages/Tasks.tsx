@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Input, InputNumber, Modal, Popconfirm, Segmented, Select, Space, Statistic, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { TasksWorkbenchHeader } from "./delivery/TasksWorkbenchHeader";
@@ -16,6 +16,9 @@ import { DeliveryTaskDetail } from "./delivery/DeliveryTaskDetail";
 import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { ProjectContextGate } from "@/components/ProjectContextGate";
 import { projectSessionKey } from "@/lib/projectPortfolio";
+import { taskDefinitionHref } from "@/lib/taskDefinitionRoute";
+import { taskDefinitionCopy } from "@/i18n/task-definition";
+import { ExecutionRouteRecoveryGate } from "./delivery/ExecutionRouteRecoveryGate";
 import { bindSessionRequest } from "@/lib/http";
 import { eventProblem } from "@/lib/eventReceipts";
 
@@ -107,14 +110,16 @@ function TaskCard({
   busy,
   draggable,
   detailHref,
+  editHref,
 }: {
   task: any;
   onStatus: (id: string, status: string) => void;
   busy?: boolean;
   draggable?: boolean;
   detailHref?: string;
+  editHref?: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const pr = (task.priority || "P3").toUpperCase();
   return (
     <div
@@ -175,6 +180,7 @@ function TaskCard({
           </option>
         ))}
       </select>
+      {editHref && <a draggable={false} href={editHref} className="mt-2 inline-block text-xs text-[var(--brand)]">{taskDefinitionCopy(i18n?.language).edit}</a>}
     </div>
   );
 }
@@ -196,8 +202,13 @@ const inlineEditCopy = {
   "en-US": { saving: "Saving", rejected: "Task change was not saved", unknown: "Task change needs confirmation", refresh: "Read current task", details: "Open task details", refusalHelp: "Review the reason or open task details to resolve dependencies, permissions and acceptance conditions.", unknownHelp: "No save receipt was received. Inline edits for this task are locked. Reading only checks the current record and never resubmits; verify the task details before continuing.", current: "Current observed record", readError: "Read failed", receiptMissing: "A valid task save receipt was not received", recordInvalid: "The current task record could not be confirmed. Check task details." },
   "ja-JP": { saving: "保存中", rejected: "タスクの変更を保存できませんでした", unknown: "タスク変更の結果を確認してください", refresh: "現在のタスクを再取得", details: "タスク詳細を開く", refusalHelp: "原因を確認するか、タスク詳細で依存関係、権限、受入条件を確認してください。", unknownHelp: "保存の応答を受信できませんでした。このタスクの簡易編集をロックしています。再取得は現在の記録の参照のみで、再送信しません。詳細で確認してから続けてください。", current: "現在取得した記録", readError: "再取得に失敗しました", receiptMissing: "有効な保存応答を受信できませんでした", recordInvalid: "現在のタスク記録を確認できませんでした。詳細を確認してください。" },
 };
+const subscribeTaskScope = (callback: () => void) => {
+  for (const name of ["sop-session", "storage"]) window.addEventListener(name, callback);
+  return () => { for (const name of ["sop-session", "storage"]) window.removeEventListener(name, callback); };
+};
 export function Tasks(props: TasksProps) {
-  return <ProjectContextGate><ProjectTasks {...props} /></ProjectContextGate>;
+  const scope = useSyncExternalStore(subscribeTaskScope, projectSessionKey, projectSessionKey);
+  return <ProjectContextGate><ExecutionRouteRecoveryGate key={scope}><ProjectTasks key={scope} {...props} /></ExecutionRouteRecoveryGate></ProjectContextGate>;
 }
 function ProjectTasks({
   initialTab = "list",
@@ -925,8 +936,10 @@ function ProjectTasks({
     {
       title: t("page.tasks.actions"),
       dataIndex: "actions",
-      width: 110,
+      width: 180,
       render: (_value, task) => (
+        <Space wrap>
+          <Button size="small" href={taskDefinitionHref(getProjectId()!, task, taskBackground())}>{taskDefinitionCopy(i18n?.language).edit}</Button>
         <Popconfirm
           title={t("page.tasks.confirmDelete", { name: task.title })}
           okText={t("common.delete")}
@@ -935,6 +948,7 @@ function ProjectTasks({
         >
           <Button size="small" danger disabled={busy || taskEditLocked(task.id)}>{t("page.tasks.delete")}</Button>
         </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -2000,6 +2014,7 @@ function ProjectTasks({
                   boardGroups[st].map((task) => (
                     <TaskCard
                       detailHref={manualTaskHref(task, taskBackground())}
+                      editHref={taskDefinitionHref(getProjectId()!, task, taskBackground())}
                       key={task.id}
                       task={task}
                       busy={busy || taskEditLocked(task.id)}

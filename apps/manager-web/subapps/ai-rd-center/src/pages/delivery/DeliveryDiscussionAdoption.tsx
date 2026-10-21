@@ -24,7 +24,7 @@ import {
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { requirementAdoptionHref } from "@/lib/deliveryRequirementAdoption";
 import { DeliveryTaskPlanEditor } from "./DeliveryTaskPlanEditor";
-import { DeliveryTaskPlanMaintenance } from "./DeliveryTaskPlanMaintenance";
+import { taskDefinitionHref } from "@/lib/taskDefinitionRoute";
 import { IssueReviewPanel } from "./DeliveryIssueReview";
 import { DeliveryEditor, type EditorSpec } from "./DeliveryEditor";
 import {
@@ -236,7 +236,7 @@ export function DeliveryDiscussionAdoption({
 }: {
   projectId: string;
   sessionId: string;
-  action: Exclude<DiscussionAdoptAction, "requirement">;
+  action: Exclude<DiscussionAdoptAction, "requirement" | "task">;
   source: DiscussionAdoption;
   onClose: () => void;
   onSaved: (ack: DeliveryCommandAck) => void;
@@ -295,19 +295,6 @@ export function DeliveryDiscussionAdoption({
         onSaved={onSaved}
         onClose={onClose}
         initialSource={source}
-        onUnresolvedChange={pending}
-      />
-    );
-  if (action === "task" && data.task)
-    return (
-      <DeliveryTaskPlanMaintenance
-        task={data.task.task}
-        data={data.task}
-        canEdit
-        onTask={() => {}}
-        onSaved={onSaved}
-        initialSource={source}
-        onClose={onClose}
         onUnresolvedChange={pending}
       />
     );
@@ -385,7 +372,7 @@ export function DeliveryCollaboration({
   onNavigate?: (href: string) => void;
 }) {
   const [adoption, setAdoption] = useState<{
-    action: Exclude<DiscussionAdoptAction, "requirement">;
+    action: Exclude<DiscussionAdoptAction, "requirement" | "task">;
     source: DiscussionAdoption;
   } | null>(null);
   const origin = useRef(projectSessionKey());
@@ -397,8 +384,8 @@ export function DeliveryCollaboration({
     onNavigate,
     onUnresolvedChange,
     onAdopt: (action: DiscussionAdoptAction, source: DiscussionAdoption) => {
-      if (action === "requirement") {
-        const href = requirementAdoptionHref(
+      if (action === "requirement" || action === "task") {
+        const href = action === "task" ? taskDefinitionHref(projectId, { id: source.thread.subject.id, req_id: source.thread.subject.current_requirement_id || "" }, currentDiscussionHash(), source) : requirementAdoptionHref(
           projectId,
           source,
           currentDiscussionHash(),

@@ -7,6 +7,7 @@ from datetime import date
 from typing import Annotated, Literal
 from urllib.parse import parse_qsl, unquote, urlsplit
 
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from sop_manager.task_acceptance import TaskAcceptanceCriteria
@@ -457,6 +458,7 @@ class TaskCreate(TaskDraft):
 
 class TaskEdit(Dated):
     id: str = Field(min_length=1, max_length=64)
+    title: str | None = Field(default=None, min_length=1, max_length=256, strict=True)
     status: Literal["pending", "in_progress", "blocked", "completed"] | None = None
     owner_id: TaskOwnerId = ""
     description: str | None = Field(default=None, max_length=10000)
@@ -470,6 +472,18 @@ class TaskEdit(Dated):
     planning_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     allocations: list[AllocationInput] | None = Field(default=None, max_length=80)
 
+    @field_validator("title", mode="before")
+    @classmethod
+    def explicit_title(cls, value):
+        if value is None:
+            raise ValueError("Omit title to leave it unchanged")
+        if isinstance(value, str):
+            try:
+                value.encode("utf-8")
+            except UnicodeError:
+                raise HTTPException(422, {"code": "task_title_invalid", "message": "Use a valid Unicode title"}) from None
+        return value
+
     @field_validator("requirement_criteria_indices", "depends_on")
     @classmethod
     def explicit_references(cls, values, info):
@@ -482,7 +496,7 @@ class TaskEdit(Dated):
 
     @model_validator(mode="after")
     def references_require_basis(self):
-        definition_fields = {"acceptance_criteria", "requirement_criteria_indices", "depends_on", "owner_id"}
+        definition_fields = {"title", "acceptance_criteria", "requirement_criteria_indices", "depends_on", "owner_id"}
         if definition_fields & self.model_fields_set and self.task_basis is None:
             raise ValueError("Reference edits require the current task basis")
         if {"starts_on", "ends_on", "allocations"} & self.model_fields_set and self.planning_basis is None:

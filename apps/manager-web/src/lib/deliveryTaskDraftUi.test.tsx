@@ -7,18 +7,20 @@ import { DeliveryRequirementTasks } from "../../subapps/ai-rd-center/src/pages/d
 import { DeliveryExecutionPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryExecutionPanel";
 import { DeliveryTaskPlanMaintenance } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanMaintenance";
 import { DeliveryTaskPlanning } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanning";
-import { DeliveryEditor } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryEditor";
+import { DeliveryTaskDefinitionHost, TaskDefinitionRecoveryOwner } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskDefinitionHost";
 import { DeliveryCollaboration } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryDiscussionAdoption";
 import { DeliveryDesignContextPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryDesignContextPanel";
 import { DeliveryTaskSubmissionPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskSubmissionPanel";
 import { DeliveryManualReviewPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryManualReviewPanel";
 import { ExternalWorkOrderPanel } from "../components/ExternalWorkOrderPanel";
+import { closeTaskDefinitionRoute, taskDefinitionRouteClosedEvent } from "./taskDefinitionRoute";
 import { useDeliveryDraftState } from "./useDeliveryDraftState";
 import { setSession, USER_KEY } from "./authStorage";
 import { request } from "./http";
 import type { DeliveryTaskData } from "./delivery";
 
 const h = vi.hoisted(() => ({ hooks: {} as Record<string, any[]>, component: "", next: 0, effects: [] as Array<() => void>, scope: "scope-a", task: {} as any, context: {} as any, options: [] as any[], storage: {} as Record<string, string>,
+  taskEditPending: undefined as undefined | ((value: boolean) => void), recoveryIds: [] as string[], discoveryError: false, taskEdit: { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, reset: vi.fn(), run: vi.fn(), locked: false },
   invalidate: vi.fn(), refetch: vi.fn(), mutation: vi.fn(), queue: { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, reset: vi.fn(), locked: false },
 }));
 vi.mock("react", async () => {
@@ -30,13 +32,17 @@ vi.mock("react", async () => {
     useRef: (initial: any) => { const [values, index] = slot({ current: initial }); return values[index]; },
     useMemo: memo, useCallback: (callback: unknown, deps: unknown[]) => memo(() => callback, deps),
     useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
-    useEffect: (effect: () => void | (() => void), deps: unknown[]) => { const [values, index] = slot(undefined), previous = values[index]; if (!previous || deps.some((value, i) => value !== previous.deps[i])) { const entry = { effect: true, deps, cleanup: undefined as undefined | (() => void) }; values[index] = entry; h.effects.push(() => { previous?.cleanup?.(); entry.cleanup = effect() || undefined; }); } },
+    useEffect: (effect: () => void | (() => void), deps: unknown[]) => { const [values, index] = slot(undefined), previous = values[index]; if (!previous || deps.some((value, i) => value !== previous.deps[i])) { const entry = { effect: true, make: effect, deps, cleanup: undefined as undefined | (() => void) }; values[index] = entry; h.effects.push(() => { previous?.cleanup?.(); entry.cleanup = effect() || undefined; }); } },
   };
 });
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en-US" } }) }));
 vi.mock("./projectPortfolio", async () => ({ ...await vi.importActual<typeof import("./projectPortfolio")>("./projectPortfolio"), projectSessionKey: () => h.scope }));
 vi.mock("./authStorage", async () => ({ ...await vi.importActual<typeof import("./authStorage")>("./authStorage"), getProjectId: () => "P", getToken: () => "controlled" }));
 vi.mock("./http", () => ({ request: vi.fn() }));
+vi.mock("./taskEditCommand", async () => ({ ...await vi.importActual<typeof import("./taskEditCommand")>("./taskEditCommand"),
+  useTaskEditCommand: (_project: string, _task: string, _session: string, onPending: (value: boolean) => void) => { h.taskEditPending = onPending; return h.taskEdit; },
+  discoverTaskEditRecovery: () => { if (h.discoveryError) throw new Error("retainedOriginalUnavailable"); return h.recoveryIds; }, taskEditRecoveryPending: (_project: string, taskId: string) => h.recoveryIds.includes(taskId),
+}));
 vi.mock("./deliveryQuery", async () => ({ ...await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery"), fetchDeliveryTaskEditData: async () => structuredClone(h.task.data) }));
 vi.mock("./executionDispatchCommand", async () => ({ ...await vi.importActual<typeof import("./executionDispatchCommand")>("./executionDispatchCommand"), useExecutionDispatchCommand: () => h.queue }));
 vi.mock("./deliveryAttention", () => ({ useDeliveryInboxQuery: () => ({ data: undefined }), useDeliveryInboxNavigation: () => ({ open: vi.fn(), retry: vi.fn() }) }));
@@ -52,6 +58,7 @@ const task = { project: { id: "P", name: "Project", status: "active" }, permissi
   task: { id: "T", title: "Task being edited", req_id: "", description: "Original task", owner_id: "", estimate: "", basis: "task-basis", status: "pending", recorded_status: "pending", acceptance_criteria: [], acceptance: { available: true, criteria: [], sources: [] }, execution_gate: { eligible: true, reasons: [] } },
 } as unknown as DeliveryTaskData;
 function frame<T>(name: string, render: () => T) { h.component = name; h.next = 0; h.effects = []; const tree = render(); h.effects.forEach((effect) => effect()); return tree; }
+function strictEffectCycle(name: string) { const effects = (h.hooks[name] || []).filter((value) => value?.effect); effects.forEach((value) => value.cleanup?.()); effects.forEach((value) => { value.cleanup = value.make() || undefined; }); }
 function unmount(name: string) { for (const value of h.hooks[name] || []) if (value?.effect) value.cleanup?.(); delete h.hooks[name]; }
 function nodes(node: ReactNode): ReactElement<any>[] { if (Array.isArray(node)) return node.flatMap(nodes); if (!isValidElement<any>(node)) return []; return [node, ...["children", "action", "description", "footer"].flatMap((key) => nodes(node.props[key])), ...(node.props.items || []).flatMap((value: any) => nodes(value.children))]; }
 function find(tree: ReactNode, type: unknown) { return nodes(tree).find((node) => node.type === type)!; }
@@ -59,7 +66,7 @@ function host(props: Record<string, unknown> = {}) { return frame("task", () => 
 function workbench() { const shell = frame("shell", () => DeliveryWorkbench()), project = nodes(shell).find((node) => typeof node.type === "function" && node.type.name === "ProjectDelivery")!; return frame("workbench", () => (project.type as (props: any) => ReactNode)(project.props)); }
 function beforeUnload() { const event = new Event("beforeunload", { cancelable: true }); Object.defineProperty(event, "returnValue", { writable: true, value: "" }); window.dispatchEvent(event); return event; }
 beforeEach(() => {
-  h.hooks = {}; h.effects = []; h.options = []; h.storage = {}; h.scope = "scope-a"; h.invalidate.mockReset(); h.refetch.mockReset();
+  h.hooks = {}; h.effects = []; h.recoveryIds = []; h.discoveryError = false; h.taskEditPending = undefined; h.options = []; h.storage = {}; h.scope = "scope-a"; h.invalidate.mockReset(); h.refetch.mockReset();
   vi.mocked(request).mockReset();
   const local = new Map<string, string>(); vi.stubGlobal("localStorage", { getItem: (key: string) => local.get(key) ?? null, setItem: (key: string, value: string) => local.set(key, value), removeItem: (key: string) => local.delete(key) });
   vi.stubGlobal("sessionStorage", { getItem: (key: string) => h.storage[key] ?? null, setItem: (key: string, value: string) => { h.storage[key] = value; } });
@@ -113,7 +120,7 @@ describe("task draft navigation protection", () => {
   });
   it("gives execution and planning separate inner scopes", () => {
     const content = find(host(), TaskDetailContent), tree = frame("content", () => TaskDetailContent(content.props));
-    const execution = find(tree, DeliveryExecutionPanel), planning = find(tree, DeliveryTaskPlanMaintenance);
+    const execution = find(tree, DeliveryExecutionPanel), planning = find(host(), DeliveryTaskDefinitionHost);
     execution.props.onEditingChange(true); planning.props.onEditingChange(true); execution.props.onEditingChange(false);
     expect(beforeUnload().defaultPrevented).toBe(true);
     planning.props.onEditingChange(false);
@@ -129,43 +136,108 @@ describe("task draft navigation protection", () => {
   });
   it("keeps the mounted ordinary planning operation locked when another source reports false", () => {
     const tree = host(), content = find(tree, TaskDetailContent), inner = frame("content", () => TaskDetailContent(content.props));
-    const planning = find(inner, DeliveryTaskPlanMaintenance), execution = find(inner, DeliveryExecutionPanel), collaboration = find(inner, DeliveryCollaboration);
-    planning.props.onUnresolvedChange(true);
+    const execution = find(inner, DeliveryExecutionPanel), collaboration = find(inner, DeliveryCollaboration);
+    h.taskEditPending!(true);
     collaboration.props.onUnresolvedChange(false); execution.props.onUnresolvedChange(false);
     expect(beforeUnload().defaultPrevented).toBe(true);
     expect(find(tree, DeliveryTaskSubmissionPanel).props.canSubmit()).toBe(false);
-    planning.props.onUnresolvedChange(false);
+    h.taskEditPending!(false);
     expect(beforeUnload().defaultPrevented).toBe(false);
     expect(find(tree, DeliveryTaskSubmissionPanel).props.canSubmit()).toBe(true);
   });
-  it("gives an ordinary task plan the real editor's original-value retry protection", async () => {
-    const unresolved = vi.fn(), props = { task: h.task.data.task, data: h.task.data, onTask: vi.fn(), onSaved: vi.fn(), canEdit: true, onUnresolvedChange: unresolved };
-    const read = () => frame("ordinary-planning", () => DeliveryTaskPlanMaintenance(props));
-    await find(read(), DeliveryTaskPlanning).props.onEdit();
-    const editor = find(read(), DeliveryEditor);
-    expect(editor).toBeDefined(); expect(editor.props.sourceAware).toBe(true);
-    editor.props.onUnresolvedChange(true); editor.props.onUnresolvedChange(false);
-    expect(unresolved.mock.calls).toEqual([[true], [false]]);
+  it("delegates planning edits to the independent definition host", () => {
+    const content = find(host(), TaskDetailContent), inner = frame("content", () => TaskDetailContent(content.props));
+    const maintenance = find(inner, DeliveryTaskPlanMaintenance);
+    const facts = frame("planning-facts", () => DeliveryTaskPlanMaintenance(maintenance.props));
+    find(facts, DeliveryTaskPlanning).props.onEdit();
+    expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
   });
-  it("retains the original planning version, body and key across a mounted retry", async () => {
-    const props = { task: h.task.data.task, data: h.task.data, onTask: vi.fn(), onSaved: vi.fn(), canEdit: true };
-    const read = () => frame("retry-planning", () => DeliveryTaskPlanMaintenance(props));
-    await find(read(), DeliveryTaskPlanning).props.onEdit();
-    const editor = find(read(), DeliveryEditor), values = editor.props.spec.values;
-    vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown")).mockResolvedValueOnce({ project_id: "P", version: 8 });
-    await expect(editor.props.spec.submit(values)).rejects.toThrow();
-    await editor.props.spec.submit(values);
-    const first = JSON.parse(vi.mocked(request).mock.calls[0][1]!.body as string), retried = JSON.parse(vi.mocked(request).mock.calls[1][1]!.body as string);
-    expect(first).toEqual(retried); expect(first.expected_version).toBe(7); expect(first.payload.task_basis).toBe("task-basis"); expect(first.payload.planning_basis).toBe("planning-basis");
-    expect(props.onSaved).toHaveBeenCalledTimes(1);
+  it("opens same-Task editing on hash/pop routes, ignores delivery selections, and reopens the same link after local close", () => {
+    const base = location.hash, edit = `${base}&task_edit=1&task_edit_task=T`;
+    const navigate = (hash: string, event = "hashchange") => { location.hash = hash; location.href = `http://local/${hash}`; window.dispatchEvent(new Event(event)); };
+    expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(0);
+    navigate(edit); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
+    navigate(`${edit}&submission_id=S&work_order_id=W`); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
+    const browserNavigation = vi.fn(); window.addEventListener("hashchange", browserNavigation); window.addEventListener("popstate", browserNavigation);
+    closeTaskDefinitionRoute("P", "T"); expect(browserNavigation).not.toHaveBeenCalled();
+    expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
+    navigate(edit); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(2);
+    closeTaskDefinitionRoute("P", "T");
+    navigate(edit, "popstate"); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(3);
   });
-  it("closes the acknowledged planning draft even when refreshing its parent fails", async () => {
-    const editing = vi.fn(), props = { task: h.task.data.task, data: h.task.data, onTask: vi.fn(), onSaved: () => { throw new Error("Refresh failed"); }, canEdit: true, onEditingChange: editing };
-    const read = () => frame("ack-planning", () => DeliveryTaskPlanMaintenance(props));
-    await find(read(), DeliveryTaskPlanning).props.onEdit();
-    const editor = find(read(), DeliveryEditor); vi.mocked(request).mockResolvedValueOnce({ project_id: "P", version: 8 });
-    await expect(editor.props.spec.submit(editor.props.spec.values)).resolves.toBeUndefined();
-    expect(editing.mock.calls).toEqual([[true], [false]]); expect(find(read(), DeliveryEditor)).toBeUndefined();
+  it("retains one initial edit request and one listener through effect remount, then removes the old owner", () => {
+    const base = location.hash, source = (message: string) => `${base}&task_edit=1&task_edit_task=T&task_source_thread=D&task_source_message=${message}&task_source_version=4&task_source_revision=2&task_source_resolution=E&task_source_field=description`;
+    location.hash = source("A"); location.href = `http://local/${location.hash}`;
+    const add = vi.spyOn(window, "addEventListener"), remove = vi.spyOn(window, "removeEventListener");
+    expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
+    strictEffectCycle("task"); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
+    location.hash = source("B"); location.href = `http://local/${location.hash}`; window.dispatchEvent(new Event("hashchange"));
+    expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(2);
+    const added = add.mock.calls.filter(([event]) => event === taskDefinitionRouteClosedEvent).map(([, listener]) => listener);
+    expect(added).toHaveLength(2); expect(remove.mock.calls.filter(([event]) => event === taskDefinitionRouteClosedEvent).map(([, listener]) => listener)).toEqual([added[0]]);
+    unmount("task"); expect(remove.mock.calls.filter(([event]) => event === taskDefinitionRouteClosedEvent).map(([, listener]) => listener)).toEqual(added);
+    location.hash = source("C"); location.href = `http://local/${location.hash}`; window.dispatchEvent(new Event("hashchange"));
+    expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
+    add.mockRestore(); remove.mockRestore();
+  });
+  it("recognizes a new same-Task discussion source without counting ordinary S/W changes", () => {
+    host();
+    const route = `${location.hash}&task_edit=1&task_edit_task=T&task_source_thread=D&task_source_message=M&task_source_version=4&task_source_revision=2&task_source_resolution=E&task_source_field=description`;
+    const navigate = (hash: string) => { location.hash = hash; location.href = `http://local/${hash}`; window.dispatchEvent(new Event("hashchange")); };
+    navigate(route); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
+    navigate(route.replace("task_source_message=M", "task_source_message=M2")); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(2);
+    navigate(`${location.hash}&submission_id=S&work_order_id=W`); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(2);
+  });
+  it("does not let route requests bypass an unknown operation or an open Task draft", () => {
+    const initial = host(), base = location.hash, edit = `${base}&task_edit=1&task_edit_task=T`;
+    const navigate = () => { location.hash = edit; location.href = `http://local/${edit}`; window.dispatchEvent(new Event("hashchange")); };
+    h.taskEditPending!(true); navigate(); expect(location.hash).toBe(base); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(0);
+    h.taskEditPending!(false); const definition = find(initial, DeliveryTaskDefinitionHost);
+    definition.props.onEditingChange(true); navigate(); expect(location.hash).toBe(base); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(0);
+    definition.props.onEditingChange(false); navigate(); expect(find(host(), DeliveryTaskDefinitionHost).props.requestEdit).toBe(1);
+  });
+  it("keeps the real definition owner through a failed task read", () => {
+    host(); h.task = { ...h.task, data: undefined, error: new Error("HTTP 404: task missing"), isError: true };
+    const owner = find(host(), DeliveryTaskDefinitionHost);
+    expect(owner).toBeDefined(); expect(owner.props.current).toBeUndefined(); expect(owner.props.canEdit).toBe(false);
+  });
+  it("blocks fresh direct editing at a released requirement while retaining recovery", () => {
+    location.hash += "&task_edit=1&task_edit_task=T";
+    h.task.data = { ...task, task: { ...task.task, req_id: "R" }, requirement: { id: "R", flow: { stage: "release" } } };
+    const owner = find(host(), DeliveryTaskDefinitionHost);
+    expect(owner.props.requestEdit).toBe(1); expect(owner.props.canEdit).toBe(false); expect(owner.props.freshBlockReason).toContain("Reopen"); expect(owner.props.command).toBe(h.taskEdit);
+  });
+  for (const failed of ["pending", "error", "old-schema", "requirement"]) {
+    it(`keeps hot Task edit recovery outside the ${failed} parent read`, () => {
+      h.recoveryIds = ["T"];
+      if (failed === "pending") h.context.isPending = true;
+      if (failed === "error") h.context.error = new Error("HTTP 503: unavailable");
+      if (failed === "old-schema") h.context.data.query_state.status = "stale";
+      if (failed === "requirement") location.hash = "#/dev-flow?view=list&requirement=R&detail=tasks&task=T&project_id=P";
+      const owner = find(workbench(), TaskDefinitionRecoveryOwner);
+      expect(owner.props.taskId).toBe("T"); expect(owner.props.projectId).toBe("P");
+      owner.props.onPending(true); expect(beforeUnload().defaultPrevented).toBe(true);
+    });
+  }
+  for (const otherPending of [false, true]) {
+    it(`transfers a mounted definition original without leaving its old task aggregate (${otherPending ? "another operation remains" : "all resolved"})`, () => {
+      const parent = workbench(), detail = find(parent, DeliveryTaskDetail);
+      const inner = frame("transferred-task", () => DeliveryTaskDetail(detail.props));
+      h.recoveryIds = ["T"]; const definitionPending = h.taskEditPending!;
+      definitionPending(true);
+      if (otherPending) find(inner, DeliveryManualReviewPanel).props.onUnresolvedChange(true);
+      h.context.error = new Error("HTTP 503: unavailable");
+      const fallback = find(workbench(), TaskDefinitionRecoveryOwner);
+      definitionPending(false); unmount("transferred-task");
+      fallback.props.onPending(true); expect(beforeUnload().defaultPrevented).toBe(true);
+      h.recoveryIds = []; fallback.props.onPending(false); fallback.props.onResolved();
+      expect(beforeUnload().defaultPrevented).toBe(otherPending);
+    });
+  }
+  it("shows inaccessible recovery storage as a retryable failure", () => {
+    h.discoveryError = true;
+    const tree = workbench(); expect(nodes(tree).some((node) => String(node.props.title || "").includes("retained original"))).toBe(true);
+    expect(beforeUnload().defaultPrevented).toBe(true);
   });
   it("restores browser back and programmatic hash navigation until the draft is closed", () => {
     const report = find(host(), DeliveryTaskSubmissionPanel); report.props.onEditingChange(true);
@@ -195,10 +267,11 @@ describe("task draft navigation protection", () => {
     expect(history.replaceState).toHaveBeenCalled();
   });
   it("forwards the requirement task's draft separately from its pending command", () => {
-    const draft = vi.fn(), pending = vi.fn(), route = { task: "T", taskPage: 1, taskCursor: "" } as any;
-    const tree = frame("requirement-tasks", () => DeliveryRequirementTasks({ projectId: "P", sessionId: "s", requirementId: "R", route, onRoute: vi.fn(), onUnresolvedChange: pending, onDraftChange: draft }));
+    const draft = vi.fn(), pending = vi.fn(), definition = vi.fn(), route = { task: "T", taskPage: 1, taskCursor: "" } as any;
+    const tree = frame("requirement-tasks", () => DeliveryRequirementTasks({ projectId: "P", sessionId: "s", requirementId: "R", route, onRoute: vi.fn(), onUnresolvedChange: pending, onDraftChange: draft, onDefinitionPending: definition }));
     const detail = find(tree, DeliveryTaskDetail); detail.props.onDraftChange(true); detail.props.onDraftChange(false);
     expect(draft.mock.calls).toEqual([[true], [false]]); expect(pending).not.toHaveBeenCalled();
+    detail.props.onDefinitionPending(true); detail.props.onDefinitionPending(false); expect(definition.mock.calls).toEqual([[true], [false]]); expect(pending).not.toHaveBeenCalled();
   });
 });
 

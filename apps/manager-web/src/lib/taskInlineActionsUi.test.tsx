@@ -17,6 +17,7 @@ vi.mock("react", async () => ({
     return [h.states[index], (value: any) => { h.states[index] = typeof value === "function" ? value(h.states[index]) : value; }];
   },
   useMemo: (read: () => unknown) => read(), useEffect: () => {},
+  useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "zh-CN" } }) }));
 vi.mock("@tanstack/react-query", async () => ({
@@ -54,7 +55,7 @@ function all(node: ReactNode, predicate: (node: ReactElement<any>) => boolean): 
 function render(tab: "list" | "board" = "board") {
   h.next = 0;
   const wrapper = Tasks({ initialTab: tab });
-  const content = wrapper.props.children;
+  const content = find(wrapper, (node) => typeof node.type === "function" && node.type.name === "ProjectTasks")!;
   return (content.type as (props: unknown) => ReactElement)(content.props);
 }
 function card(tree: ReactNode) { return find(tree, (node) => node.props.task?.id === "T-original")!; }
@@ -75,6 +76,12 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("task board actual inline edit feedback", () => {
+  it("opens the canonical Task editor from the actual board card and keeps filters as its return", () => {
+    const href = card(render()).props.editHref, params = new URLSearchParams(href.split("?")[1]);
+    expect(params.get("project_id")).toBe("P"); expect(params.get("task_id")).toBe("T-original"); expect(params.get("task_edit")).toBe("1"); expect(params.get("task_edit_task")).toBe("T-original");
+    expect(params.get("return_to")).toBe(window.location.hash);
+  });
+
   it.each([403, 409])("keeps the task in its original column and displays the real HTTP %s rejection", async (status) => {
     const fetcher = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ detail: { code: "task_gate_blocked", message: "Resolve the dependency before changing status" } }), { status }));
     vi.stubGlobal("fetch", fetcher);

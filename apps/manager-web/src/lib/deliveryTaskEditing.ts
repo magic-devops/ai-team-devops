@@ -2,6 +2,7 @@ import type { DeliveryTask, DeliveryTaskData } from "./delivery";
 import { remapCriterionIndexes } from "./deliveryTaskPlan";
 import { normalizeTaskCriteria } from "./taskAcceptance";
 import { requirementReadMatches } from "./deliveryRequirementReads";
+import type { TaskDefinitionEditPayload } from "./taskEditCommand";
 export type TaskEditSession = {
   projectId: string;
   version: number;
@@ -47,22 +48,23 @@ export function openTaskEdit(
 export function taskEditPayload(
   session: TaskEditSession,
   values: Record<string, unknown>,
-): Record<string, unknown> {
+): TaskDefinitionEditPayload {
   return {
     id: session.task.id,
+    title: typeof values.title === "string" ? values.title.trim() : session.task.title,
     task_basis: session.task.basis,
     planning_basis: session.planningBasis,
-    description: values.description || "",
+    description: typeof values.description === "string" ? values.description : "",
     acceptance_criteria: normalizeTaskCriteria(
       values.acceptance_criteria || [],
     ),
     requirement_criteria_indices: session.task.req_id
       ? ((values.requirement_criteria_indices || []) as string[]).map(Number)
       : [],
-    depends_on: values.depends_on || [],
-    starts_on: values.starts_on || null,
-    ends_on: values.ends_on || null,
-    blocked_reason: values.blocked_reason || "",
+    depends_on: (values.depends_on || []) as string[],
+    starts_on: (values.starts_on || null) as string | null,
+    ends_on: (values.ends_on || null) as string | null,
+    blocked_reason: typeof values.blocked_reason === "string" ? values.blocked_reason : "",
   };
 }
 export function adoptTaskEdit(

@@ -460,7 +460,7 @@ export function beginProgressExactRead() {
     hash = typeof location === "undefined" ? "" : location.hash;
   let live = true;
   const invalidate = () => {
-    live = false;
+    if (owner !== projectSessionKey() || hash !== (typeof location === "undefined" ? "" : location.hash)) live = false;
   };
   const events = ["hashchange", "popstate", "sop-session", "storage"];
   if (typeof window !== "undefined")

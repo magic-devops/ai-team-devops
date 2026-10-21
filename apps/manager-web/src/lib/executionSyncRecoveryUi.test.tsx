@@ -38,7 +38,7 @@ vi.mock("react", async () => ({ ...(await vi.importActual<typeof import("react")
   useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("./http", () => ({ request: vi.fn() }));
+vi.mock("./http", async () => ({ ...await vi.importActual<typeof import("./http")>("./http"), request: vi.fn() }));
 vi.mock("@tanstack/react-query", async () => ({ ...(await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query")),
   useQuery: (options: any) => {
     if (!h.taskHost) return { data: h.detailReady ? { execution } : undefined, isPending: !h.detailReady && !h.detailError, error: h.detailError, refetch: vi.fn() };

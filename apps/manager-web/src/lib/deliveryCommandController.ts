@@ -80,6 +80,7 @@ export type DeliveryControllerOptions<T extends DeliveryOriginal> = {
   validateOriginal: (original: T) => boolean;
   validateAck: (original: T, value: unknown) => boolean;
   onPending?: (pending: boolean) => void;
+  retainSucceededOnRestore?: boolean;
 };
 export function createDeliveryCommandController<T extends DeliveryOriginal>(
   options: DeliveryControllerOptions<T>,
@@ -112,10 +113,12 @@ export function createDeliveryCommandController<T extends DeliveryOriginal>(
         throw new Error("retainedOriginalInvalid");
       state = {
         ...saved,
+        // Malformed optional diagnostics cannot hide a validated original or confirmed receipt.
+        ...(saved.error !== undefined && typeof saved.error !== "string" ? { error: undefined } : {}),
         original: freeze(saved.original),
         phase: saved.phase === "sending" ? "unknown" : saved.phase,
       };
-      if (saved.phase === "succeeded") {
+      if (saved.phase === "succeeded" && !options.retainSucceededOnRestore) {
         options.save("");
         state = { phase: "idle" };
       }
@@ -269,7 +272,7 @@ export function useDeliveryCommand<T extends DeliveryOriginal>(options: {
     callback.current?.(
       ["sending", "unknown"].includes(controller.snapshot().phase),
     );
-    const leave = () => controller.invalidate();
+    const leave = () => { if (currentScope() !== scope) controller.invalidate(); };
     if (typeof window !== "undefined")
       for (const name of ["hashchange", "popstate", "sop-session", "storage"])
         window.addEventListener(name, leave);

@@ -46,7 +46,7 @@ describe("task editor with the materialized API task shape", () => {
             },
           },
       } as unknown as DeliveryTaskData;
-      const editingChanged = vi.fn();
+      const onEdit = vi.fn();
       renderToStaticMarkup(
         createElement(
           QueryClientProvider,
@@ -56,15 +56,13 @@ describe("task editor with the materialized API task shape", () => {
             task: data.task,
             canEdit: true,
             onTask: () => {},
-            onSaved: () => {},
-            onEditingChange: editingChanged,
+            onEdit,
           }),
         ),
       );
       expect(edit).toBeTypeOf("function");
       expect(() => edit!()).not.toThrow();
-      // Pinning starts only when the editor mounts, never before specification creation.
-      expect(editingChanged).not.toHaveBeenCalled();
+      expect(onEdit).toHaveBeenCalledTimes(1);
     });
   }
 });

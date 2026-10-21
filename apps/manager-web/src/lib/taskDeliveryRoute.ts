@@ -4,6 +4,7 @@ export type TaskDeliverySelection = {
   work_order_id?: string | null;
 };
 const selectionKeys = ["submission_id", "work_order_id", "delivery_report"] as const;
+const taskEditKeys = ["task_edit", "task_edit_task", "task_source_thread", "task_source_message", "task_source_version", "task_source_revision", "task_source_resolution", "task_source_field"];
 const identity = (value: unknown, max = 64): value is string => typeof value === "string" && Boolean(value) && Array.from(value).length <= max && value === value.trim() &&
   !/[\u0000-\u001f\u007f-\u009f/\\]/.test(value) && ![".", ".."].includes(value) &&
   !Array.from(value).some((char) => { const code = char.codePointAt(0)!; return code >= 0xd800 && code <= 0xdfff; });
@@ -25,6 +26,7 @@ function taskScope(hash: string) {
 export function applyTaskDeliverySelection(target: string, source: string, explicit?: TaskDeliverySelection) {
   const [path, query] = target.split("?"), params = new URLSearchParams(query);
   const next = taskScope(target), previous = taskScope(source);
+  if (!next || !previous || next.projectId !== previous.projectId || next.taskId !== previous.taskId) for (const key of taskEditKeys) params.delete(key);
   clearTaskDeliverySelection(params);
   const supplied = explicit && (Object.hasOwn(explicit, "submission_id") || Object.hasOwn(explicit, "work_order_id"));
   if (supplied) {

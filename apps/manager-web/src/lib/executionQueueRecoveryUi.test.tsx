@@ -11,6 +11,7 @@ import { openExecutionDraft, prepareExecution, previewDeliveryExecution, fetchDe
 import { createExecutionDispatchController, executionQueueOriginal, executionDispatchStorageKey, type ExecutionDispatchCommand } from "./executionDispatchCommand";
 import { fetchDeliveryTaskEditData } from "./deliveryQuery";
 import { projectSessionKey } from "./projectPortfolio";
+import { taskEditStorageKey } from "./taskEditCommand";
 import { setSession, USER_KEY } from "./authStorage";
 import type { DeliveryCommandAck, DeliveryTaskData } from "./delivery";
 
@@ -57,7 +58,7 @@ vi.mock("./executionDispatchCommand", async () => {
 });
 vi.mock("./deliveryExecution", async () => ({ ...await vi.importActual<typeof import("./deliveryExecution")>("./deliveryExecution"), previewDeliveryExecution: vi.fn(), fetchDeliveryTargets: vi.fn() }));
 vi.mock("./deliveryQuery", async () => ({ ...await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery"), fetchDeliveryTaskEditData: vi.fn() }));
-vi.mock("./delivery", async () => ({ ...await vi.importActual<typeof import("./delivery")>("./delivery"), saveDelivery: (...args: unknown[]) => h.taskSend(...args) }));
+vi.mock("./http", async () => ({ ...await vi.importActual<typeof import("./http")>("./http"), bindSessionRequest: () => (path: string, init?: RequestInit) => h.taskSend(path, init) }));
 
 const taskBasis = "a".repeat(64), targetBasis = "b".repeat(64);
 const target = { id: "local", kind: "local" as const, name: "Local", version: 1, basis: targetBasis, paired: null, online: null, last_seen_at: null, expires_at: null, worker_id: null, capability_digest: "", runtime_capabilities: ["command" as const], providers: [], policy: { allowed_runtimes: ["command" as const], allowed_providers: [] }, can_execute: true, reason_codes: [] };
@@ -73,6 +74,7 @@ function previewFor(value = draft()): ExecutionPreview {
 }
 const original = () => { const value = draft(); value.preview = previewFor(value); return executionQueueOriginal(prepareExecution(value)); };
 const ack = (): DeliveryCommandAck => ({ project_id: "P", action: "execution.queue", resource: { kind: "execution", id: "E-created" }, result: null, affected_refs: [{ kind: "execution", id: "E-created" }], applied_version: 8, version: 8, query_generation: 4, replayed: false });
+const taskAck = (): DeliveryCommandAck => ({ ...ack(), action: "task.update", resource: { kind: "task", id: "T" }, affected_refs: [{ kind: "task", id: "T" }] });
 function controller() {
   const scope = projectSessionKey();
   h.controller = createExecutionDispatchController({ projectId: "P", action: "execution.queue", targetId: "T", scope, currentScope: projectSessionKey,
@@ -106,7 +108,7 @@ beforeEach(() => {
   h.query = { data, error: null, isError: false, isPending: false, refetch: vi.fn() };
   h.executionQuery = { data: undefined, error: null, isError: false, isPending: true, refetch: vi.fn() };
   h.historyQuery = { data: { pages: [{ items: [{ data: { id: "E-history", status: "failed", created_at: "now", attempt: 1 } }], total: 1 }] }, error: null };
-  h.taskSend.mockReset().mockResolvedValue({ ...ack(), action: "task.update", resource: { kind: "task", id: "T" } });
+  h.taskSend.mockReset().mockResolvedValue(taskAck());
   vi.mocked(fetchDeliveryTaskEditData).mockReset();
   vi.mocked(fetchDeliveryTargets).mockReset().mockResolvedValue(targets);
   vi.mocked(previewDeliveryExecution).mockReset().mockImplementation(async (_projectId, payload) => previewFor({ ...draft(), approvalBeforeRun: payload.nodes.some((node) => node.kind === "approval") }));
@@ -154,7 +156,7 @@ describe("actual dispatch editor and permanent recovery host (definitions, not e
     const content = nodes(renderHost()).find((node) => node.type === TaskDetailContent)!;
     let finish!: (value: unknown) => void; h.send.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     const pending = h.controller.run(original());
-    await expect(content.props.onCommand("task.update", { id: "T", status: "blocked" })).rejects.toThrow();
+    await expect(content.props.onCommand("task.update", { id: "T", task_basis: taskBasis, status: "blocked" })).rejects.toThrow();
     expect(h.taskSend).not.toHaveBeenCalled(); finish(ack()); await pending;
   });
   it("rejects an old queue save callback immediately when a task property write begins", async () => {
@@ -162,16 +164,21 @@ describe("actual dispatch editor and permanent recovery host (definitions, not e
     await button(renderEditor({ canSubmit: content.props.canSubmitQueue }), "deliveryRuntime.preview").onClick();
     const save = button(renderEditor({ canSubmit: content.props.canSubmitQueue }), "deliveryRuntime.save").onClick;
     let finish!: (value: unknown) => void; h.taskSend.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    const pending = content.props.onCommand("task.update", { id: "T", status: "blocked" });
+    const pending = content.props.onCommand("task.update", { id: "T", task_basis: taskBasis, status: "blocked" });
     expect(content.props.isActive()).toBe(false);
-    await save(); expect(h.send).not.toHaveBeenCalled(); finish({ ...ack(), action: "task.update" }); await pending;
+    expect(h.taskSend).toHaveBeenCalledOnce();
+    const [path, init] = h.taskSend.mock.calls[0], body = JSON.parse(init.body);
+    expect(path).toBe("/api/v1/delivery/commands"); expect(body.payload).toEqual({ id: "T", task_basis: taskBasis, status: "blocked" }); expect(body.expected_version).toBe(7);
+    const stored = JSON.parse(h.storage[taskEditStorageKey("P", "T")!]);
+    expect(stored.original).toEqual({ action: "task.update", payload: body.payload, intent: { version: body.expected_version, key: body.idempotency_key } });
+    await save(); expect(h.send).not.toHaveBeenCalled(); finish(taskAck()); await pending;
     expect(content.props.isActive()).toBe(true);
   });
   it.each(["read_error", "write_revoked"])("rejects a captured task-property callback after current access changes: %s", async (change) => {
     const callback = nodes(renderHost()).find((node) => node.type === TaskDetailContent)!.props.onCommand;
     h.query = change === "read_error" ? { ...h.query, error: new Error("HTTP 403: task denied"), isError: true } : { ...h.query, data: { ...data, permissions: { ...data.permissions, write: false } } };
     renderHost();
-    await expect(callback("task.update", { id: "T", status: "blocked" })).rejects.toThrow();
+    await expect(callback("task.update", { id: "T", task_basis: taskBasis, status: "blocked" })).rejects.toThrow();
     expect(h.taskSend).not.toHaveBeenCalled();
   });
   it("rejects fresh queue confirmation after live write permission changes without disabling original recovery", async () => {
