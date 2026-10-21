@@ -195,6 +195,32 @@ def execution_control_write_scope(db, tenant_id, project_id, control_id):
     return _scope(db, tenant_id, project_id, "execution_control_write:" + control_id)
 
 
+def design_write_scope(db, tenant_id, project_id):
+    return _scope(db, tenant_id, project_id, "design_write")
+
+
+def design_generation_write_scope(db, tenant_id, project_id, generation_id):
+    return _scope(db, tenant_id, project_id, "design_generation:" + generation_id)
+
+
+def _check_design_write(db, table, scope, operation, old, values):
+    if table.name == "project_design_generations":
+        from .routers.design_generation_model import valid_transition
+
+        identity = values.get("id") if operation == "insert" else old["id"]
+        allowed = _permission(db, scope, "design_generation:" + str(identity))
+        if allowed and (operation == "insert" or operation == "update" and valid_transition(old, values)):
+            return
+        _deny("design_generation_immutable", "Only the exact durable design preview may append and finalize its original once")
+    if table.name not in {"project_design_documents", "project_design_revisions", "project_design_adoptions"}:
+        return
+    allowed = _permission(db, scope, "design_write")
+    if allowed and (operation == "insert" or operation == "update" and table.name == "project_design_documents"
+                   and not {"id", "tenant_id", "project_id", "created_at"} & set(values)):
+        return
+    _deny("design_original_immutable", "Only its canonical design command may append fixed revisions or adoption; originals cannot be rewritten or removed")
+
+
 def task_submission_write_scope(db, tenant_id, project_id, submission_id):
     return _scope(db, tenant_id, project_id, "task_submission_write:" + submission_id)
 
@@ -550,6 +576,8 @@ def _flow_invalidation(original, changed):
 
 
 def _restricted_write(db, table, scope, operation, old, values):
+    if table.name == "project_design_generations" and operation == "update":
+        return _permission(db, scope, "design_generation:" + old["id"]) is not None
     if table.name == "delivery_task_submissions" and operation == "update":
         return _permission(db, scope, "task_submission_invalidation") is not None
     if table.name == "delivery_execution_control_operations" and operation == "update":
@@ -672,6 +700,7 @@ def _check_write(db, table, operation, old, values, *, user_cascade=False):
     scope = _scope_for_row(db, table, values if operation == "insert" else old)
     if scope is None:
         return
+    _check_design_write(db, table, scope, operation, old, values)
     _check_submission_write(db, table, scope, operation, old, values)
     _check_control_write(db, table, scope, operation, old, values)
     _check_handoff_write(db, table, scope, operation, old, values)

@@ -69,6 +69,7 @@ import {
 import "./delivery-workbench.css";
 import { DeliveryIssueWorkbench } from "./DeliveryIssueWorkbench";
 import { DeliveryTaskPlanEditor } from "./DeliveryTaskPlanEditor";
+import { DeliveryDesignContextPanel } from "./DeliveryDesignContextPanel";
 import { planError } from "@/lib/deliveryTaskPlan";
 import {
   deliveryInboxHash,
@@ -946,6 +947,10 @@ function ProjectDelivery() {
       },
     );
 
+  const requirementDesign = selectedId && projectId && getToken() ? <DeliveryDesignContextPanel key={`${projectId}:${sessionId}:${selectedId}:design`} projectId={projectId} target={{ kind: "requirement", id: selectedId }} sessionId={sessionId}
+    disabled={executionExit.pending} isActive={() => originScope.current === sessionSnapshot() && !locatedRecoveryLive.current}
+    canSubmit={() => executionExit.canNavigate() && originScope.current === sessionSnapshot() && !locatedRecoveryLive.current}
+    onSaved={saveWorkspace} onUnresolvedChange={(value) => executionPending(`requirement-design:${selectedId}`, value)} /> : null;
   const requirementRecovery =
     selectedId && collaborationRoute.edit === "1" && projectId && getToken() ? (
       <DeliveryRequirementChangeHost
@@ -1012,6 +1017,7 @@ function ProjectDelivery() {
         {taskHandoffFallback}
         <Skeleton active paragraph={{ rows: 12 }} />
         {requirementRecovery}
+        {requirementDesign}
         {historyFallback}
       </>
     );
@@ -1036,6 +1042,7 @@ function ProjectDelivery() {
           }
         />
         {requirementRecovery}
+        {requirementDesign}
         {historyFallback}
       </>
     );
@@ -1064,6 +1071,7 @@ function ProjectDelivery() {
           description={actionError || undefined}
         />
         {requirementRecovery}
+        {requirementDesign}
         {historyFallback}
       </>
     );
@@ -1541,6 +1549,7 @@ function ProjectDelivery() {
           />
         )}
         {!selected && independentHistory}
+        {requirementDesign}
         {selected && (
           <>
             <div className="delivery-inspector-meta">

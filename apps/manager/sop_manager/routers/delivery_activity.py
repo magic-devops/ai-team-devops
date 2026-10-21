@@ -56,6 +56,9 @@ class _RecordedTargets:
             }.get(payload.get("module"))
             if kind:
                 self.add(kind, rid)
+        elif action in {"requirement.design.adopt", "requirement.design.clear", "task.design.adopt", "task.design.clear"}:
+            kind = action.split(".")[0]
+            self.add(kind, payload.get(kind + "_id"))
         elif action.startswith("requirement.") or action in {
             "artifact.add",
             "stage.advance",

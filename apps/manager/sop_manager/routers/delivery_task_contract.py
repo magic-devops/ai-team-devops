@@ -7,11 +7,27 @@ from copy import deepcopy
 from .delivery_team import semantic_owner
 
 
+def public_design_snapshot(snapshot):
+    """Project the known empty pre-design shape without rewriting a fixed original."""
+    value = deepcopy(snapshot)
+    if "designs" not in value and "design_basis" not in value:
+        from .design_contract import design_basis
+
+        value.update(designs=[], design_basis=design_basis([]))
+    return value
+
+
 def semantic_snapshot(snapshot):
     """Audit labels remain original; responsibility comparisons use stable IDs."""
     if snapshot is None:
         return None
     value = deepcopy(snapshot)
+    if value.get("designs") == []:
+        from .design_contract import design_basis
+
+        if value.get("design_basis") == design_basis([]):
+            value.pop("designs", None)
+            value.pop("design_basis", None)
     value.pop("assigned_to", None)
     if "task" in value:
         value["task"].pop("assigned_to", None)
@@ -47,7 +63,7 @@ def _criteria(value):
     )
 
 
-def delivery_task_definition(task, requirement, planning, owner, dependency_basis, *, requirement_revision=0):
+def delivery_task_definition(task, requirement, planning, owner, dependency_basis, *, requirement_revision=0, designs=()):
     """Resolve explicit references; never query, mutate, infer inheritance or repair old data."""
     reasons = []
 
@@ -115,7 +131,11 @@ def delivery_task_definition(task, requirement, planning, owner, dependency_basi
             "task_acceptance_missing",
             "Define at least one task condition or explicitly select a requirement condition before delivery.",
         )
+    from .design_contract import design_basis
+
     snapshot = {
+        "designs": deepcopy(list(designs)),
+        "design_basis": design_basis(list(designs)),
         "task_id": task["id"],
         "title": task.get("title") or "",
         "description": task.get("description") or "",

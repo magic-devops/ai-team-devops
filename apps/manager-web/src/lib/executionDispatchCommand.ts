@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { validDesignReferences } from "./designLibrary";
 import { saveDelivery, type DeliveryIntent } from "./delivery";
 import { createDeliveryCommandController, useDeliveryCommand, validDeliveryCommandAck, type DeliveryControllerOptions } from "./deliveryCommandController";
 import { eventRetryDraftKey } from "./eventReceipts";
@@ -52,7 +53,7 @@ const normalized = (node: Record<string, unknown>) => [node.id, node.title, node
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every((part) => typeof part === "string");
 function validSnapshot(value: unknown, taskId: string) {
   if (!record(value) || value.task_id !== taskId || ![value.title, value.description, value.assigned_to].every((part) => typeof part === "string") ||
-    !strings(value.acceptance_criteria) || !strings(value.task_acceptance_criteria) || !record(value.dependency_basis) ||
+    !strings(value.acceptance_criteria) || !strings(value.task_acceptance_criteria) || !validDesignReferences(value.designs) || !digest(value.design_basis) || !record(value.dependency_basis) ||
     !Object.values(value.dependency_basis).every((part) => typeof part === "string")) return false;
   const requirement = value.requirement, owner = value.owner;
   return (requirement === null || record(requirement) && id(requirement.id, 64) &&

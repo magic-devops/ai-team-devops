@@ -7,6 +7,7 @@ import { bindSessionRequest } from "./http";
 import { getSessionRevision } from "./authStorage";
 import { projectSessionKey } from "./projectPortfolio";
 import { request } from "./http";
+import { validDesignReferences } from "./designLibrary";
 
 export type SubmissionSource = { kind: "human" | "agent" | "tool"; name: string; url: string };
 export type SubmissionArtifact = { id: string; title: string; content: string; url: string; sha256: string | null };
@@ -61,7 +62,7 @@ const validActor = (value: unknown) => record(value) && submissionIdentity(value
 const validReasons = (value: unknown) => Array.isArray(value) && value.every((item) => record(item) && typeof item.code === "string" && typeof item.message === "string");
 const validDefinition = (value: unknown, taskId: string): value is SubmissionDefinition => record(value) && value.task_id === taskId && typeof value.title === "string" && typeof value.description === "string" &&
   typeof value.assigned_to === "string" && Array.isArray(value.task_acceptance_criteria) && value.task_acceptance_criteria.every((item: unknown) => text(item, 2000)) &&
-  Array.isArray(value.acceptance_criteria) && value.acceptance_criteria.every((item: unknown) => text(item, 2000)) && record(value.dependency_basis) &&
+  Array.isArray(value.acceptance_criteria) && value.acceptance_criteria.every((item: unknown) => text(item, 2000)) && record(value.dependency_basis) && validDesignReferences(value.designs) && digest(value.design_basis) &&
   (value.owner === null || record(value.owner) && submissionIdentity(value.owner.id) && typeof value.owner.active === "boolean") &&
   (value.requirement === null || record(value.requirement) && submissionIdentity(value.requirement.id) && integer(value.requirement.revision, 1) &&
     Array.isArray(value.requirement.acceptance_criteria) && value.requirement.acceptance_criteria.every((item: unknown) => text(item, 2000)) && Array.isArray(value.requirement.criteria_indices));

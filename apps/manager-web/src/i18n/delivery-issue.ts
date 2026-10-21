@@ -1009,6 +1009,7 @@ function withDetails(base: typeof en, language: 0 | 1 | 2) {
     sources: {
       ...base.sources,
       event: ["Tool events", "工具事件", "ツールイベント"][language],
+      external: ["External delivery reports", "外部交付报告", "外部成果報告"][language],
     },
     origins: {
       ...Object.fromEntries(

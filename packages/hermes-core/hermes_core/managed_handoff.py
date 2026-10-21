@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .agents import AgentDispatch, Agents
 from .delivery import Delivery
-from .models import CoreError, Principal, TaskDispatch
+from .models import CoreError, Principal, TaskDispatch, TaskEnvelope
 from .repository import Repository
 from .transactional import Store, digest, now
 
@@ -59,13 +59,19 @@ def _request(principal, workspace, *, operation_id, project_id, execution_id, en
         raise CoreError("invalid_handoff", "An immutable plan basis is required", 422)
     if not re.fullmatch(r"[0-9a-f]{64}", frozen_body.target_basis):
         raise CoreError("invalid_handoff", "An immutable execution target basis is required", 422)
-    if (not isinstance(envelope, dict) or set(envelope) != {"title", "description", "acceptance_criteria", "source"}
+    if (not isinstance(envelope, dict) or set(envelope) not in (
+            {"title", "description", "acceptance_criteria", "source"},
+            {"title", "description", "acceptance_criteria", "source", "design_context"})
             or any(not isinstance(envelope.get(key), str) for key in ("title", "description", "acceptance_criteria"))
             or not envelope["title"].strip() or not envelope["acceptance_criteria"].strip()
             or not isinstance(envelope.get("source"), dict)
             or envelope["source"].get("kind") != "manager.delivery"
             or envelope["source"].get("execution_id") != execution_id):
         raise CoreError("invalid_handoff", "Use the complete original managed task envelope", 422)
+    try:
+        TaskEnvelope.model_validate(envelope)
+    except ValueError as exc:
+        raise CoreError("invalid_handoff", "Use the complete typed original managed task envelope", 422) from exc
     request = {"schema": "manager.execution-handoff.v1", "tenant": principal.tenant,
                "business": principal.business, "workspace": workspace, "actor": principal.actor,
                "operation_id": operation_id, "project_id": project_id, "execution_id": execution_id,

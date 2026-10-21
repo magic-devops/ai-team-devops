@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 API_BASE = "/api/hermes/v1"
 RESOURCES = frozenset({"workspaces", "sessions", "runs", "tasks", "requirements", "assets", "devices", "schedules", "approvals", "artifacts", "agents", "squads"})
@@ -16,7 +16,7 @@ RESOURCE_STATUS_OPTIONS = {
     "assets": ("active", "archived"),
 }
 RESOURCE_DATA_FIELDS = {
-    "tasks": ("title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind"),
+    "tasks": ("title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind", "design_context"),
     "requirements": ("title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind"),
     "sessions": ("title", "content", "summary", "description", "assigned_agent", "dev_tool", "source", "kind", "workspace_root"),
     "assets": ("title", "name", "content", "summary", "description", "source", "kind"),
@@ -177,6 +177,32 @@ class Decision(RunAction):
     dry_run: bool = False
 
 
+class TaskDesignContext(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    slot: Literal["prd", "prototype", "architecture"]
+    document_id: str = Field(min_length=1, max_length=64)
+    revision_id: str = Field(min_length=1, max_length=64)
+    revision_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    content: str = Field(min_length=1, max_length=65536)
+
+
+class TaskEnvelope(BaseModel):
+    """Managed original validation does not rewrite the frozen receipt."""
+    model_config = ConfigDict(strict=True, extra="forbid")
+    title: str = Field(min_length=1)
+    description: str
+    acceptance_criteria: str = Field(min_length=1)
+    source: dict[str, Any]
+    design_context: list[TaskDesignContext] = Field(default_factory=list, max_length=3)
+
+    @model_validator(mode="after")
+    def complete_input(self):
+        from .agent_input import task_context
+        task_context(self.model_dump())
+        return self
+
+
 class Node(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
@@ -186,7 +212,13 @@ class Node(BaseModel):
     expected_exit_code: int = Field(default=0, ge=0, le=255, strict=True)
     timeout_seconds: int = Field(default=60, ge=1, le=3600, strict=True)
     agent_id: str = Field(default="", max_length=64)
-    prompt: str = Field(default="", max_length=32000)
+    prompt: str = Field(default="", max_length=512 * 1024)
+
+    @model_validator(mode="after")
+    def bounded_input(self):
+        if "\x00" in self.prompt or len(self.prompt.encode("utf-8")) > 512 * 1024:
+            raise ValueError("Complete agent input must be valid UTF-8 without NUL and at most 512 KiB")
+        return self
 
 
 class TaskDispatch(RunAction):

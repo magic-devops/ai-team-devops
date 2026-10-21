@@ -62,7 +62,7 @@ def _accepted(requirement, tasks, issues):
     ):
         return False
     acceptance = {**flow, "stage": "acceptance"}
-    return all(gate["ok"] for gate in stage_gates(requirement, acceptance, tasks, issues))
+    return all(gate["ok"] for gate in stage_gates(requirement, acceptance, tasks, issues, designs=requirement.get("designs", [])))
 
 
 @dataclass

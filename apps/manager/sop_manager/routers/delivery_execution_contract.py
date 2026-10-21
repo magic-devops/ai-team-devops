@@ -6,6 +6,7 @@ from hermes_core.models import Node
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from .delivery_team_runtime_contract import ExecutorSnapshot
+from .design_contract import DesignReference
 
 OutputText = Annotated[str, StringConstraints(strip_whitespace=False)]
 
@@ -156,6 +157,8 @@ class ExecutionOwnerSnapshot(ExecutionInput):
 
 
 class ExecutionSnapshot(ExecutionInput):
+    designs: list["DesignReference"] = Field(max_length=3)
+    design_basis: str = Field(pattern=r"^[0-9a-f]{64}$")
     task_id: str
     title: str
     description: str

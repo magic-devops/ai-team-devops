@@ -102,6 +102,7 @@ def _awaiting(task, requirement, entry, latest):
         task.get("owner"),
         evidence.get("dependency_basis", {}),
         requirement_revision=_flow(requirement)["revision"] if requirement else 0,
+        designs=task.get("designs", []),
     )
     return task.get("delivery_status") == "awaiting_review" and snapshots_match(
         definition["snapshot"], evidence
@@ -151,7 +152,7 @@ def _approval(requirement, tasks, issues, reasons, evaluated_gates=None):
     if checks is None:
         checks = stage_gates(
             requirement, flow, tasks, issues,
-            deployment_verified=requirement.get("deployment_verified") is True,
+            deployment_verified=requirement.get("deployment_verified") is True, designs=requirement.get("designs", []),
         )
     return bool(checks) and all(check.get("ok") is True for check in checks)
 

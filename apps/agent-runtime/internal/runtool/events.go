@@ -102,9 +102,13 @@ func RunEvents(ctx context.Context, root string, req Request, callback func(Tool
 		callback(event)
 	}
 	finish := func(resp Response) Response {
+		resp.StdinSHA256 = req.StdinSHA256
 		resp.DurationMS = time.Since(started).Milliseconds()
 		emit(ToolEvent{Event: "tool.completed", Result: &resp})
 		return resp
+	}
+	if err := validateStdin(req); err != nil {
+		return finish(failure(err))
 	}
 	workspace, err := validRoot(root)
 	if err != nil {
@@ -125,6 +129,10 @@ func RunEvents(ctx context.Context, root string, req Request, callback func(Tool
 	}
 	command := exec.Command(req.Argv[0], req.Argv[1:]...)
 	command.Dir = workspace
+	if req.StdinText != "" {
+		// Child input is independent of the JSONL controller/cancellation pipe.
+		command.Stdin = strings.NewReader(req.StdinText)
+	}
 	prepareCommand(command)
 	stdout := &eventWriter{stream: "stdout", emit: emit, summary: limitedBuffer{limit: maxOutputBytes}}
 	stderr := &eventWriter{stream: "stderr", emit: emit, summary: limitedBuffer{limit: maxOutputBytes}}
@@ -163,7 +171,7 @@ func RunEvents(ctx context.Context, root string, req Request, callback func(Tool
 	stdout.flush(true)
 	stderr.flush(true)
 	result := Response{OK: err == nil && cause == "", ExitCode: exitCode(err), Stdout: stdout.summary.String(), Stderr: stderr.summary.String(),
-		Error: cause, ProcessTreeStopped: treeStopped, WaitCompleted: true, OutputEOF: true, Backend: processBackend()}
+		Error: cause, ProcessTreeStopped: treeStopped, WaitCompleted: true, OutputEOF: true, Backend: processBackend(), StdinSHA256: req.StdinSHA256}
 	if result.OK && !treeStopped {
 		result.OK = false
 		result.Error = "controlled process tree stop could not be confirmed"

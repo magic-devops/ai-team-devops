@@ -60,7 +60,7 @@ def test_agent_dispatch_preview_execution_and_evidence(setup, monkeypatch):
     run = response.json()["items"][0]["run"]
     assert dispatch(client, task, agent=agent).json() ["items"] == response.json()["items"]
     assert run["data"]["agent_bindings"]["agent_1"]["version"] == agent["version"]
-    monkeypatch.setattr(app.state.hermes_execution, "tool", lambda *args: codex_result("Verified output"))
+    monkeypatch.setattr(app.state.hermes_execution, "tool", lambda *args, **kwargs: codex_result("Verified output"))
     started = client.post(f"{BASE}/runs/{run['id']}/start", json={"expected_version": 1,
                             "idempotency_key": "start", "dry_run": False})
     assert started.status_code == 200, started.text
@@ -79,7 +79,7 @@ def test_squad_leader_routes_only_selected_members(setup, monkeypatch):
     run = dispatch(client, task, squad=squad).json()["items"][0]["run"]
     calls = []
 
-    def tool(*args):
+    def tool(*args, **kwargs):
         calls.append(args[3].id)
         return codex_result(json.dumps({"delegations": [{"agent_id": agents[1]["id"], "instruction": "Implement tests"}]})) if len(calls) == 1 else codex_result("Tests pass")
 
@@ -136,5 +136,10 @@ def test_provider_cli_arguments_do_not_bypass_permissions(monkeypatch):
     monkeypatch.setattr("hermes_core.agents.shutil.which", lambda provider: "/bin/" + provider)
     for provider in ("codex", "claude", "opencode"):
         argv = provider_command(AgentProfile(title="Test", provider=provider), "prompt ; not shell")
-        assert argv[-1] == "prompt ; not shell"
+        if provider == "codex":
+            assert argv[-1] == "-"
+        elif provider == "claude":
+            assert "stdin" in argv[-1]
+        else:
+            assert argv[-1] == "prompt ; not shell"
         assert not any("dangerously" in part or "bypassPermissions" in part for part in argv)

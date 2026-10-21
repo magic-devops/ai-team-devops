@@ -43,7 +43,7 @@ from .transactional import Store, digest
 
 
 def _validate_task_source_change(resource, current, changes):
-    if resource != "tasks" or "source" not in changes:
+    if resource != "tasks" or not {"source", "design_context"}.intersection(changes):
         return
     existing, proposed = current.get("source"), changes["source"]
     if (isinstance(existing, dict) and existing.get("kind") == "manager.delivery"

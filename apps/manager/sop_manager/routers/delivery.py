@@ -339,7 +339,7 @@ def delivery_issue_page(
     q: str = Query("", max_length=200),
     status: str = Query("", max_length=32),
     severity: str = Query("", max_length=8),
-    source: Literal["", "execution", "deployment", "event", "other"] = "",
+    source: Literal["", "execution", "deployment", "event", "external", "other"] = "",
     cursor: str = Query("", max_length=4000),
     limit: int = Query(20, ge=1, le=100),
     project_id: str = Header(default="", alias="X-Project-Id"),
@@ -1367,7 +1367,7 @@ def execution_preview(
             getattr(request.app.state, "hermes_store", None),
             getattr(request.app.state, "hermes_execution", None),
         )
-        return {"project_id": project.id, "version": row.version if row else 0, **plan}
+        return {"project_id": project.id, "version": row.version if row else 0, **{key: value for key, value in plan.items() if key != "design_context"}}
     except CoreError as exc:
         raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc
 
@@ -2001,6 +2001,10 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
             complete = prepare_sync(db, project, payload)
             if complete is not None:
                 requirement_proof_token = install(db, project, payload.record["id"], complete)
+        from .design_adoption_service import prepare_command as prepare_design_adoption
+
+        design_prepared = prepare_design_adoption(db, project, user, body.action, payload,
+            store=getattr(request.app.state, "hermes_store", None) if request else None)
         progress_proof = None
         if body.action == "baseline.create":
             from .delivery_progress_current import freeze_proof
@@ -2052,7 +2056,7 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
             applied = apply_progress(db, project, user, body.action, payload, proof=progress_proof)
         else:
             applied = _apply(
-                db, project, user, data, body.action, payload, request, command_key=body.idempotency_key
+                db, project, user, data, body.action, payload, request, command_key=body.idempotency_key, design_prepared=design_prepared
             )
         resource_id, before = applied[:2]
         event_data = {
@@ -2149,7 +2153,15 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
         raise
 
 
-def _apply(db, project, user, data, action, payload, request, *, command_key=""):
+def _apply(db, project, user, data, action, payload, request, *, command_key="", design_prepared=None):
+    if action.startswith("design."):
+        from .design_service import apply_document
+
+        return apply_document(db, project, user, action, payload, command_key=command_key)
+    if action in {"requirement.design.adopt", "requirement.design.clear", "task.design.adopt", "task.design.clear"}:
+        from .design_adoption_service import apply_adoption
+
+        return apply_adoption(db, project, user, data, action, payload, design_prepared, command_key=command_key)
     if action in {"task.delivery.submit", "task.delivery.review"}:
         from .delivery_task_submission_service import apply_submission
 
@@ -2226,3 +2238,46 @@ def _apply(db, project, user, data, action, payload, request, *, command_key="")
         execution = getattr(request.app.state, "hermes_execution", None) if request else None
         return apply_execution(db, project, user, data, action, payload, store, execution)
     return apply_action(db, project, user, data, action, payload)
+
+
+from .design_contract import AdoptionPreview, AdoptionPreviewInput, DesignCurrent  # noqa: E402
+
+
+@router.get("/requirements/{requirement_id}/designs", response_model=DesignCurrent)
+def requirement_designs(requirement_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+                        project_id: str = Header(default="", alias="X-Project-Id")):
+    from .design_adoption_service import current
+
+    with db.no_autoflush:
+        return current(db, _project(db, user, project_id), user, "requirement", requirement_id)
+
+
+@router.get("/tasks/{task_id}/designs", response_model=DesignCurrent)
+def task_designs(task_id: str, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+                 project_id: str = Header(default="", alias="X-Project-Id")):
+    from .design_adoption_service import current
+
+    with db.no_autoflush:
+        return current(db, _project(db, user, project_id), user, "task", task_id)
+
+
+@router.post("/requirements/{requirement_id}/design-adoption-preview", response_model=AdoptionPreview)
+def requirement_design_preview(requirement_id: str, body: AdoptionPreviewInput, request: Request,
+        user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+        project_id: str = Header(default="", alias="X-Project-Id")):
+    from .design_adoption_service import preview
+
+    with db.no_autoflush:
+        return preview(db, _project(db, user, project_id), user, "requirement", requirement_id, body,
+            store=getattr(request.app.state, "hermes_store", None))
+
+
+@router.post("/tasks/{task_id}/design-adoption-preview", response_model=AdoptionPreview)
+def task_design_preview(task_id: str, body: AdoptionPreviewInput, request: Request,
+        user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+        project_id: str = Header(default="", alias="X-Project-Id")):
+    from .design_adoption_service import preview
+
+    with db.no_autoflush:
+        return preview(db, _project(db, user, project_id), user, "task", task_id, body,
+            store=getattr(request.app.state, "hermes_store", None))

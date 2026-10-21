@@ -150,12 +150,16 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
             409, {"code": "target_unavailable", "message": "Target cannot execute every planned node"}
         )
     snapshot = verification.definition(task.id)["snapshot"]
+    from .delivery_execution_design_context import execution_design_context
+
+    design_context = execution_design_context(db, project, snapshot)
     nodes = body.nodes
     if agent:
         from hermes_core.agents import single_agent_nodes
 
-        nodes = single_agent_nodes(agent, _envelope_data({"snapshot": snapshot, "id": ""}), body.test_nodes)
+        nodes = single_agent_nodes(agent, _envelope_data({"snapshot": snapshot, "id": "", "design_context": design_context}), body.test_nodes)
     result = {
+        "design_context": design_context,
         "task_basis": body.task_basis,
         "workspace_id": workspace["id"],
         "workspace_version": workspace["version"],
@@ -188,7 +192,7 @@ def _queue(db, project, user, state, body, store, execution=None):
         "project_id": project.id,
         **body.model_dump(mode="json"),
         "test_node_ids": plan["test_node_ids"],
-        "plan_nodes": plan["nodes"],
+        "plan_nodes": [{key: node[key] for key in ("id", "kind", "title") if key in node} for node in plan["nodes"]],
         "plan_basis": plan["plan_basis"],
         "target_snapshot": plan["target"],
         "agent_snapshot": plan["agent"],
@@ -211,7 +215,7 @@ def _queue(db, project, user, state, body, store, execution=None):
     task.status = "in_progress"
     from .delivery_execution_handoff import accept_handoff
 
-    accept_handoff(db, project, user, entry)
+    accept_handoff(db, project, user, entry, design_context=plan["design_context"])
     return entry["id"], None
 
 
@@ -221,6 +225,7 @@ def _envelope_data(entry):
     if entry.get("executor_snapshot") is not None:
         source["executor_snapshot"] = entry["executor_snapshot"]
     return {
+        **({"design_context": deepcopy(entry["design_context"])} if "design_context" in entry else {}),
         "title": snapshot["title"],
         "description": "\n\n".join(
             text
@@ -250,14 +255,24 @@ def _dispatch_body(entry):
     return TaskDispatch(**common, nodes=entry["nodes"])
 
 
-def _recover_dispatch(store, principal, entry):
+def _recover_dispatch(store, principal, entry, *, db=None, project=None):
     """Recover committed external receipts before revalidating an unstarted plan."""
     if entry.get("handoff_id"):
         from hermes_core.managed_handoff import ManagedHandoff
 
+        original = entry
+        if db is not None and project is not None:
+            from .delivery_execution_handoff_model import DeliveryExecutionHandoff
+            from .delivery_execution_handoff import _validate_original
+
+            handoff = db.get(DeliveryExecutionHandoff, entry["handoff_id"])
+            if not handoff or (handoff.tenant_id, handoff.project_id, handoff.execution_id) != (project.tenant_id, project.id, entry["id"]):
+                raise HTTPException(409, "The fixed handoff original is unavailable")
+            _validate_original(handoff)
+            original = handoff.original
         fact = ManagedHandoff(store, None).probe(principal, entry["workspace_id"], operation_id=entry["handoff_id"],
-            project_id=entry["project_id"], execution_id=entry["id"], envelope=_envelope_data(entry),
-            body=_dispatch_body(entry), plan_basis=entry["plan_basis"])
+            project_id=entry["project_id"], execution_id=entry["id"], envelope=_envelope_data(original),
+            body=_dispatch_body(original), plan_basis=original["plan_basis"])
         if fact and fact["state"] == "planned":
             entry.update(run_id=fact["run_id"], runtime_task_id=fact["runtime_task_id"])
             return True
@@ -419,7 +434,7 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
         if action == "execution.cancel":
             raise HTTPException(422, "Use the fixed execution control preview and command payload")
         if not entry.get("run_id"):
-            _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry)
+            _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry, db=db, project=project)
         if not entry.get("run_id"):
             raise HTTPException(409, {"code": "execution_handoff_pending",
                 "message": "The accepted handoff has no runtime plan yet. Observe its handoff state; sync and review never dispatch."})

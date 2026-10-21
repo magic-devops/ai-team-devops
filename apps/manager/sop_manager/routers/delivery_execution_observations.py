@@ -98,7 +98,7 @@ def observations(db, project, user, state, entry, store, execution, permissions,
     principal, _ = _access(store, user, project, entry["workspace_id"])
     entry = deepcopy(entry)
     if not entry.get("run_id"):
-        _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry)
+        _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry, db=db, project=project)
     run_id = entry.get("run_id") or ""
     after = _after(cursor, project.id, entry["id"], run_id)
     run = store.get(principal, entry["workspace_id"], "runs", run_id) if run_id else None

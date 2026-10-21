@@ -19,12 +19,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
 	defaultTimeoutSeconds = 60
 	maxTimeoutSeconds     = 3600
 	maxOutputBytes        = 64 * 1024
+	maxStdinBytes         = 512 * 1024
 )
 
 const MaxOutputBytes = maxOutputBytes
@@ -32,6 +34,8 @@ const MaxOutputBytes = maxOutputBytes
 type Request struct {
 	Argv           []string `json:"argv"`
 	TimeoutSeconds int      `json:"timeout_seconds,omitempty"`
+	StdinText      string   `json:"stdin_text,omitempty"`
+	StdinSHA256    string   `json:"stdin_sha256,omitempty"`
 }
 
 type Response struct {
@@ -45,6 +49,27 @@ type Response struct {
 	WaitCompleted      bool   `json:"wait_completed,omitempty"`
 	OutputEOF          bool   `json:"output_eof,omitempty"`
 	Backend            string `json:"backend,omitempty"`
+	StdinSHA256        string `json:"stdin_sha256,omitempty"`
+}
+
+func validateStdin(req Request) error {
+	if len(req.StdinText) > maxStdinBytes || !utf8.ValidString(req.StdinText) || strings.ContainsRune(req.StdinText, '\x00') {
+		return errors.New("stdin must be valid UTF-8 without NUL and at most 512 KiB")
+	}
+	if req.StdinText != "" && len(req.Argv) > 0 {
+		switch req.Argv[0] {
+		case "workspace-file-list", "workspace-file-read", "workspace-file-write", "git-status", "git-diff":
+			return errors.New("stdin is only supported for external command processes")
+		}
+	}
+	if req.StdinText == "" && req.StdinSHA256 == "" {
+		return nil
+	}
+	sum := sha256.Sum256([]byte(req.StdinText))
+	if req.StdinSHA256 != hex.EncodeToString(sum[:]) {
+		return errors.New("stdin original digest does not match the complete input")
+	}
+	return nil
 }
 
 func Run(ctx context.Context, root string, req Request) Response {
@@ -55,6 +80,9 @@ func Run(ctx context.Context, root string, req Request) Response {
 }
 
 func run(ctx context.Context, root string, req Request) Response {
+	if err := validateStdin(req); err != nil {
+		return failure(err)
+	}
 	workspaceRoot, err := validRoot(root)
 	if err != nil {
 		return failure(err)
@@ -69,6 +97,9 @@ func run(ctx context.Context, root string, req Request) Response {
 	timeout := timeoutFromRequest(req.TimeoutSeconds)
 	cmd := exec.Command(req.Argv[0], req.Argv[1:]...)
 	cmd.Dir = workspaceRoot
+	if req.StdinText != "" {
+		cmd.Stdin = strings.NewReader(req.StdinText)
+	}
 	prepareCommand(cmd)
 	var stdout, stderr limitedBuffer
 	stdout.limit = maxOutputBytes
@@ -136,10 +167,11 @@ func run(ctx context.Context, root string, req Request) Response {
 	}
 
 	resp := Response{
-		OK:       err == nil,
-		ExitCode: exitCode(err),
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
+		OK:          err == nil,
+		StdinSHA256: req.StdinSHA256,
+		ExitCode:    exitCode(err),
+		Stdout:      stdout.String(),
+		Stderr:      stderr.String(),
 	}
 	if err != nil {
 		var exitErr *exec.ExitError

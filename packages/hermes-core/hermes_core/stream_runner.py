@@ -1,6 +1,7 @@
 """Agentd JSONL controller shared by native and paired workers."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import queue
@@ -12,7 +13,16 @@ from .models import CoreError
 from .run_output import OutputSanitizer, sanitize_text
 
 
-def run_stream(agentd, root, argv, timeout_seconds, *, on_output, control, known_secrets=()):  # noqa: C901 - bounded execution protocol state machine
+def run_stream(agentd, root, argv, timeout_seconds, *, on_output, control, known_secrets=(), stdin_text=""):  # noqa: C901 - bounded execution protocol state machine
+    from .agent_input import validate_prompt
+    validate_prompt(stdin_text)
+    stdin_sha256 = hashlib.sha256(stdin_text.encode("utf-8")).hexdigest() if stdin_text else ""
+    request = {'argv': argv, 'timeout_seconds': timeout_seconds}
+    if stdin_text:
+        request.update(stdin_text=stdin_text, stdin_sha256=stdin_sha256)
+    encoded_request = (json.dumps(request, ensure_ascii=False, allow_nan=False) + '\n').encode("utf-8")
+    if len(encoded_request) > 4 * 1024 * 1024 - 65536:
+        raise CoreError('agent_input_too_large', 'Encoded execution request exceeds its complete transport budget', 422)
     environment = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
     secrets = tuple(known_secrets) + tuple(value for key, value in environment.items()
         if any(part in key.lower() for part in ('token', 'secret', 'password', 'api_key')) and len(value) >= 4)
@@ -50,8 +60,6 @@ def run_stream(agentd, root, argv, timeout_seconds, *, on_output, control, known
     errors = threading.Thread(target=read_errors, daemon=True)
     reader.start()
     errors.start()
-    proc.stdin.write((json.dumps({'argv': argv, 'timeout_seconds': timeout_seconds}) + '\n').encode())
-    proc.stdin.flush()
     started = time.monotonic()
     cancelled_at = None
     completed = None
@@ -59,6 +67,8 @@ def run_stream(agentd, root, argv, timeout_seconds, *, on_output, control, known
     tails = {'stdout': '', 'stderr': ''}
     control_error = None
     try:
+        proc.stdin.write(encoded_request)
+        proc.stdin.flush()
         while True:
             request_id = None
             try:
@@ -102,6 +112,8 @@ def run_stream(agentd, root, argv, timeout_seconds, *, on_output, control, known
                 completed = event.get('result')
                 if not isinstance(completed, dict) or type(completed.get('exit_code')) is not int:
                     raise CoreError('executor_protocol', 'Missing executor exit evidence', 502)
+                if stdin_text and completed.get('stdin_sha256') != stdin_sha256:
+                    raise CoreError('executor_protocol', 'Executor did not confirm the complete original stdin input; update the executor before retrying', 502)
             elif event.get('event') != 'tool.started':
                 raise CoreError('executor_protocol', 'Unknown executor event', 502)
         proc.wait(timeout=3)

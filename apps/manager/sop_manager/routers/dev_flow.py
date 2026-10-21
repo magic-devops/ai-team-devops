@@ -38,14 +38,14 @@ class DevFlowOpsTasksIn(TaskOwnerInput):
 
 
 def _design_docs_count() -> int:
-    p = resolved_ai_memory_root() / "tech_design" / "index.json"
-    if not p.exists():
-        return 0
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-        return len(data.get("documents") or [])
-    except Exception:
-        return 0
+    from sqlalchemy import func, select
+    from .design_model import ProjectDesignDocument
+    from .sql_models import SessionLocal
+
+    with SessionLocal() as db:
+        return db.scalar(select(func.count()).select_from(ProjectDesignDocument).where(
+            ProjectDesignDocument.tenant_id == resolved_tenant_id(), ProjectDesignDocument.project_id == resolved_project_id(),
+            ProjectDesignDocument.archived.is_(False)))
 
 
 def _count_agents() -> int:

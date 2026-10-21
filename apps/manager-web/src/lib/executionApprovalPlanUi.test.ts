@@ -151,7 +151,7 @@ beforeEach(() => {
             title: "Task",
             description: "",
             assigned_to: "",
-            dependency_basis: {},
+            dependency_basis: {}, designs: [], design_basis: "a".repeat(64),
             task_acceptance_criteria: [],
             acceptance_criteria: [],
             requirement: null,

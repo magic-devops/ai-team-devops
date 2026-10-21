@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-21T00:27:07.729273+00:00",
+  "updated_at": "2026-10-21T02:51:51.421976+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-21T00:27:07.729273+00:00",
-    "status": "external_delivery_loop_source_stage_runtime_pending",
+    "updated_at": "2026-10-21T02:51:51.421976+00:00",
+    "status": "design_adoption_source_stage_runtime_pending",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/external-delivery-loop/",
+    "evidence": ".sop-runtime/delivery-evidence/design-adoption/",
     "verification_status": "current_source_runtime_types_build_and_browser_unverified",
-    "next_step": "finish_external_delivery_source_stage_and_commit_then_validate_when_shared_window_recovers",
+    "next_step": "run_source_pinned_design_and_previous_source_stage_validation_when_user_window_recovers_then_continue_full_lifecycle_gaps",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -652,7 +652,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-external-delivery-loop源码阶段：同Task外部固定报告、既有人工验收事实、失败问题回流、可靠事件回写及原生验收原请求恢复正在完善。用户要求测试、类型、构建、服务与浏览器等待资源和验证窗口；本阶段仅源码/AST/合同/散列审查。完整生命周期目标继续active，阶段相关源码提交不代表运行验收通过。",
+  "current": "T-design-adoption源码阶段：正式设计原件、需求和独立任务固定采用、AI建议恢复及真实执行输入已接通，独立源码审查已完成，进入阶段提交。测试、类型、构建、服务与浏览器按用户要求等待验证窗口；完整生命周期目标继续active，源码提交不代表运行验收通过。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -749,7 +749,7 @@
     "task_id": "T-external-delivery-loop",
     "base_commit": "747666304327e9e615789de8d68fcdca52fd96c9",
     "updated_at": "2026-10-21T00:27:07.729273+00:00",
-    "status": "source_implementation_review_runtime_pending",
+    "status": "source_phase_committed_runtime_validation_deferred_by_user",
     "design": "docs/EXTERNAL_DELIVERY_INTERACTION.md",
     "guide": "docs/EXTERNAL_DELIVERY_GUIDE.md",
     "evidence": ".sop-runtime/delivery-evidence/external-delivery-loop/",
@@ -767,7 +767,7 @@
     "build_executed": false,
     "browser_verified": false,
     "production_integration_complete": false,
-    "next_step": "complete_independent_source_review_and_phase_commit_then_run_source_pinned_validation_when_user_window_recovers",
+    "next_step": "run_source_pinned_runtime_types_build_browser_checks_when_shared_window_recovers",
     "remaining_goal": [
       "actual_adapter_handshake_execution_and_progress",
       "code_inclusion_signed_CI_relationship",
@@ -775,6 +775,26 @@
       "operations_actual_effects_and_independent_verification",
       "current_browser_accessibility_responsive_validation",
       "full_lifecycle_end_to_end_and_scale"
-    ]
+    ],
+    "commit_receipt": ".sop-runtime/delivery-evidence/external-delivery-loop/staging-reviewed/commit-receipt.json",
+    "source_commit": "df23cc6f33589a637452fb3f47610cc427ef7d82"
+  },
+  "design_adoption": {
+    "task_id": "T-design-adoption",
+    "base_commit": "df23cc6f33589a637452fb3f47610cc427ef7d82",
+    "updated_at": "2026-10-21T02:51:51.421976+00:00",
+    "status": "source_stage_frozen_reviewed_runtime_validation_deferred_by_user",
+    "design": "docs/DESIGN_ADOPTION_INTERACTION.md",
+    "guide": "docs/DESIGN_DELIVERY_GUIDE.md",
+    "record": "memory/design-adoption-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/design-adoption/",
+    "runtime_tests_executed": false,
+    "typescript_checked": false,
+    "build_executed": false,
+    "browser_verified": false,
+    "production_integration_complete": false,
+    "full_lifecycle_complete": false,
+    "commit_receipt": ".sop-runtime/delivery-evidence/design-adoption/staging-reviewed/commit-receipt.json",
+    "next_step": "run_source_pinned_design_and_previous_source_stage_validation_when_user_window_recovers_then_continue_full_lifecycle_gaps"
   }
 }

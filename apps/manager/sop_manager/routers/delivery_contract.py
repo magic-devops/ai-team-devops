@@ -83,6 +83,8 @@ class TaskAcceptance(BaseModel):
 
 class Command(Input):
     action: Literal[
+        "design.document.create", "design.revision.save", "design.revision.restore", "design.document.archive",
+        "requirement.design.adopt", "requirement.design.clear", "task.design.adopt", "task.design.clear",
         "project.update",
         "project.lifecycle",
         "resource.save",
@@ -583,7 +585,12 @@ class TaskReviewPlanning(BaseModel):
     depends_on: list[str]
 
 
+from .design_contract import DesignReference  # noqa: E402
+
+
 class TaskReviewSnapshot(BaseModel):
+    designs: list["DesignReference"] = Field(max_length=3)
+    design_basis: str = Field(pattern=r"^[0-9a-f]{64}$")
     task: TaskReviewTask
     owner: TaskReviewOwner | None
     requirement: TaskReviewRequirement | None
@@ -795,7 +802,7 @@ def default_flow():
     }
 
 
-def stage_gates(requirement, flow, tasks, issues, *, deployment_verified=False):
+def stage_gates(requirement, flow, tasks, issues, *, deployment_verified=False, designs=()):
     stage = flow["stage"]
     revision = flow["revision"]
     artifacts = [a for a in flow["artifacts"] if a["revision"] == revision]
@@ -814,14 +821,14 @@ def stage_gates(requirement, flow, tasks, issues, *, deployment_verified=False):
     artifact = next(s["artifact"] for s in STAGES if s["id"] == stage)
     if artifact:
         evidence = [a for a in artifacts if a["kind"] == artifact]
+        fixed_design = any(item["slot"] == artifact for item in designs)
         # A later failed test supersedes an older passing report.
         checks.append(
             {
                 "id": artifact,
-                "ok": bool(evidence)
-                and not evidence[-1].get("stale", False)
-                and evidence[-1]["result"] != "failed"
-                and (artifact != "test" or evidence[-1]["result"] == "passed"),
+                "ok": (bool(evidence) and not evidence[-1].get("stale", False)
+                       and evidence[-1]["result"] != "failed"
+                       and (artifact != "test" or evidence[-1]["result"] == "passed")) or (not evidence and fixed_design),
             }
         )
     if stage in {"planning", "development", "testing", "acceptance", "release"}:
@@ -866,3 +873,8 @@ def stage_gates(requirement, flow, tasks, issues, *, deployment_verified=False):
         # a stored flow flag or manual release history cannot supply it.
         checks.append({"id": "deployment_verified", "ok": deployment_verified is True})
     return checks
+
+
+from .design_contract import COMMANDS as DESIGN_COMMANDS  # noqa: E402
+
+PAYLOADS.update(DESIGN_COMMANDS)

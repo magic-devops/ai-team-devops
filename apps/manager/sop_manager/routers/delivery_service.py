@@ -216,6 +216,8 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
     for task in tasks:
         task["recorded_status"] = task["status"]
         task["basis"] = verification.basis(task["id"])
+        task["designs"] = verification.definition(task["id"])["snapshot"]["designs"]
+        task["design_basis"] = verification.definition(task["id"])["snapshot"]["design_basis"]
         task["acceptance"] = verification.definition(task["id"])["acceptance"]
         task["execution_gate"] = verification.execution_gate(task["id"])
         task["delivery_status"] = verification.delivery_status(task["id"])
@@ -275,6 +277,9 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
             )
         )
     )
+    from .delivery_issue_sources import external_issue_ids
+
+    reported_issue_ids = set() if progress_only else external_issue_ids(db, project)
     for issue in issues:
         issue["source_kinds"] = [
             kind
@@ -283,6 +288,8 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
         ]
         if issue["id"] in event_issue_ids:
             issue["source_kinds"].append("event")
+        if issue["id"] in reported_issue_ids:
+            issue["source_kinds"].append("external")
     reqs = []
     deployed_requirements = current_deployed_requirement_ids(db, project, data, verification=verification)
     requirement_rows = sorted(verification.requirements.values(), key=lambda row: row.id)
@@ -295,8 +302,9 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
         req["deployment_verified"] = row.id in deployed_requirements
         linked = task_groups[row.id]
         flow["gates"] = stage_gates(
-            req, flow, linked, issue_groups[row.id], deployment_verified=req["deployment_verified"]
+            req, flow, linked, issue_groups[row.id], deployment_verified=req["deployment_verified"], designs=verification.design_selections.get(("requirement", row.id), [])
         )
+        req["designs"] = deepcopy(verification.design_selections.get(("requirement", row.id), []))
         req["flow"] = flow
         req["tasks_total"] = len(linked)
         req["tasks_done"] = sum(t["verified"] for t in linked)
@@ -665,7 +673,7 @@ def _apply_lifecycle(db, project, user, data, action, body, values):
             flow,
             snapshot["tasks"],
             snapshot["issues"],
-            deployment_verified=current_requirement["deployment_verified"],
+            deployment_verified=current_requirement["deployment_verified"], designs=current_requirement.get("designs", []),
         )
         missing = [g["id"] for g in gates if not g["ok"]]
         if missing:

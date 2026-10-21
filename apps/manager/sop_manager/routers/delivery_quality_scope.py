@@ -512,6 +512,9 @@ class _Scope:
         self.data["executions"] = [
             row for _, row in sorted(self.entries.values(), key=lambda value: value[0])
         ]
+        from .design_service import load_design_selections
+
+        designs = load_design_selections(self.db, self.project, self.requirements, self.tasks, input_budget=self.input_budget)
         context = VerificationContext(
             self.db,
             self.project,
@@ -522,7 +525,7 @@ class _Scope:
             reviews=reviews,
             team=self.team(),
             external_proofs=external,
-            latest_submissions=submissions,
+            latest_submissions=submissions, design_selections=designs,
         )
         reconcile(self.db, self.project, self.data, verification=context)
         return context

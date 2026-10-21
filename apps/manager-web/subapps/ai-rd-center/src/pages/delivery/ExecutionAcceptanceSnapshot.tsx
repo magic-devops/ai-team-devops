@@ -1,11 +1,17 @@
 import { useTranslation } from "react-i18next";
 import type { ExecutionPreview } from "@/lib/deliveryExecution";
+import { designDigest, validDesignReferences } from "@/lib/designLibrary";
+import { designCopy } from "@/i18n/design-library";
+import { DesignReferenceFacts } from "./DeliveryDesignContextPanel";
 export function ExecutionAcceptanceSnapshot({
   snapshot,
+  projectId,
 }: {
   snapshot: Partial<ExecutionPreview["snapshot"]>;
+  projectId?: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const copy = designCopy(i18n?.language);
   const tr = (key: string) => t(`deliveryTaskAcceptance.${key}`);
   if (!Array.isArray(snapshot.task_acceptance_criteria))
     return (
@@ -59,6 +65,7 @@ export function ExecutionAcceptanceSnapshot({
           {tr("owner")}: {snapshot.owner.name || snapshot.owner.id}
         </p>
       )}
+      <section className="space-y-2"><strong>{copy.context}</strong>{validDesignReferences(snapshot.designs) && designDigest(snapshot.design_basis) ? projectId ? <DesignReferenceFacts references={snapshot.designs} projectId={projectId} background={typeof location === "undefined" ? "" : location.hash} /> : <ul>{snapshot.designs.map((item) => <li key={item.slot}>{copy.slots[item.slot]} · {item.title} · v{item.revision_number}</li>)}</ul> : <p className="runtime-help">{copy.invalid}</p>}</section>
     </div>
   );
 }

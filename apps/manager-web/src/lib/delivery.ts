@@ -302,7 +302,7 @@ export type DeliveryWorkspace = {
     reported_by?: string;
     type?: string;
     created_at?: string;
-    source_kinds?: ("execution" | "deployment" | "event")[];
+    source_kinds?: ("execution" | "deployment" | "event" | "external")[];
   }[];
   summary: {
     requirements: number;

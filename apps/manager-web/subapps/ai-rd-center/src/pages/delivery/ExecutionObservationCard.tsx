@@ -528,7 +528,7 @@ export function ExecutionObservationCard({
             children: (
               <>
                 <strong>{entry.snapshot.title}</strong>
-                <ExecutionAcceptanceSnapshot snapshot={entry.snapshot} />
+                <ExecutionAcceptanceSnapshot projectId={projectId} snapshot={entry.snapshot} />
                 {entry.agent_snapshot && (
                   <p>
                     {entry.agent_snapshot.title} ·{" "}

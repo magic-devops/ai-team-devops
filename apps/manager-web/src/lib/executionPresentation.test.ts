@@ -150,7 +150,7 @@ function renderObservedCard(
     stale: entryStale,
     snapshot: {
       title: "Original task",
-      task_id: "T-one", description: "", assigned_to: "", task_acceptance_criteria: ["Human checks the result"], requirement: null, owner: null, dependency_basis: {},
+      task_id: "T-one", description: "", assigned_to: "", task_acceptance_criteria: ["Human checks the result"], requirement: null, owner: null, dependency_basis: {}, designs: [], design_basis: "a".repeat(64),
       acceptance_criteria: ["Human checks the result"],
     },
     results: {},

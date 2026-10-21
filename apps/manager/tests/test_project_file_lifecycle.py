@@ -5,7 +5,6 @@ from fastapi import HTTPException
 from sop_manager.routers import (
     agents,
     data_analytics,
-    design_docs,
     mcp_mgr,
     models,
     requirements,
@@ -56,7 +55,6 @@ def test_missing_governance_get_is_a_pure_default_projection(tmp_path, monkeypat
         "mcp",
         "governance",
         "sync",
-        "design",
         "agent",
         "workflow",
         "event",
@@ -80,7 +78,6 @@ def test_actual_file_writer_rechecks_archived_project_under_project_lock(
     monkeypatch.setattr(requirements, "_ui_state_path", lambda: target)
     monkeypatch.setattr(mcp_mgr, "_settings_file", lambda: target)
     monkeypatch.setattr(data_analytics, "_governance_file", lambda: target)
-    monkeypatch.setattr(design_docs, "_index_path", lambda: target)
     monkeypatch.setattr(models, "_models_file", lambda: target)
     monkeypatch.setattr(workflow, "_runs_file", lambda: target)
     monkeypatch.setattr(workflow, "_events_file", lambda: target)
@@ -102,7 +99,6 @@ def test_actual_file_writer_rechecks_archived_project_under_project_lock(
             "mcp": lambda: mcp_mgr._save_cfg({}),
             "governance": lambda: data_analytics._write_governance_store({}),
             "sync": asset_sync,
-            "design": lambda: design_docs._save_index({}),
             "agent": lambda: agents._save_definition(target, {}),
             "workflow": lambda: workflow._save_runs([]),
             "event": lambda: workflow._record_event({}),
@@ -192,7 +188,7 @@ def test_actual_file_save_waits_for_archive_and_then_rejects(tmp_path, monkeypat
 
 
 @pytest.mark.parametrize(
-    "module,getter", [(design_docs, "_root"), (agents, "_agents_dir"), (workflow, "_wf_dir")]
+    "module,getter", [(agents, "_agents_dir"), (workflow, "_wf_dir")]
 )
 def test_missing_business_directories_are_not_created_by_reads(tmp_path, monkeypatch, module, getter):
     monkeypatch.setattr(module, "resolved_ai_memory_root", lambda: tmp_path)
@@ -208,14 +204,12 @@ def test_active_file_groups_can_nest_without_acquiring_a_second_sqlite_writer(gu
     monkeypatch.setattr(sql_models, "SessionLocal", sessions)
     monkeypatch.setattr(path_config, "resolved_tenant_id", lambda: "tenant")
     monkeypatch.setattr(path_config, "resolved_project_id", lambda: "active")
-    monkeypatch.setattr(design_docs, "resolved_ai_memory_root", lambda: tmp_path)
+    import json
+
+    target = tmp_path / "agent.json"
     with project_file_write_scope():
-        result = design_docs.create_doc(
-            design_docs.DocCreate(title="Nested lock", initial_content="Real content")
-        )
-    assert (tmp_path / "tech_design" / result["id"] / "current.md").read_text(
-        encoding="utf-8"
-    ).strip() == "Real content"
+        agents._save_definition(target, {"title": "Nested lock", "instructions": "Real content"})
+    assert json.loads(target.read_text(encoding="utf-8"))["instructions"] == "Real content"
 
 
 def test_rag_external_vector_mutation_rechecks_archival_after_embedding(guarded, monkeypatch):

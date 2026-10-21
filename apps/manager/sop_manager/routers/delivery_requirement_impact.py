@@ -58,7 +58,7 @@ def reject_rows(db, query, message):
         fail("requirement_source_unavailable", message)
 
 
-def affected_tasks(project, identity):
+def affected_tasks(project, identity, *, task_target=False):
     task = m.Task
     plans = (
         func.json_each(m.DeliveryWorkspace.data, path("task_details"))
@@ -80,14 +80,14 @@ def affected_tasks(project, identity):
         .where(*scope(project, m.DeliveryWorkspace), deps.c.type == "text")
         .cte("requirement_dependency_edges")
     )
-    direct = select(task.id.label("id")).where(*scope(project, task), task.req_id == identity)
+    direct = select(task.id.label("id")).where(*scope(project, task), task.id == identity if task_target else task.req_id == identity)
     affected = direct.cte("requirement_affected_tasks", recursive=True)
     affected = affected.union(select(edges.c.task_id).join(affected, edges.c.dependency_id == affected.c.id))
     return direct, affected
 
 
-def relation_queries(project, identity):
-    direct, affected = affected_tasks(project, identity)
+def relation_queries(project, identity, *, task_target=False):
+    direct, affected = affected_tasks(project, identity, task_target=task_target)
     task, fact = m.Task, m.DeliveryQueryFact
     task_query = (
         select(
@@ -125,7 +125,7 @@ def relation_queries(project, identity):
         .alias("impact_candidate_tasks")
     )
     match = or_(
-        select(1).select_from(requirements).where(requirements.c.value == identity).exists(),
+        select(1).select_from(requirements).where(requirements.c.value.in_(select(task.req_id).where(*scope(project, task), task.id.in_(affected_ids))) if task_target else requirements.c.value == identity).exists(),
         select(1).select_from(tasks).where(tasks.c.value.in_(affected_ids)).exists(),
     )
     candidate = (

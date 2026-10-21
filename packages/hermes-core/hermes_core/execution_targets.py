@@ -265,6 +265,8 @@ def select_execution_target(store, execution, principal, workspace_id: str, *, t
     if runtime not in target["runtime_capabilities"] or runtime not in target["policy"]["allowed_runtimes"]:
         reasons.append("runtime_not_allowed")
     if provider:
+        from .agents import require_provider_input_transport
+        require_provider_input_transport(provider)
         if provider not in target["policy"]["allowed_providers"]:
             reasons.append("provider_not_allowed")
         if not any(item["id"] == provider and item["executable_present"] for item in target["providers"]):

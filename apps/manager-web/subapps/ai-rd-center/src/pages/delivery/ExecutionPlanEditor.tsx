@@ -638,7 +638,7 @@ export function ExecutionPlanEditor({
             <ExecutionExecutorFacts
               snapshot={draft.preview.executor_snapshot}
             />
-            <ExecutionAcceptanceSnapshot snapshot={draft.preview.snapshot} />
+            <ExecutionAcceptanceSnapshot projectId={draft.projectId} snapshot={draft.preview.snapshot} />
             <div className="runtime-node-chips">
               {draft.preview.nodes.map((node) => (
                 <Tag

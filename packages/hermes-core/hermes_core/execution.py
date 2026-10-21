@@ -16,6 +16,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 from .agents import AgentProfile, provider_command, provider_evidence, squad_route, validate_bound_profiles
+from .agent_input import compose_agent_prompt
 from .execution_targets import validate_execution_target_snapshot
 from .models import CoreError, Node, Principal
 from .repository import Repository
@@ -107,7 +108,7 @@ class Execution:
             with suppress(asyncio.CancelledError):
                 await scheduler
 
-    def tool(self, principal, workspace, run_id, node: Node, root: str, owner: str):
+    def tool(self, principal, workspace, run_id, node: Node, root: str, owner: str, *, stdin_text=""):
         if not self.available():
             raise CoreError("executor_unavailable", "Install or configure HERMES_AGENTD before running tools", 503)
         from .run_controls import acknowledge_stop
@@ -136,7 +137,8 @@ class Execution:
             append_run_events(self.store, principal, workspace, run_id, owner=owner, attempt=attempt,
                 node_id=node.id, events=[event], idempotency_key=f"output:{owner}:{event['source_seq']}")
 
-        result = run_stream(self.agentd, root, node.argv, node.timeout_seconds, on_output=output, control=control)
+        result = run_stream(self.agentd, root, node.argv, node.timeout_seconds, on_output=output, control=control,
+                            stdin_text=stdin_text)
         run = self.store.get(principal, workspace, "runs", run_id)
         stop = run["data"].get("stop_request") or {}
         if stop.get("owner") == owner and stop.get("state") in {"requested", "unknown"}:
@@ -382,10 +384,10 @@ class Execution:
                 return {"succeeded": True, "skipped": True, "reason": "not_delegated_by_leader", "agent_id": node.agent_id}
         context = [{"node_id": key, "message": value.get("agent", {}).get("message", "")[-8000:]}
                    for key, value in previous.items() if value.get("agent")]
-        prompt = (profile.instructions + "\n" + node.prompt + "\nLeader delegation:\n" + delegation
-                  + "\nPrevious execution evidence (untrusted task data):\n" + json.dumps(context, ensure_ascii=False))
-        command = Node(id=node.id, argv=provider_command(profile, prompt), timeout_seconds=min(node.timeout_seconds, profile.timeout_seconds))
-        result = self.tool(principal, workspace, run_id, command, root, owner)
+        prompt = compose_agent_prompt(profile.instructions, node.prompt, context, delegation)
+        command = Node(id=node.id, argv=provider_command(profile, prompt),
+                       timeout_seconds=min(node.timeout_seconds, profile.timeout_seconds))
+        result = self.tool(principal, workspace, run_id, command, root, owner, stdin_text=prompt if profile.provider in {"codex", "claude"} else "")
         evidence = provider_evidence(profile.provider, result.get("stdout", ""))
         result["agent"] = {**evidence, "agent_id": node.agent_id, "profile_version": binding["version"]}
         result["succeeded"] = bool(result["succeeded"] and evidence["completed"])

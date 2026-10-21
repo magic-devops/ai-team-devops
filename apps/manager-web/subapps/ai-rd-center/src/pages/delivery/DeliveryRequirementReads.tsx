@@ -28,19 +28,24 @@ import {
 } from "@/lib/deliveryCollaboration";
 import { beginProgressExactRead } from "@/lib/deliveryProgress";
 import { safeEvidenceUrl } from "@/lib/delivery";
+import { designCopy } from "@/i18n/design-library";
+import { designLibraryHref, validDesignReference } from "@/lib/designLibrary";
 import { RequirementImpactFacts } from "./DeliveryRequirementChangeEditor";
 
 export function RequirementRecordOriginal({
   collection,
   record,
   position,
+  projectId,
 }: {
   collection: RequirementRecordCollection;
   record: Record<string, unknown>;
   position: number;
+  projectId?: string;
 }) {
   const { t, i18n } = useTranslation();
   const tr = (key: string) => t(`deliveryCollaboration.${key}`);
+  const designText = designCopy(i18n.language);
   const text = (key: string) =>
     typeof record[key] === "string" ? (record[key] as string) : "";
   const link = text(collection === "releases" ? "artifact_url" : "url");
@@ -106,9 +111,10 @@ export function RequirementRecordOriginal({
           ? ` · ${t("delivery.revision", { number: record.revision })}`
           : ""}
         {collection === "artifacts"
-          ? ` · ${t(text("source") === "execution-runtime" ? "delivery.runtimeEvidence" : text("source") === "manual" ? "delivery.manual" : "deliveryCollaboration.sourceUnknown")}`
+          ? ` · ${text("source") === "ai" ? designText.aiSource : text("source") === "rules" ? designText.rulesSource : text("source") === "external-delivery" ? designText.externalSource : text("source") === "design_revision" ? designText.fixedSource : t(text("source") === "execution-runtime" ? "delivery.runtimeEvidence" : text("source") === "manual" ? "delivery.manual" : "deliveryCollaboration.sourceUnknown")}`
           : ""}
       </small>
+      {projectId && text("source") === "design_revision" && validDesignReference(record.design) && <Button size="small" href={designLibraryHref(projectId, record.design.document_id, record.design.revision_id, typeof location === "undefined" ? "" : location.hash)}>{designText.sourceOpen}</Button>}
       <details>
         <summary>{tr("originalRecord")}</summary>
         <pre className="delivery-collaboration-original">
@@ -400,6 +406,7 @@ export function DeliveryRequirementRecords({
                 </Button>
               </div>
               <RequirementRecordOriginal
+                projectId={projectId}
                 collection={collection}
                 record={selected.record}
                 position={selected.position}

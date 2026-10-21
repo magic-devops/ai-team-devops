@@ -26,7 +26,7 @@ class VerificationContext:
 
     def __init__(
         self, db, project, data, *, tasks=None, requirements=None, issues=None, reviews=None, team=None,
-        external_proofs=None, latest_submissions=None,
+        external_proofs=None, latest_submissions=None, design_selections=None,
     ):
         self.project, self.data = project, data
 
@@ -61,6 +61,9 @@ class VerificationContext:
         self.external_proofs = external_proofs if external_proofs is not None else load_external_proofs(
             db, project, self.tasks, reviews=self.reviews.values())
         self.latest_submissions = latest_submissions if latest_submissions is not None else load_latest_submissions(db, project, self.tasks)
+        from .design_service import load_design_selections
+
+        self.design_selections = design_selections if design_selections is not None else load_design_selections(db, project, self.requirements, self.tasks)
         self.reset_proof()
 
     def reset_proof(self):
@@ -89,7 +92,12 @@ class VerificationContext:
                     "verified": self.verified(predecessor, trail | {task_id}),
                 }
             )
+        from .design_service import design_basis, effective_designs
+
+        _own_designs, designs = effective_designs(self.design_selections, "task", task_id, task.req_id)
         value = {
+            "designs": designs,
+            "design_basis": design_basis(designs),
             "task": {
                 "id": task.id,
                 "title": task.title,
@@ -126,7 +134,7 @@ class VerificationContext:
             planning,
             value["owner"],
             dependencies,
-            requirement_revision=flow["revision"],
+            requirement_revision=flow["revision"], designs=designs,
         )
         value["acceptance"] = definition["acceptance"]
         self._definitions[task_id] = definition
@@ -368,7 +376,7 @@ class VerificationContext:
         ]
         accepted = reviewed and all(
             gate["ok"]
-            for gate in stage_gates({"id": requirement.id}, {**flow, "stage": "acceptance"}, tasks, issues)
+            for gate in stage_gates({"id": requirement.id}, {**flow, "stage": "acceptance"}, tasks, issues, designs=self.design_selections.get(("requirement", requirement.id), []))
         )
         self._accepted[requirement_id] = accepted
         self._accepting.remove(requirement_id)

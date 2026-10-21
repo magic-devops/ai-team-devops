@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MarkdownView } from "@/components/MarkdownView";
+import { designCopy } from "@/i18n/design-library";
 import { api } from "@/lib/api";
 import { getProjectId, getSessionRevision } from "@/lib/authStorage";
 import {
@@ -38,6 +39,7 @@ type PreviewState = {
   stale: boolean;
   error?: ReturnType<typeof assistanceError>;
   saved: boolean;
+  savedArtifact?: { id: string; content: string };
 };
 type History = {
   expected_version: number;
@@ -67,7 +69,8 @@ export function RequirementAssistance({
   onApplied: () => void;
   onClose?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const designText = designCopy(i18n?.language);
   const [mode, setMode] = useState<Mode>("review");
   const [sources, setSources] = useState<Record<Mode, AssistanceSource>>({
     review: "rules",
@@ -128,6 +131,7 @@ export function RequirementAssistance({
         stale,
         latest: undefined,
         saved: false,
+        savedArtifact: undefined,
         error:
           restored || stale
             ? {
@@ -230,8 +234,8 @@ export function RequirementAssistance({
     try {
       if (mode === "review")
         await api.applyRequirementReview(requirementId, body);
-      else
-        await api.applyRequirementPrototype(
+      else {
+        const result = await api.applyRequirementPrototype(
           requirementId,
           body as {
             content: string;
@@ -242,6 +246,9 @@ export function RequirementAssistance({
             idempotency_key: string;
           },
         );
+        if (typeof result?.artifact_id !== "string" || !result.artifact_id.trim() || typeof result.content !== "string") throw new Error(designText.invalid);
+        patch({ savedArtifact: { id: result.artifact_id, content: result.content } }, target);
+      }
       patch({ saved: true }, target);
       onApplied();
       void history.refetch();
@@ -476,12 +483,12 @@ export function RequirementAssistance({
             </>
           )}
           {state.saved ? (
-            <p
+            <div><p
               role="status"
               className="rounded-lg bg-emerald-500/10 p-3 text-sm"
             >
               {t("assistance.applied")}
-            </p>
+            </p>{state.savedArtifact && <details className="rounded-lg border border-[var(--border)] p-3"><summary>{designText.prototypeSaved}</summary><MarkdownView content={state.savedArtifact.content} /><small>{state.savedArtifact.id}</small></details>}</div>
           ) : (
             <button
               type="button"

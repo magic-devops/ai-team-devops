@@ -704,6 +704,16 @@ from .delivery_task_submission_model import register_submission_models  # noqa: 
 DeliveryTaskSubmission, DeliveryTaskSubmissionDecision = register_submission_models(Base)
 
 
+
+from .design_model import register_design_models  # noqa: E402
+
+ProjectDesignDocument, ProjectDesignRevision, ProjectDesignAdoption = register_design_models(Base)
+
+from .design_generation_model import register_design_generation_model  # noqa: E402
+
+ProjectDesignGeneration = register_design_generation_model(Base)
+
+
 def create_all():
     from sop_manager.schema_upgrade import require_current_schema
 

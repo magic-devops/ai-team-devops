@@ -11,6 +11,7 @@ from .delivery_quality_scope import _paths, load_task_scope
 from .delivery_query_index import scope
 from .delivery_query_read import _now, _stamp, _unchanged, metadata
 from .delivery_service import stamp
+from .delivery_task_contract import public_design_snapshot
 from .delivery_task_submission_model import DeliveryTaskSubmission as Submission, DeliveryTaskSubmissionDecision as Decision
 from .delivery_task_submission_service import (
     MAX_NATIVE_EXECUTIONS, _actor, _assert_original, assert_submission_access, native_boundary, reason, report_accept_reasons,
@@ -158,6 +159,6 @@ def submission_detail(db, project, user, task_id, submission_id, *, store=None, 
     version = db.scalar(select(DeliveryWorkspace.version).where(*scope(project, DeliveryWorkspace))) or 0
     return {"project_id": project.id, "task_id": task_id, "version": version, "as_of": stamp(), "task_basis": task_basis,
         "native_boundary_digest": boundary_digest, "submission": _summary(SimpleNamespace(**dict(summary))),
-        "payload": deepcopy(row.payload), "definition": deepcopy(row.definition), "decision": decision_view,
+        "payload": deepcopy(row.payload), "definition": public_design_snapshot(row.definition), "decision": decision_view,
         "permissions": {"can_review": can_review, "can_accept": can_review and not accept_reasons,
                         "reasons": reasons + accept_reasons}}

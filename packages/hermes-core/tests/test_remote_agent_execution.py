@@ -191,13 +191,13 @@ def test_public_agent_dispatch_accepts_remote_single_agent_with_allowed_device(t
 def _write_fake_agentd(path: Path) -> None:
     path.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, os, subprocess, sys, time\n"
+        "import hashlib, json, os, subprocess, sys, time\n"
         "payload = json.loads(sys.stdin.readline())\n"
         "root = sys.argv[sys.argv.index('--root') + 1]\n"
         "started = time.monotonic()\n"
-        "proc = subprocess.run(payload['argv'], cwd=root, text=True, capture_output=True, timeout=payload['timeout_seconds'])\n"
+        "proc = subprocess.run(payload['argv'], cwd=root, input=payload.get('stdin_text', ''), text=True, encoding='utf-8', capture_output=True, timeout=payload['timeout_seconds'])\n"
         "print(json.dumps({'event':'tool.completed','result':{'ok': proc.returncode == 0, 'exit_code': proc.returncode, 'stdout': proc.stdout,\n"
-        "                  'stderr': proc.stderr, 'duration_ms': int((time.monotonic() - started) * 1000)}}))\n",
+        "                  'stderr': proc.stderr, 'stdin_sha256': hashlib.sha256(payload.get('stdin_text', '').encode()).hexdigest(), 'duration_ms': int((time.monotonic() - started) * 1000)}}))\n",
         encoding="utf-8",
     )
     path.chmod(0o700)

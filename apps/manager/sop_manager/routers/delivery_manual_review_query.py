@@ -8,7 +8,7 @@ from .delivery_manual_review import current_review
 from .delivery_quality_scope import load_task_scope
 from .delivery_query_index import scope
 from .delivery_query_read import _now, _stamp, _unchanged, metadata
-from .delivery_task_contract import snapshots_match
+from .delivery_task_contract import public_design_snapshot, snapshots_match
 from .sql_models import DeliveryTaskReview, Task
 from .delivery_task_submission_model import DeliveryTaskSubmissionDecision
 from .delivery_task_submission_service import assert_submission_access
@@ -162,7 +162,7 @@ def review_detail(db, project, task_id, review_id, *, user=None, store=None):
             "created_at": _date(row["created_at"]),
             "reviewer": {"id": row["reviewer_id"], "name": row["reviewer_name"]},
             "task_basis": row["task_basis"],
-            "snapshot": row["snapshot"],
+            "snapshot": public_design_snapshot(row["snapshot"]),
             "comment": row["comment"],
             "evidence_content": row["evidence_content"],
             "evidence_url": row["evidence_url"],

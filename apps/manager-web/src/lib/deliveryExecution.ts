@@ -1,4 +1,5 @@
 import { request } from "./http";
+import type { DesignReference } from "./designLibrary";
 import {
   prepareDeliveryIntent,
   type DeliveryIntent,
@@ -113,6 +114,8 @@ export type ExecutionPreview = {
     };
     owner: null | { id: string; name: string | null; kind: "human" | "agent" | "tool" | null; active: boolean };
     dependency_basis: Record<string, string>;
+    designs: DesignReference[];
+    design_basis: string;
     acceptance_criteria: string[];
   };
   target: ExecutionTarget;

@@ -32,7 +32,7 @@ function preview(prepared = prepareExecution(draft())): ExecutionPreview {
       timeout_seconds: "timeout_seconds" in node ? node.timeout_seconds : 60, agent_id: "", prompt: "" })),
     test_node_ids: [...prepared.payload.test_node_ids],
     snapshot: { task_id: "T", title: "Fixed task", description: "Dispatch the fixed commands", assigned_to: "", task_acceptance_criteria: [],
-      acceptance_criteria: [], requirement: null, owner: null, dependency_basis: {} } };
+      acceptance_criteria: [], requirement: null, owner: null, dependency_basis: {}, designs: [], design_basis: "a".repeat(64) } };
 }
 function preparedQueue() {
   const prepared = prepareExecution(draft()); prepared.session.preview = preview(prepared); return prepared;
@@ -90,7 +90,7 @@ describe("queue preview binding before durable dispatch", () => {
     expect(JSON.stringify(value)).not.toContain("private-dispatch-token");
   });
 
-  it.each(["project", "version", "task", "task-basis", "workspace", "target-basis", "target-kind", "command", "test-ids", "executor"])("rejects a preview with mismatched %s evidence", (field) => {
+  it.each(["project", "version", "task", "task-basis", "workspace", "target-basis", "target-kind", "command", "test-ids", "executor", "missing-designs", "missing-design-basis"])("rejects a preview with mismatched %s evidence", (field) => {
     const prepared = preparedQueue(), value = structuredClone(prepared.session.preview!);
     if (field === "project") value.project_id = "Q";
     if (field === "version") value.version = 8;
@@ -102,6 +102,8 @@ describe("queue preview binding before durable dispatch", () => {
     if (field === "command") value.nodes[0].argv = ["different-program"];
     if (field === "test-ids") value.test_node_ids = [];
     if (field === "executor") value.executor_snapshot = { member_id: "foreign-member" } as unknown as NonNullable<ExecutionPreview["executor_snapshot"]>;
+    if (field === "missing-designs") delete (value.snapshot as Partial<ExecutionPreview["snapshot"]>).designs;
+    if (field === "missing-design-basis") delete (value.snapshot as Partial<ExecutionPreview["snapshot"]>).design_basis;
     expect(validExecutionQueuePreview("P", prepared, value)).toBe(false);
   });
 

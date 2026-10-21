@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .delivery_activity_contract import ActivityActor, ActivityTarget, FieldChange, RequirementDefinition
 from .delivery_contract import Stage
+from .delivery_proof_contract import RequirementReadBudget, RequirementImpactCounts, RequirementPreviewImpact
 
 Count = Annotated[int, Field(ge=0)]
 SummaryText = Annotated[str, Field(max_length=256)]
@@ -129,31 +130,8 @@ class RequirementRecordDetail(RequirementReadEnvelope):
     record: dict[str, Any]
 
 
-class RequirementReadBudget(RequirementReadModel):
-    max_tasks: int = 10000
-    max_closure_tasks: int = 10000
-    max_requirements: int = 10000
-    max_records_per_collection: int = 10000
-    max_bytes: int = 16777216
-    max_item_bytes: int = 1048576
-    max_dependency_depth: int = 64
-    task_count: int | None = None
-    closure_task_count: int | None = None
-    requirement_count: int | None = None
-    execution_count: int | None = None
-    release_candidate_count: int | None = None
-    deployment_count: int | None = None
-    bytes_used: int | None = None
 
 
-class RequirementImpactCounts(RequirementReadModel):
-    direct_task: Count
-    dependent_task: Count
-    execution: Count
-    release_candidate: Count
-    deployment: Count
-    restricted_execution: Count
-    restricted_deployment: Count
 
 
 class RequirementImpactSummary(RequirementReadEnvelope):
@@ -188,9 +166,6 @@ class RequirementImpactDetail(RequirementReadEnvelope):
     item: RequirementImpactItem
 
 
-class RequirementPreviewImpact(RequirementReadModel):
-    counts: RequirementImpactCounts | None
-    invalidates_current_acceptance: bool | None
 
 
 class RequirementChangePreview(RequirementReadEnvelope):

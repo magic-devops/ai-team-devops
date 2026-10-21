@@ -36,6 +36,7 @@ from .errors import (
     SopTransportError,
 )
 from .task_submission import submission_command_body
+from .design_original import design_command_body, design_preview_body
 from .security import Auth, BearerAuth, HmacAuth, NoAuth, auth_from_env
 
 _log = logging.getLogger("sop_sdk")
@@ -50,6 +51,12 @@ def _resource_segment(value: str) -> str:
             "resource ID must contain only ASCII letters, digits, dots, underscores, colons or hyphens"
         )
     return quote(value, safe="")
+
+
+def _design_segment(value: str) -> str:
+    if not isinstance(value, str) or len(value) > 64:
+        raise ValueError("design resource IDs must contain at most 64 ASCII characters")
+    return _resource_segment(value)
 
 
 def _delivery_query_params(*, limit: int, cursor: str, **filters: Any) -> dict[str, Any]:
@@ -531,7 +538,7 @@ class ManagerClient:
         cursor: str = "",
         limit: int = 20,
     ) -> dict[str, Any]:
-        if source not in {"", "execution", "deployment", "event", "other"}:
+        if source not in {"", "execution", "deployment", "event", "external", "other"}:
             raise ValueError("invalid issue source")
         params = _delivery_query_params(
             limit=limit,
@@ -544,6 +551,56 @@ class ManagerClient:
             source=source,
         )
         return self._request("GET", "/api/v1/delivery/issues", params=params)
+
+    def design_documents(self, *, q: str = "", include_archived: bool = False,
+                         limit: int = 20, cursor: str = "") -> dict[str, Any]:
+        """One metadata page; originals have independent exact-revision reads."""
+        if type(include_archived) is not bool:
+            raise ValueError("invalid design archive selection")
+        return self._request("GET", "/api/v1/design-docs", params=_requirement_page(
+            limit=limit, cursor=cursor, q=q, include_archived=include_archived))
+
+    def design_document(self, document_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/design-docs/{_design_segment(document_id)}")
+
+    def design_revisions(self, document_id: str, *, limit: int = 20, cursor: str = "") -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/design-docs/{_design_segment(document_id)}/revisions",
+                             params=_requirement_page(limit=limit, cursor=cursor))
+
+    def design_revision(self, document_id: str, revision_id: str) -> dict[str, Any]:
+        """Read the requested immutable original, never silently the current head."""
+        return self._request("GET", f"/api/v1/design-docs/{_design_segment(document_id)}/revisions/{_design_segment(revision_id)}")
+
+    def design_compare(self, document_id: str, from_revision_id: str, to_revision_id: str) -> dict[str, Any]:
+        _design_segment(from_revision_id)
+        _design_segment(to_revision_id)
+        return self._request("GET", f"/api/v1/design-docs/{_design_segment(document_id)}/compare",
+                             params={"from": from_revision_id, "to": to_revision_id})
+
+    def delivery_designs(self, target_kind: str, target_id: str) -> dict[str, Any]:
+        if target_kind not in {"requirement", "task"}:
+            raise ValueError("select an existing requirement or task")
+        return self._request("GET", f"/api/v1/delivery/{target_kind}s/{_requirement_segment(target_id)}/designs")
+
+    def delivery_design_adoption_preview(self, target_kind: str, target_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        if target_kind not in {"requirement", "task"}:
+            raise ValueError("select an existing requirement or task")
+        from .design_original import _bounded
+
+        if not isinstance(body, Mapping):
+            raise ValueError("provide the explicit adoption or clear preview body")
+        return self._request("POST", f"/api/v1/delivery/{target_kind}s/{_requirement_segment(target_id)}/design-adoption-preview", json_body=_bounded(body))
+
+    def design_command(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Replay the complete saved command, including its action/key/version/basis."""
+        return self.delivery_command(design_command_body(body))
+
+    def design_generate_preview(self, document_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Request or recover the same proposal; this never saves or adopts it."""
+        return self._request("POST", f"/api/v1/design-docs/{_design_segment(document_id)}/previews", json_body=design_preview_body(body))
+
+    def design_preview(self, document_id: str, preview_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/design-docs/{_design_segment(document_id)}/previews/{_design_segment(preview_id)}")
 
     def delivery_execution(self, execution_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}")

@@ -68,28 +68,18 @@ def dashboard() -> dict[str, Any]:
 
 
 def _design_doc_search_hits(q: str) -> list[dict[str, Any]]:
-    idx_path = resolved_ai_memory_root() / "tech_design" / "index.json"
-    if not idx_path.exists():
-        return []
-    try:
-        docs = json.loads(idx_path.read_text(encoding="utf-8")).get("documents") or []
-    except Exception:
-        return []
-    needle = q.lower()
-    hits: list[dict[str, Any]] = []
-    for d in docs:
-        blob = f"{d.get('title', '')} {d.get('id', '')} {' '.join(d.get('tags') or [])}".lower()
-        if needle in blob:
-            hits.append(
-                {
-                    "type": "design_docs",
-                    "id": d.get("id"),
-                    "title": d.get("title") or d.get("id"),
-                    "description": d.get("category", ""),
-                    "snippet": f"v{d.get('current_version', 0)} · {d.get('category', '')}",
-                }
-            )
-    return hits
+    from sqlalchemy import select
+    from sop_manager.path_config import resolved_tenant_id
+    from .design_model import ProjectDesignDocument
+    from .sql_models import SessionLocal
+
+    with SessionLocal() as db:
+        docs = db.execute(select(ProjectDesignDocument.id, ProjectDesignDocument.title, ProjectDesignDocument.category,
+            ProjectDesignDocument.revision_number).where(ProjectDesignDocument.tenant_id == resolved_tenant_id(),
+                ProjectDesignDocument.project_id == resolved_project_id(), ProjectDesignDocument.archived.is_(False),
+                ProjectDesignDocument.title.icontains(q, autoescape=True)).order_by(ProjectDesignDocument.id).limit(100)).all()
+    return [{"type": "design_docs", "id": row.id, "title": row.title, "description": row.category,
+             "snippet": f"v{row.revision_number} · {row.category}"} for row in docs]
 
 
 @router.get("/search/hub", dependencies=[Depends(read_business_access)])

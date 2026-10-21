@@ -153,7 +153,7 @@ export function DeliveryIssueWorkbench({
             setSource(value);
             filterChanged("issue_source", value);
           }}
-          options={["all", "execution", "deployment", "event", "other"].map(
+          options={["all", "execution", "deployment", "event", "external", "other"].map(
             (value) => ({
               value,
               label: tr(`sources.${value}`),

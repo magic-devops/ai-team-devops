@@ -132,7 +132,7 @@ def _canonical_query(project, kind):
     return model, query
 
 
-def _filters(query, model, filters, *, omit_stage=False):
+def _filters(query, model, filters, *, project, omit_stage=False):
     fact = DeliveryQueryFact
     values = {key: value for key, value in filters.items() if value and key not in {"sort", "kind", "ids"}}
     expressions = {
@@ -152,8 +152,16 @@ def _filters(query, model, filters, *, omit_stage=False):
         elif key == "requirement_id":
             query = _requirement_filter(query, model, value)
         elif key == "source":
+            from .delivery_issue_sources import external_issue_predicate
+
             sources = fact.data["source_kinds"].as_string()
-            query = query.where(sources == "[]" if value == "other" else sources.contains(f'"{value}"'))
+            external = external_issue_predicate(model, project)
+            if value == "external":
+                query = query.where(external)
+            elif value == "other":
+                query = query.where(sources == "[]", ~external)
+            else:
+                query = query.where(sources.contains(f'"{value}"'))
         elif key in expressions and not (omit_stage and key == "stage"):
             query = query.where(expressions[key] == value)
     return query
@@ -230,7 +238,7 @@ def _summary(row, kind):
 def entity_page(db, project, user, kind, filters, *, limit=20, cursor=""):
     stamp = _stamp(db, project)
     model, base = _canonical_query(project, kind)
-    filtered = _filters(base, model, filters)
+    filtered = _filters(base, model, filters, project=project)
     sort = filters.get("sort") or "created_desc"
     signature = [project.tenant_id, project.id, user.id, kind, _filter_signature(filters), limit]
     after = _cursor_position(cursor, signature, stamp, sort)
@@ -257,9 +265,13 @@ def entity_page(db, project, user, kind, filters, *, limit=20, cursor=""):
         "limit": limit,
     }
     if kind == "requirement":
-        facets = _filters(base, model, filters, omit_stage=True)
+        facets = _filters(base, model, filters, project=project, omit_stage=True)
         counts = _stage_counts(db, project, facets)
         result["facets"] = {"stages": counts}
+    elif kind == "issue":
+        from .delivery_issue_sources import project_external_sources
+
+        project_external_sources(db, project, result["items"])
     _unchanged(db, project, stamp)
     return result
 
@@ -532,7 +544,7 @@ def _selected_entity_references(db, project, user, filters, ids, limit, cursor):
     stamp = _stamp(db, project)
     kind = filters["kind"]
     model, query = _canonical_query(project, kind)
-    query = _filters(query.where(model.id.in_(ids)), model, filters)
+    query = _filters(query.where(model.id.in_(ids)), model, filters, project=project)
     signature = [project.tenant_id, project.id, user.id, "references", _filter_signature(filters), limit]
     after = _cursor_position(cursor, signature, stamp, "id_asc")
     total = db.scalar(select(func.count()).select_from(query.subquery()))

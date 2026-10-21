@@ -9,7 +9,7 @@ import (
 // ServeEvents is the explicit JSONL execution protocol. Closing the controller
 // pipe cancels the command rather than leaving an unowned child running.
 func ServeEvents(ctx context.Context, root string, input io.Reader, output io.Writer) error {
-	decoder := json.NewDecoder(io.LimitReader(input, 2*1024*1024))
+	decoder := json.NewDecoder(io.LimitReader(input, 4*1024*1024))
 	var request Request
 	if err := decoder.Decode(&request); err != nil {
 		return err

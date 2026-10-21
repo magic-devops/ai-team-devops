@@ -142,14 +142,14 @@ def _agentd_executes_argv(tmp_path: Path) -> Path:
     script.write_text(
         "#!" + sys.executable + "\n"
         "from pathlib import Path\n"
-        "import json, subprocess, sys\n"
+        "import hashlib, json, subprocess, sys\n"
         "root = Path(sys.argv[sys.argv.index('--root') + 1])\n"
         "count = root / 'agent-executions.txt'\n"
         "count.write_text(str(int(count.read_text() or '0') + 1) if count.exists() else '1')\n"
         "payload = json.loads(sys.stdin.readline())\n"
-        "proc = subprocess.run(payload['argv'], cwd=root, text=True, capture_output=True, timeout=payload['timeout_seconds'])\n"
+        "proc = subprocess.run(payload['argv'], cwd=root, input=payload.get('stdin_text', ''), text=True, encoding='utf-8', capture_output=True, timeout=payload['timeout_seconds'])\n"
         "print(json.dumps({'event':'tool.completed','result':{'ok': proc.returncode == 0, 'exit_code': proc.returncode, 'stdout': proc.stdout, "
-        "'stderr': proc.stderr, 'duration_ms': 9}}))\n",
+        "'stderr': proc.stderr, 'stdin_sha256': hashlib.sha256(payload.get('stdin_text', '').encode()).hexdigest(), 'duration_ms': 9}}))\n",
         encoding="utf-8",
     )
     script.chmod(0o700)

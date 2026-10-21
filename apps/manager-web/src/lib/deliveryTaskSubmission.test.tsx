@@ -36,7 +36,7 @@ const payload = (): TaskSubmissionPayload => ({ task_id: "T", task_basis: a, def
   artifacts: [{ id: "e1", title: "Diff and check output", content: "Actual delivered change and reported check output", url: "https://example.com/pull/1", sha256: null }],
   criteria: [{ source: "task", index: 0, text_digest: d, result: "met", evidence_ids: ["e1"] }], tests: [{ id: "test1", title: "Acceptance check", status: "passed", evidence_ids: ["e1"] }] });
 const current = (): SubmissionCurrent => ({ project_id: "P", task_id: "T", version: 7, query_generation: null, as_of: now, task_basis: a, definition_digest: b, native_boundary_digest: c,
-  definition: { task_id: "T", title: "Task", description: "Current scope", assigned_to: "owner", task_acceptance_criteria: ["User can recover"], acceptance_criteria: ["User can recover"], owner: null, dependency_basis: {}, requirement: null },
+  definition: { task_id: "T", title: "Task", description: "Current scope", assigned_to: "owner", task_acceptance_criteria: ["User can recover"], acceptance_criteria: ["User can recover"], owner: null, dependency_basis: {}, requirement: null, designs: [], design_basis: a },
   criteria: [{ source: "task", index: 0, text: "User can recover", text_digest: d }], can_submit: true, reasons: [], latest_submission_id: null });
 const summary = (): SubmissionSummary => ({ id: "S1", task_id: "T", created_at: now, submitted_by: { id: "U", name: "Submitter" }, source: payload().source, summary: payload().summary,
   digest: d, task_basis: a, definition_digest: b, native_boundary_digest: c, status: "awaiting_review", invalidated: false, invalidated_at: null, invalidated_reason: "",

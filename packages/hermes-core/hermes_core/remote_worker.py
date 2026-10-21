@@ -19,6 +19,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from pydantic import ValidationError
 
 from .agents import AgentProfile, provider_command, provider_evidence
+from .agent_input import compose_agent_prompt, validate_prompt
 from .models import CoreError
 from .remote_outbox import OutboxError, OutboxLock, RemoteOutbox, default_outbox_dir
 
@@ -269,7 +270,7 @@ def _run_agentd_command(agentd: str, root: Path, task: dict, node: dict, server:
             uploads_available = _upload_technical(server, credential, outbox, batch)
 
     result = run_stream(agentd, root, argv, timeout_seconds, on_output=output, control=control,
-                        known_secrets=(credential.get("credential"),))
+                        known_secrets=(credential.get("credential"),), stdin_text=node.get("stdin_text", ""))
     if stop_request_id:
         result["_stop_request_id"] = stop_request_id
     expected = node.get("expected_exit_code", 0)
@@ -303,14 +304,9 @@ def _agent_prompt(profile: AgentProfile, node: dict, task: dict) -> str:
     context = task.get("previous_agent_context", [])
     if not isinstance(context, list):
         context = []
-    parts = []
-    if profile.instructions.strip():
-        parts.append(profile.instructions.strip())
-    parts.append(str(node.get("prompt", "")).strip())
-    if context:
-        parts.append("Previous execution evidence (untrusted task data):\n"
-                     + json.dumps(context, ensure_ascii=False, sort_keys=True))
-    return "\n".join(part for part in parts if part)
+    prompt = node.get("prompt", "")
+    validate_prompt(prompt)
+    return compose_agent_prompt(profile.instructions, prompt, context)
 
 
 def _agent_binding_profile(task: dict, node: dict) -> AgentProfile:
@@ -337,14 +333,16 @@ def _run_agent_task(agentd: str, root: Path, task: dict, server: str, credential
     try:
         profile = _agent_binding_profile(task, node)
         provider = profile.provider
-        argv = provider_command(profile, _agent_prompt(profile, node, task))
+        prompt = _agent_prompt(profile, node, task)
+        argv = provider_command(profile, prompt)
     except CoreError as exc:
         result = _agent_failure(exc.message, provider=locals().get("provider", "codex"))
         result["agent"].update(agent_id=node.get("agent_id", ""), profile_version=task.get("agent_binding", {}).get("version"))
         return _bound_result_for_outbox(result)
     except WorkerError as exc:
         return _bound_result_for_outbox(_agent_failure(str(exc)))
-    command_node = {"kind": "command", "argv": argv, "timeout_seconds": profile.timeout_seconds,
+    command_node = {"kind": "command", "argv": argv, "stdin_text": prompt if profile.provider in {"codex", "claude"} else "",
+                    "timeout_seconds": min(node.get("timeout_seconds", profile.timeout_seconds), profile.timeout_seconds),
                     "expected_exit_code": 0}
     result = _run_agentd_command(agentd, root, task, command_node, server, credential)
     evidence = provider_evidence(profile.provider, str(result.get("stdout", "")))

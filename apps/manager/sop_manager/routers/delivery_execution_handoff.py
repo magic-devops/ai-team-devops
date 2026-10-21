@@ -82,7 +82,7 @@ def _validate_original(row):
     return request
 
 
-def accept_handoff(db, project, user, entry, accepted_version=None):
+def accept_handoff(db, project, user, entry, accepted_version=None, *, design_context=None):
     """Append H inside the queue's existing SQL/CAS/receipt transaction; never dispatch."""
     from .delivery_service import identifier
     from .hermes_workspace import runtime_identity
@@ -96,9 +96,12 @@ def accept_handoff(db, project, user, entry, accepted_version=None):
         raise HTTPException(409, "A handoff must belong to a reserved acceptance version")
     # Current queue authorization already succeeded; preserve its exact Core scope.
     business = runtime_identity(user, None).business if user.role == "super_admin" else "team"
+    original = deepcopy(entry)
+    if design_context is not None:
+        original["design_context"] = deepcopy(design_context)
     row = DeliveryExecutionHandoff(id=entry["handoff_id"], tenant_id=project.tenant_id, project_id=project.id,
         execution_id=entry["id"], task_id=entry["task_id"], workspace_id=entry["workspace_id"], requested_by=user.id,
-        business_key=business, original=deepcopy(entry), request_digest="", accepted_version=version,
+        business_key=business, original=original, request_digest="", accepted_version=version,
         state="accepted", revision=1, fence=0, attempt=0, lease_owner="", lease_expires_at=None,
         next_attempt_at=instant, error=None, run_id="", runtime_task_id="", accepted_at=instant, updated_at=instant)
     row.request_digest = managed_handoff_digest(_principal(row), row.workspace_id, **_request(row))

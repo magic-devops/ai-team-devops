@@ -10,6 +10,7 @@ import typer
 from .._util import console, get_client, warn
 from . import delivery_discussion
 from sop_sdk.task_submission import load_submission_command
+from sop_sdk.design_original import load_design_original, load_design_selection
 
 app = typer.Typer(
     help="项目交付：context / requirements / requirement / requirement-definition / requirement-records / requirement-record / requirement-impact / requirement-impact-items / requirement-impact-item / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / progress-freeze-proof / baselines / baseline / baseline-items / baseline-item / baseline-comparison / baseline-comparison-items / baseline-comparison-item / observation / observation-items / observation-item / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
@@ -45,6 +46,97 @@ def _query_output(method, *args, **selection):
 def context():
     """读取项目概要、全范围有效统计和查询状态。"""
     _query_output("delivery_context")
+
+
+@app.command("designs")
+def designs(q: Annotated[str, typer.Option("--query")] = "",
+            include_archived: Annotated[bool, typer.Option("--include-archived")] = False,
+            limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+            cursor: Annotated[str, typer.Option("--cursor")] = ""):
+    """分页查看设计文档小头；不会下载全部历史或正文。"""
+    _query_output("design_documents", q=q, include_archived=include_archived, limit=limit, cursor=cursor)
+
+
+@app.command("design")
+def design(document_id: Annotated[str, typer.Option("--id")]):
+    """查看明确文档当前头与权限。"""
+    _query_output("design_document", document_id)
+
+
+@app.command("design-revisions")
+def design_revisions(document_id: Annotated[str, typer.Option("--id")],
+                     limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+                     cursor: Annotated[str, typer.Option("--cursor")] = ""):
+    """分页查看明确设计文档的版本摘要。"""
+    _query_output("design_revisions", document_id, limit=limit, cursor=cursor)
+
+
+@app.command("design-revision")
+def design_revision(document_id: Annotated[str, typer.Option("--id")],
+                    revision_id: Annotated[str, typer.Option("--revision")]):
+    """读取明确的不可变设计原文，保留原摘要。"""
+    _query_output("design_revision", document_id, revision_id)
+
+
+@app.command("design-compare")
+def design_compare(document_id: Annotated[str, typer.Option("--id")],
+                   from_revision: Annotated[str, typer.Option("--from")],
+                   to_revision: Annotated[str, typer.Option("--to")]):
+    """比较两个明确版本；差异预览会标明截断。"""
+    _query_output("design_compare", document_id, from_revision, to_revision)
+
+
+class DesignTarget(str, Enum):
+    requirement = "requirement"
+    task = "task"
+
+
+@app.command("design-current")
+def design_current(target: Annotated[DesignTarget, typer.Option("--target")],
+                   target_id: Annotated[str, typer.Option("--id")]):
+    """查看需求或任务明确采用的版本及继承来源。"""
+    _query_output("delivery_designs", target.value, target_id)
+
+
+@app.command("design-command")
+def design_command(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """提交完整原设计命令；保存、恢复、归档、采用或清除均复用原文件。"""
+    try:
+        body = load_design_original(file)
+        _query_output("design_command", body)
+    except ValueError as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("design-adoption-preview")
+def design_adoption_preview(target: Annotated[DesignTarget, typer.Option("--target")],
+                            target_id: Annotated[str, typer.Option("--id")],
+                            file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """复核明确采用或清除的完整影响；不自动形成批准命令。"""
+    try:
+        _query_output("delivery_design_adoption_preview", target.value, target_id, load_design_selection(file))
+    except ValueError as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("design-generate")
+def design_generate(document_id: Annotated[str, typer.Option("--id")],
+                    file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """提交或恢复原AI建议请求；不自动保存设计或采用。"""
+    try:
+        _query_output("design_generate_preview", document_id, load_design_original(file, preview=True))
+    except ValueError as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("design-preview")
+def design_preview(document_id: Annotated[str, typer.Option("--id")],
+                   preview_id: Annotated[str, typer.Option("--preview")]):
+    """恢复当前账户的明确AI建议原件；未知状态不会重建请求。"""
+    _query_output("design_preview", document_id, preview_id)
 
 
 @app.command("requirements")

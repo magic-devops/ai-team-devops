@@ -40,7 +40,7 @@ def _read(db, project, user, state, entry, store):
     check_project_access(user, project.id, db)
     principal, workspace = _access(store, user, project, entry["workspace_id"])
     if not entry.get("run_id"):
-        _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry)
+        _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry, db=db, project=project)
     run = store.get(principal, entry["workspace_id"], "runs", entry["run_id"]) if entry.get("run_id") else None
     return entry, principal, workspace, run
 

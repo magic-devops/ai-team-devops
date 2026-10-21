@@ -125,7 +125,7 @@ def _template(requirement, body):
     ], []
 
 
-def _generate(requirement, body, request, existing):
+def _generate(requirement, body, request, existing, *, designs=(), design_context=()):
     from . import llm_gateway
 
     if body.generator == "template":
@@ -153,7 +153,7 @@ def _generate(requirement, body, request, existing):
                     content=json.dumps(
                         {
                             "requirement": requirement_snapshot(requirement),
-                            "existing_tasks": existing,
+                            "existing_tasks": existing, "designs": list(designs), "design_context": list(design_context),
                         },
                         ensure_ascii=False,
                     ),
@@ -203,6 +203,12 @@ def create_preview(db, project, user, body, request):
     if version != body.expected_version:
         fail(409, "project_version_conflict", "Project changed. Reload and review the current plan basis.")
     snapshot = requirement_snapshot(requirement)
+    from .design_service import design_basis, load_design_selections
+    from .delivery_execution_design_context import execution_design_context
+
+    designs = load_design_selections(db, project, [requirement.id], []).get(("requirement", requirement.id), [])
+    design_snapshot = {"designs": designs, "design_basis": design_basis(designs)}
+    design_context = execution_design_context(db, project, design_snapshot)
     basis = requirement_basis(requirement)
     existing = [
         {"id": t.id, "title": t.title, "status": t.status, "req_id": t.req_id}
@@ -216,7 +222,7 @@ def create_preview(db, project, user, body, request):
         request_hash=fingerprint,
         status="generating",
         data={
-            "snapshot": snapshot,
+            "snapshot": snapshot, **design_snapshot,
             "revision": revision,
             "version": version,
             "basis": basis,
@@ -235,7 +241,7 @@ def create_preview(db, project, user, body, request):
     # No business workspace mutation or lock is held during the provider request.
     try:
         items, warnings, model, provider, usage = _generate(
-            SimpleNamespace(**snapshot), body, request, existing
+            SimpleNamespace(**snapshot), body, request, existing, designs=designs, design_context=design_context
         )
         # End any read transaction before refreshing, including MySQL's repeatable-read snapshot.
         db.rollback()
