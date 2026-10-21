@@ -17,25 +17,35 @@ import type {
 import type { DeliveryExecution } from "./delivery";
 const renderState = vi.hoisted(() => ({
   next: null as null | { observation: unknown; comment: string; hook: number },
+  reviewComment: null as string | null,
 }));
-// Seed only the card's initial observed response and review draft. React still
-// renders the real card and Ant Design controls; no requests run during SSR.
+// Seed each actual consumer separately instead of relying on the card's old
+// global review-hook position. No requests run during SSR.
 vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
   return {
     ...actual,
     useState: (initial: unknown) => {
+      if (renderState.reviewComment !== null && initial === "") {
+        const comment = renderState.reviewComment;
+        renderState.reviewComment = null;
+        return actual.useState(comment);
+      }
       const seed = renderState.next;
       if (!seed) return actual.useState(initial);
       const hook = seed.hook++;
       if (hook === 0) return actual.useState(seed.observation);
-      if (hook === 7) {
-        renderState.next = null;
-        return actual.useState(seed.comment);
-      }
       return actual.useState(initial);
     },
   };
+});
+vi.mock("../../subapps/ai-rd-center/src/pages/delivery/ExecutionReviewControl", async () => {
+  const actual = await vi.importActual<typeof import("../../subapps/ai-rd-center/src/pages/delivery/ExecutionReviewControl")>("../../subapps/ai-rd-center/src/pages/delivery/ExecutionReviewControl");
+  return { ...actual, ExecutionReviewControl: (props: Parameters<typeof actual.ExecutionReviewControl>[0]) => {
+    renderState.reviewComment = renderState.next?.comment ?? null;
+    try { return actual.ExecutionReviewControl(props); }
+    finally { renderState.reviewComment = null; }
+  } };
 });
 let language: keyof typeof runtimeTranslations = "en-US";
 vi.mock("react-i18next", () => ({

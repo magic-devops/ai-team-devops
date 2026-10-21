@@ -115,9 +115,16 @@ def list_events(db, project, user, permissions, *, state, event_type, producer_i
         ),
     )
     rows = db.execute(query.where(m.EventInbox.seq > after).order_by(m.EventInbox.seq).limit(limit + 1)).all()
+    items = []
+    for original, row in rows:
+        value = summary(original, row)
+        if original.event_type == "sop.task.delivery_submitted":
+            value["source"], value["subject"] = "", ""
+            value["processing"] = {**value["processing"], "result": None}
+        items.append(value)
     answer = page(
         project,
-        [summary(a, b) for a, b in rows],
+        items,
         total,
         limit,
         signature,
@@ -133,8 +140,11 @@ def list_events(db, project, user, permissions, *, state, event_type, producer_i
     return answer
 
 
-def attempts(db, project, user, rid, limit, cursor):
-    inbox(db, project, rid)
+def attempts(db, project, user, rid, limit, cursor, *, store=None):
+    original = inbox(db, project, rid)
+    from .task_submission_event_access import require_submission_event_access
+
+    require_submission_event_access(db, project, user, original, db.get(m.EventProcessing, rid), store)
     statement = select(m.EventProcessingAttempt).where(
         *scope(project, m.EventProcessingAttempt), m.EventProcessingAttempt.receipt_id == rid
     )
@@ -199,16 +209,19 @@ def capability(db, project, user, permissions, original, row):
     return {"retry": reason is None, "retry_reason_code": reason}
 
 
-def detail(db, project, user, permissions, rid):
+def detail(db, project, user, permissions, rid, *, store=None):
     saved = watermark(db, project)
     original = inbox(db, project, rid)
     row = db.get(m.EventProcessing, rid)
+    from .task_submission_event_access import require_submission_event_access
+
+    require_submission_event_access(db, project, user, original, row, store)
     result = {
         "project_id": project.id,
         "as_of": date(now()),
         "event": summary(original, row),
         "event_json": original.event_json,
-        "attempts": attempts(db, project, user, rid, 20, None),
+        "attempts": attempts(db, project, user, rid, 20, None, store=store),
         "permissions": {"read": True, "configure": permissions["configure"] and project.status != "archived"},
         "capabilities": capability(db, project, user, permissions, original, row),
     }

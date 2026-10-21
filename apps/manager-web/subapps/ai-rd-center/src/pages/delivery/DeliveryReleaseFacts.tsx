@@ -88,6 +88,7 @@ export function QualityTaskFacts({
   const source = {
     native: "native",
     manual: "manual",
+    external: "external",
     requirement: "requirementProof",
     none: "noProof",
   }[task.proof.source];
@@ -163,7 +164,9 @@ export function QualityTaskFacts({
         </section>
       )}
       {background && (
-        <Button size="small" href={releaseTargetHref(task.target, background)}>
+        <Button size="small" href={releaseTargetHref(task.target, background) +
+          (task.proof.source === "external" && task.proof.id && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(task.proof.id)
+            ? `&submission_id=${encodeURIComponent(task.proof.id)}` : "")}>
           {tr("openEntity")}
         </Button>
       )}

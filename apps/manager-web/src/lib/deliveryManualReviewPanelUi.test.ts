@@ -236,7 +236,7 @@ function find(
 }
 const onSaved = vi.fn(),
   onPending = vi.fn();
-function render() {
+function render(patch: Partial<Parameters<typeof DeliveryManualReviewPanel>[0]> = {}) {
   hooks.next = 0;
   const tree = DeliveryManualReviewPanel({
     projectId: "P",
@@ -244,6 +244,7 @@ function render() {
     taskId: "T",
     onSaved,
     onUnresolvedChange: onPending,
+    ...patch,
   });
   hooks.effects.splice(0).forEach((effect) => effect());
   return tree;
@@ -307,6 +308,31 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("manual review panel boundaries", () => {
+  it("checks the task's live fresh-write gate before a captured confirmation callback", async () => {
+    const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher); let allowed = true;
+    fill(); const tree = render({ canSubmit: () => allowed }), confirm = find(tree, Modal).onOk;
+    allowed = false; confirm(); await tick(); expect(fetcher).not.toHaveBeenCalled();
+    expect(find(render(), ManualReviewFormFields).session.comment).toBe("Original opinion");
+  });
+  it("keeps a confirmed manual ACK visible through local cleanup failure without resubmitting", async () => {
+    const sends: unknown[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      sends.push(JSON.parse(String(init.body)));
+      return { ok: true, json: async () => ({ project_id: "P", action: "task.manual_review", resource: { kind: "task_review", id: "review-new" },
+        applied_version: 8, version: 8, query_generation: 8, replayed: false,
+        affected_refs: [{ kind: "task_review", id: "review-new" }, { kind: "task", id: "T" }], result: { task_ids: ["T"] } }) };
+    });
+    const save = sessionStorage.setItem.bind(sessionStorage); let blocked = true;
+    sessionStorage.setItem = (key: string, value: string) => {
+      if (blocked && key === manualReviewCommandStorageKey("P", "T") && (!value || JSON.parse(value).phase === "succeeded")) throw new Error("Cleanup unavailable");
+      save(key, value);
+    };
+    fill(); find(render(), Modal).onOk(); await tick();
+    let tree = render(); expect(find(tree, Modal).open).toBe(true); expect(find(tree, Modal).closable).toBe(false);
+    expect(find(tree, Button, (props) => props["data-action"] === "finish-manual-review")).toBeDefined(); expect(onSaved).not.toHaveBeenCalled();
+    blocked = false; find(tree, Button, (props) => props["data-action"] === "finish-manual-review").onClick(); await tick();
+    tree = render(); expect(sends).toHaveLength(1); expect(onSaved).toHaveBeenCalledOnce(); expect(find(tree, Modal).open).toBe(false);
+  });
   it("retains the navigation lock for a restored manual unknown when execution reports no unresolved request", () => {
     sessionStorage.setItem(
       manualReviewCommandStorageKey("P", "T")!,

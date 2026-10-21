@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { projectSessionKey } from "./projectPortfolio";
+import { request } from "./http";
 import { fetchTaskDetail, fetchRequirementDetail } from "./deliveryQuery";
 import { fetchDeliveryIssue } from "./deliveryIssue";
 import {
@@ -62,12 +63,31 @@ export async function eventTargetHref(
   const target = effect.target_id;
   if (!target) throw new Error("event_target_unavailable");
   const params = new URLSearchParams({ project_id: projectId });
-  if (effect.target_kind === "task") {
-    const value = await fetchTaskDetail(projectId, target, signal);
-    if (value.project_id !== projectId || value.task.id !== target)
+  let taskTarget = effect.target_kind === "task" ? target : undefined;
+  if (effect.kind === "task_delivery_submitted" && effect.target_kind === "task_submission") {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(target))
+      throw new Error("event_target_unavailable");
+    const locator = await request<unknown>(
+      "/api/v1/delivery/delivery-submissions/" + encodeURIComponent(target) + "/locator",
+      { headers: { "X-Project-Id": projectId }, signal },
+    );
+    if (!locator || typeof locator !== "object" || Array.isArray(locator))
+      throw new Error("event_target_unavailable");
+    const value = locator as Record<string, unknown>;
+    if (Object.keys(value).sort().join(",") !== "project_id,submission_id,task_id" ||
+      value.project_id !== projectId || value.submission_id !== target ||
+      typeof value.task_id !== "string" || !value.task_id.trim() ||
+      Array.from(value.task_id).length > 64 || /[\u0000-\u001f\u007f]/.test(value.task_id))
+      throw new Error("event_scope_changed");
+    taskTarget = value.task_id;
+    params.set("submission_id", target);
+  }
+  if (taskTarget) {
+    const value = await fetchTaskDetail(projectId, taskTarget, signal);
+    if (value.project_id !== projectId || value.task.id !== taskTarget)
       throw new Error("event_scope_changed");
     params.set("view", value.task.req_id ? "list" : "timeline");
-    params.set("task", target);
+    params.set("task", taskTarget);
     if (value.task.req_id) {
       params.set("requirement", value.task.req_id);
       params.set("detail", "tasks");

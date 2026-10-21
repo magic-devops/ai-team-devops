@@ -87,4 +87,14 @@ describe("release evidence and fixed provenance", () => {
       ),
     ).toContain("No valid acceptance");
   });
+  it("opens the precise externally reviewed report from quality facts", () => {
+    language = "en-US";
+    const task = releaseQuality.independent_tasks[0];
+    const html = renderToStaticMarkup(createElement(QualityTaskFacts, {
+      task: { ...task, proof: { ...task.proof, source: "external", id: "submission-original" } },
+      background: `#/dev-flow?project_id=${task.target.project_id}&view=quality`,
+    }));
+    expect(html).toContain("Human acceptance of an external delivery report");
+    expect(html).toContain("submission_id=submission-original");
+  });
 });

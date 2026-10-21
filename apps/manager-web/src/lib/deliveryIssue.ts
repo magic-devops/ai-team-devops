@@ -38,12 +38,14 @@ export type IssueEvidenceTarget = {
   issue_id?: string;
   receipt_id?: string;
   origin_id?: string;
+  submission_id?: string | null;
 };
 export type IssueEvidence = {
   id: string;
   kind:
     | "issue"
     | "task"
+    | "submission"
     | "execution"
     | "deployment"
     | "node"
@@ -572,6 +574,15 @@ export function issueEvidenceHref(
     const back = safeIssueOriginReturn(background, projectId);
     if (back) params.set("issue_return", back);
     return `#/intelligence/events?${params}`;
+  } else if (target.submission_id) {
+    if (!target.task_id || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(target.submission_id)) return null;
+    params.set("view", target.requirement_id ? "list" : "timeline");
+    params.set("task", target.task_id);
+    params.set("submission_id", target.submission_id);
+    if (target.requirement_id) {
+      params.set("requirement", target.requirement_id);
+      params.set("detail", "tasks");
+    }
   } else if (target.deployment_id) {
     params.set("view", "releases");
     params.set("deployment_id", target.deployment_id);

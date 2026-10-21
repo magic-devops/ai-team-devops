@@ -39,7 +39,7 @@ export type QualityIssue = {
   target: ReleaseTarget;
 };
 export type QualityProof = {
-  source: "native" | "manual" | "requirement" | "none";
+  source: "native" | "manual" | "external" | "requirement" | "none";
   id: string | null;
   basis: string | null;
   execution_id: string | null;

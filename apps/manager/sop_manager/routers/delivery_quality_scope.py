@@ -495,6 +495,20 @@ class _Scope:
             )
             .execution_options(populate_existing=True)
         ).all()
+        from .delivery_task_submission_service import load_external_proofs, load_latest_submissions
+
+        external = load_external_proofs(self.db, self.project, ids, reviews=reviews, input_budget=self.input_budget)
+        submissions = load_latest_submissions(self.db, self.project, ids, input_budget=self.input_budget)
+        # External takeover binds the complete closed native set. Load these
+        # bounded canonical positions, not only each task's latest execution.
+        external_tasks = {value["task_id"] for value in external.values()} | set(submissions)
+        if external_tasks:
+            query = select(DeliveryQueryFact.entity_id, DeliveryQueryFact.data).where(
+                *scope(self.project, DeliveryQueryFact), DeliveryQueryFact.kind == "execution",
+                DeliveryQueryFact.data["task_id"].as_string().in_(external_tasks))
+            self.budget(self.db.scalar(select(func.count()).select_from(query.subquery())))
+            self.source_rows(query, [DeliveryQueryFact.entity_id, DeliveryQueryFact.data])
+            self.read_entries(dict(self.db.execute(query).all()))
         self.data["executions"] = [
             row for _, row in sorted(self.entries.values(), key=lambda value: value[0])
         ]
@@ -507,6 +521,8 @@ class _Scope:
             issues=issues,
             reviews=reviews,
             team=self.team(),
+            external_proofs=external,
+            latest_submissions=submissions,
         )
         reconcile(self.db, self.project, self.data, verification=context)
         return context

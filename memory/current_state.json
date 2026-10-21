@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-21T00:00:53.682518+00:00",
+  "updated_at": "2026-10-21T00:27:07.729273+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-21T00:00:53.682518+00:00",
-    "status": "durable_execution_controls_source_stage_runtime_pending",
+    "updated_at": "2026-10-21T00:27:07.729273+00:00",
+    "status": "external_delivery_loop_source_stage_runtime_pending",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/durable-execution-controls/",
+    "evidence": ".sop-runtime/delivery-evidence/external-delivery-loop/",
     "verification_status": "current_source_runtime_types_build_and_browser_unverified",
-    "next_step": "run_source_pinned_runtime_types_build_browser_checks_when_shared_window_recovers_then_continue_full_lifecycle_gaps",
+    "next_step": "finish_external_delivery_source_stage_and_commit_then_validate_when_shared_window_recovers",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -196,7 +196,8 @@
     "canonical_agent_entry_design": "docs/CANONICAL_AGENT_ENTRY_DESIGN.md",
     "execution_dispatch_recovery_design": "docs/EXECUTION_DISPATCH_RECOVERY_DESIGN.md",
     "durable_execution_handoff_design": "docs/DURABLE_EXECUTION_HANDOFF_DESIGN.md",
-    "durable_execution_controls_design": "docs/DURABLE_EXECUTION_CONTROLS_DESIGN.md"
+    "durable_execution_controls_design": "docs/DURABLE_EXECUTION_CONTROLS_DESIGN.md",
+    "external_delivery_loop_design": "docs/EXTERNAL_DELIVERY_INTERACTION.md"
   },
   "tasks": {
     "completed": [
@@ -651,7 +652,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-durable-execution-controls源码阶段：四类执行控制、耐久启动、本地/远端领取、受阻原件结束和分页恢复交互已实现并交叉源码审查。当前实际测试、类型、构建和浏览器按用户要求后置；阶段相关源码commit，完整生命周期验收仍未完成。",
+  "current": "T-external-delivery-loop源码阶段：同Task外部固定报告、既有人工验收事实、失败问题回流、可靠事件回写及原生验收原请求恢复正在完善。用户要求测试、类型、构建、服务与浏览器等待资源和验证窗口；本阶段仅源码/AST/合同/散列审查。完整生命周期目标继续active，阶段相关源码提交不代表运行验收通过。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -743,5 +744,37 @@
     "durable_launch_local_and_remote_source_implemented": true,
     "old_protocol_unknown_ack_reconciliation_complete": false,
     "core_global_runtime_lock_graph_verified": false
+  },
+  "external_delivery_loop": {
+    "task_id": "T-external-delivery-loop",
+    "base_commit": "747666304327e9e615789de8d68fcdca52fd96c9",
+    "updated_at": "2026-10-21T00:27:07.729273+00:00",
+    "status": "source_implementation_review_runtime_pending",
+    "design": "docs/EXTERNAL_DELIVERY_INTERACTION.md",
+    "guide": "docs/EXTERNAL_DELIVERY_GUIDE.md",
+    "evidence": ".sop-runtime/delivery-evidence/external-delivery-loop/",
+    "source_scope": [
+      "fixed_external_report_on_existing_task",
+      "existing_human_review_as_acceptance_truth",
+      "same_submission_real_issue_and_existing_diagnosis_promotion",
+      "canonical_progress_requirement_release_proof",
+      "typed_existing_outbox_event_and_exact_report_navigation",
+      "native_review_persistent_original_recovery",
+      "bounded_sdk_cli"
+    ],
+    "runtime_tests_executed": false,
+    "typescript_checked": false,
+    "build_executed": false,
+    "browser_verified": false,
+    "production_integration_complete": false,
+    "next_step": "complete_independent_source_review_and_phase_commit_then_run_source_pinned_validation_when_user_window_recovers",
+    "remaining_goal": [
+      "actual_adapter_handshake_execution_and_progress",
+      "code_inclusion_signed_CI_relationship",
+      "exact_design_document_adoption",
+      "operations_actual_effects_and_independent_verification",
+      "current_browser_accessibility_responsive_validation",
+      "full_lifecycle_end_to_end_and_scale"
+    ]
   }
 }

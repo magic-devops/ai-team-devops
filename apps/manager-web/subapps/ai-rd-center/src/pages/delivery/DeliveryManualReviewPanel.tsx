@@ -14,7 +14,7 @@ import {
   Tag,
 } from "antd";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { safeEvidenceUrl, type DeliveryCommandAck } from "@/lib/delivery";
 import {
@@ -42,6 +42,7 @@ import { projectSessionKey } from "@/lib/projectPortfolio";
 import "./delivery-manual-review.css";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 import type { TaskAcceptance } from "@/lib/taskAcceptance";
+import { taskSubmissionCopy } from "@/i18n/task-submission";
 
 function reviewTime(value: string | null, language: string) {
   if (!value) return "—";
@@ -395,6 +396,7 @@ export function DeliveryManualReviewPanel({
   sessionId,
   taskId,
   disabled = false,
+  canSubmit,
   onSaved,
   onEditingChange,
   onUnresolvedChange,
@@ -403,25 +405,33 @@ export function DeliveryManualReviewPanel({
   sessionId: string;
   taskId: string;
   disabled?: boolean;
+  canSubmit?: () => boolean;
   onSaved?: (workspace: DeliveryCommandAck) => void;
   onEditingChange?: (editing: boolean) => void;
   onUnresolvedChange?: (pending: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation(), shared = taskSubmissionCopy(i18n?.language);
   const tr = (key: string, options?: Record<string, unknown>) =>
     t(`deliveryManualReview.${key}`, options);
   const qc = useQueryClient();
+  const access = useRef({ disabled, canSubmit }); access.current = { disabled, canSubmit };
+  // Fresh writes share the task's live authority; retained replay stays independent.
+  const canWrite = () => !access.current.disabled && access.current.canSubmit?.() !== false;
   const [session, setSession] = useState<ManualReviewSession | null>(null);
   const [draftScope, setDraftScope] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [latest, setLatest] = useState<TaskReviewCurrentResponse | null>(null);
   const [openedId, setOpenedId] = useState("");
-  const command = useManualReviewCommand(projectId, taskId, onUnresolvedChange);
+  const pendingCallback = useRef(onUnresolvedChange); pendingCallback.current = onUnresolvedChange;
+  const liveCommand = useRef<{ snapshot: () => { phase: string } }>();
+  const command = useManualReviewCommand(projectId, taskId, (value) => pendingCallback.current?.(value || liveCommand.current?.snapshot().phase === "succeeded")); liveCommand.current = command;
   const phase = command.state.phase,
     busy = phase === "sending";
   const modalOpen =
-    Boolean(session) || ["sending", "unknown", "refused"].includes(phase);
+    Boolean(session) || ["sending", "unknown", "refused", "succeeded"].includes(phase);
+  useEffect(() => { pendingCallback.current?.(["sending", "unknown", "succeeded"].includes(phase)); }, [phase]);
   const origin = JSON.stringify([
     projectId,
     sessionId,
@@ -480,7 +490,7 @@ export function DeliveryManualReviewPanel({
   }, [modalOpen, onEditingChange]);
   function open() {
     if (
-      disabled ||
+      !canWrite() ||
       !proof?.current?.can_review ||
       !command.current() ||
       phase !== "idle"
@@ -489,16 +499,20 @@ export function DeliveryManualReviewPanel({
     setSession(openManualReview(proof, crypto.randomUUID()));
     setDraftScope(origin);
     setFeedback("");
+    setRefreshFailed(false);
     setProblems([]);
     setLatest(null);
   }
   async function saved(ack: DeliveryCommandAck | undefined) {
     if (!ack || !command.current()) return;
     const decision = command.snapshot().original?.payload.decision;
-    onSaved?.(ack);
+    command.reset();
+    if (command.snapshot().phase !== "idle") { pendingCallback.current?.(true); return; }
+    pendingCallback.current?.(false);
     setSession(null);
     setLatest(null);
     setFeedback(decision === "accept" ? "savedAccept" : "savedChanges");
+    try { onSaved?.(ack);
     for (const key of [
       "delivery",
       "delivery-inbox",
@@ -511,11 +525,11 @@ export function DeliveryManualReviewPanel({
     ])
       void qc.invalidateQueries({ queryKey: [key] });
     await qc.resetQueries({ queryKey: historyKey, exact: true });
-    command.reset();
+    } catch { setRefreshFailed(true); }
   }
   async function submit() {
     if (
-      disabled ||
+      !canWrite() ||
       !session ||
       busy ||
       phase !== "idle" ||
@@ -557,7 +571,7 @@ export function DeliveryManualReviewPanel({
   }
   function adopt() {
     if (
-      !latest?.current?.can_review ||
+      !canWrite() || !latest?.current?.can_review ||
       !command.current() ||
       phase !== "refused"
     )
@@ -613,6 +627,7 @@ export function DeliveryManualReviewPanel({
           onClose={() => setFeedback("")}
         />
       )}
+      {refreshFailed && <Alert type="warning" role="alert" title={shared.refreshFailed} />}
       <div className="delivery-manual-heading">
         <h4>{tr("currentFacts")}</h4>
         <Button
@@ -729,7 +744,7 @@ export function DeliveryManualReviewPanel({
         mask={{ closable: false }}
         destroyOnHidden
         onCancel={() => {
-          if (command.unresolved) return;
+          if (command.locked) return;
           if (phase === "refused") command.reset();
           if (command.snapshot().phase === "idle") setSession(null);
         }}
@@ -746,15 +761,15 @@ export function DeliveryManualReviewPanel({
             draftScope !== origin ||
             !command.current(),
         }}
-        cancelButtonProps={{ disabled: command.unresolved }}
-        closable={!command.unresolved}
-        keyboard={!command.unresolved}
+        cancelButtonProps={{ disabled: command.locked }}
+        closable={!command.locked}
+        keyboard={!command.locked}
       >
         {command.state.error && (
           <Alert
             type="error"
             showIcon
-            title={tr("commandFailed")}
+            title={phase === "succeeded" ? shared.confirmed : tr("commandFailed")}
             description={
               [
                 "ackMismatch",
@@ -791,6 +806,7 @@ export function DeliveryManualReviewPanel({
             }
           />
         )}
+        {phase === "succeeded" && <Alert type="info" role="status" title={shared.confirmed} action={<Button data-action="finish-manual-review" onClick={() => void saved(command.snapshot().ack)}>{shared.finish}</Button>} />}
         {phase === "refused" && (
           <section className="delivery-manual-conflict">
             <p className="delivery-manual-help">{tr("refusedHint")}</p>

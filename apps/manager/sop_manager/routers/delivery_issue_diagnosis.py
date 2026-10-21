@@ -280,6 +280,7 @@ def _selected(source, ids, issue_id):
         }
     ).model_dump(mode="json")
     scopes = sorted({source["evidence_scopes"][id] for id in ids if id in source.get("evidence_scopes", {})})
+    scopes = sorted(set(scopes) | {workspace for id in ids for workspace in source.get("evidence_scope_sets", {}).get(id, [])})
     return snapshot, {id: digests[id] for id in ids}, scopes
 
 

@@ -2,7 +2,6 @@ import {
   Alert,
   Button,
   Collapse,
-  Input,
   Progress,
   Space,
   Tag,
@@ -34,6 +33,8 @@ import { executionDispatchRecoveryPending } from "@/lib/executionDispatchCommand
 import { handoffAccessFailure, useExecutionHandoffQuery, type ExecutionHandoffRead } from "@/lib/executionHandoff";
 import { ExecutionHandoffStatus, handoffControlsId } from "./ExecutionHandoffStatus";
 import { useExecutionControlOperations } from "@/lib/executionControlOperations";
+import { executionReviewRecoveryPending } from "@/lib/executionReviewCommand";
+import { ExecutionReviewControl } from "./ExecutionReviewControl";
 
 export function ExecutionStageFacts({
   observation,
@@ -92,7 +93,6 @@ export function ExecutionObservationCard({
   entry,
   projectId,
   active,
-  onCommand,
   sessionId,
   workspaceVersion,
   onSaved,
@@ -127,20 +127,15 @@ export function ExecutionObservationCard({
   const [observation, setObservation] = useState<ExecutionObservations>();
   const [events, setEvents] = useState<ExecutionEvent[]>([]);
   const [readError, setReadError] = useState("");
-  const [actionError, setActionError] = useState("");
   const [reading, setReading] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [comment, setComment] = useState("");
   const [controlLocked, setControlLocked] = useState(() => executionOperationPending(projectId, entry.id));
   const [recovering, setRecovering] = useState(() => executionOperationPending(projectId, entry.id));
-  const actionPending = useRef(false), controlPending = useRef(false);
   const runtimePending = useRef(executionControlRecoveryPending(projectId, entry.id)), syncPending = useRef(executionDispatchRecoveryPending(projectId, "execution.sync", entry.id));
-  controlPending.current = runtimePending.current || syncPending.current;
-  const unresolved = (kind: "runtime" | "sync", value: boolean) => {
-    (kind === "runtime" ? runtimePending : syncPending).current = value;
-    const pending = runtimePending.current || syncPending.current;
-    controlPending.current = pending;
+  const reviewPending = useRef(executionReviewRecoveryPending(projectId, entry.id));
+  const unresolved = (kind: "runtime" | "sync" | "review", value: boolean) => {
+    (kind === "runtime" ? runtimePending : kind === "sync" ? syncPending : reviewPending).current = value;
+    const pending = runtimePending.current || syncPending.current || reviewPending.current;
     setControlLocked(pending);
     onUnresolvedChange?.(pending);
   };
@@ -201,21 +196,6 @@ export function ExecutionObservationCard({
     );
     return () => clearInterval(timer);
   }, [active, paused, terminal, observe, observation?.more]);
-  async function act(action: () => Promise<void>) {
-    if (actionPending.current || controlPending.current || !handoffAccess.current.readable || executionOperationPending(projectId, entry.id) || access.current.disabled || access.current.isActive?.() === false || origin.current !== projectSessionKey()) return;
-    actionPending.current = true;
-    setBusy(true);
-    setActionError("");
-    try {
-      await action();
-      await observe();
-    } catch (failure) {
-      setActionError((failure as Error).message);
-    } finally {
-      actionPending.current = false;
-      setBusy(false);
-    }
-  }
   const status = observation?.status || entry.status;
   const stale = Boolean(entry.stale || observation?.stale);
   const runId = observation?.run_id || entry.run_id;
@@ -234,15 +214,6 @@ export function ExecutionObservationCard({
   const percent = observation?.nodes.length
     ? Math.round((completed / observation.nodes.length) * 100)
     : 0;
-  const review = (decision: string) =>
-    act(() =>
-      onCommand("execution.review", {
-        id: entry.id,
-        decision,
-        comment: comment.trim(),
-        run_version: observation?.run_version,
-      }),
-    );
   if (entry.handoff_id && handoffAccessFailure(handoff.error)) return <article>
     <ExecutionHandoffStatus projectId={projectId} executionId={entry.id} taskId={entry.task_id} sessionId={sessionId} read={handoff} isActive={isActive} />
     {executionOperationPending(projectId, entry.id) && <ExecutionOperationRecovery projectId={projectId} executionId={entry.id} sessionId={sessionId}
@@ -304,7 +275,6 @@ export function ExecutionObservationCard({
           }
         />
       )}
-      {actionError && <Alert type="error" role="alert" title={actionError} />}
       {observation && (
         <>
           <ExecutionStageFacts
@@ -338,7 +308,7 @@ export function ExecutionObservationCard({
       <Space wrap className="runtime-actions">
         <Button
           size="small"
-          disabled={reading || busy || controlLocked}
+          disabled={reading || controlLocked}
           onClick={() => void observe()}
         >
           {tr("refresh")}
@@ -363,7 +333,7 @@ export function ExecutionObservationCard({
           const retained = executionOperationPending(projectId, entry.id);
           runtimePending.current = executionControlRecoveryPending(projectId, entry.id);
           syncPending.current = executionDispatchRecoveryPending(projectId, "execution.sync", entry.id);
-          controlPending.current = value || retained;
+          reviewPending.current = executionReviewRecoveryPending(projectId, entry.id);
           setControlLocked(value || retained);
           onUnresolvedChange?.(value || retained);
           if (!value && !retained) setRecovering(false);
@@ -374,9 +344,9 @@ export function ExecutionObservationCard({
         sessionId={sessionId}
         workspaceVersion={workspaceVersion}
         canSync={handoff.readable && Boolean(permissions?.can_sync)}
-        disabled={disabled || busy || Boolean(readError) || !handoff.readable || runtimePending.current}
+        disabled={disabled || Boolean(readError) || !handoff.readable || runtimePending.current || reviewPending.current}
         canSubmit={() => handoffAccess.current.readable}
-        isActive={() => !actionPending.current && !runtimePending.current && !executionControlRecoveryPending(projectId, entry.id) && access.current.isActive?.() !== false}
+        isActive={() => !runtimePending.current && !reviewPending.current && !executionControlRecoveryPending(projectId, entry.id) && !executionReviewRecoveryPending(projectId, entry.id) && access.current.isActive?.() !== false}
         onSaved={onSaved}
         onObserved={observe}
         onUnresolvedChange={(value) => unresolved("sync", value)}
@@ -386,11 +356,11 @@ export function ExecutionObservationCard({
         executionId={entry.id}
         workspaceId={entry.workspace_id}
         controlRead={controlRead}
-        isActive={() => !actionPending.current && !syncPending.current && !executionDispatchRecoveryPending(projectId, "execution.sync", entry.id) && access.current.isActive?.() !== false}
+        isActive={() => !syncPending.current && !reviewPending.current && !executionDispatchRecoveryPending(projectId, "execution.sync", entry.id) && !executionReviewRecoveryPending(projectId, entry.id) && access.current.isActive?.() !== false}
         sessionId={sessionId}
         active={active}
         paused={paused}
-        disabled={disabled || busy || Boolean(readError) || !handoff.readable}
+        disabled={disabled || Boolean(readError) || !handoff.readable || reviewPending.current}
         canSubmit={() => handoffAccess.current.readable}
         onSaved={onSaved}
         initialNodeId={initialNodeId}
@@ -400,6 +370,15 @@ export function ExecutionObservationCard({
           unresolved("runtime", value);
         }}
       />
+      <ExecutionReviewControl projectId={projectId} executionId={entry.id} taskId={entry.task_id} workspaceId={entry.workspace_id}
+        sessionId={sessionId} runId={runId} runVersion={observation?.run_version} workspaceVersion={workspaceVersion}
+        canReview={handoff.readable && Boolean(permissions?.can_review)}
+        canAccept={!stale && status === "awaiting_review" && ["passed", "not_configured"].includes(observation?.tests.status || "")}
+        disabled={disabled || Boolean(readError) || !handoff.readable || runtimePending.current || syncPending.current}
+        canSubmit={() => handoffAccess.current.readable}
+        isActive={() => origin.current === projectSessionKey() && !runtimePending.current && !syncPending.current &&
+          !executionControlRecoveryPending(projectId, entry.id) && !executionDispatchRecoveryPending(projectId, "execution.sync", entry.id) && access.current.isActive?.() !== false}
+        onSaved={onSaved} onObserved={observe} onUnresolvedChange={(value) => unresolved("review", value)} />
       </>}
       </section>
       <Collapse
@@ -586,54 +565,6 @@ export function ExecutionObservationCard({
           },
         ]}
       />
-      {handoff.readable && permissions?.can_review && (
-        <div className="runtime-review">
-          <p className="runtime-help">{tr("reviewHint")}</p>
-          <label htmlFor={`runtime-review-${entry.id}`}>{tr("comment")}</label>
-          <Input.TextArea
-            id={`runtime-review-${entry.id}`}
-            rows={3}
-            maxLength={4000}
-            value={comment}
-            disabled={busy}
-            onChange={(event) => setComment(event.target.value)}
-          />
-          <Space wrap>
-            <Button
-              type="primary"
-              size="small"
-              disabled={
-                busy ||
-                controlLocked ||
-                disabled ||
-                stale ||
-                Boolean(readError) ||
-                status !== "awaiting_review" ||
-                !comment.trim() ||
-                !["passed", "not_configured"].includes(
-                  observation?.tests.status || "",
-                )
-              }
-              onClick={() => void review("accept")}
-            >
-              {tr("accept")}
-            </Button>
-            <Button
-              size="small"
-              disabled={
-                busy ||
-                controlLocked ||
-                disabled ||
-                Boolean(readError) ||
-                !comment.trim()
-              }
-              onClick={() => void review("request_changes")}
-            >
-              {tr("reject")}
-            </Button>
-          </Space>
-        </div>
-      )}
       {entry.review && (
         <blockquote>
           {entry.review.comment}

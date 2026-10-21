@@ -537,6 +537,7 @@ def issue_snapshot(db, project, data, user, issue_id, *, store=None, execution=N
         _execution(evidence, project, issue, entry, store, user, verification)
     for entry in deployments:
         _deployment(evidence, db, project, issue, entry, data, store, user)
+    submission_basis, submission_scopes = _submission_evidence(evidence, db, project, issue, user, store)
     requirement_ids = sorted(
         rid for rid, flow in data.get("flows", {}).items() if flow.get("source_issue_id") == issue.id
     )
@@ -562,6 +563,7 @@ def issue_snapshot(db, project, data, user, issue_id, *, store=None, execution=N
                 "task_ids": sorted(task_ids - {None, ""}),
                 "executions": [_execution_semantic(row) for row in executions],
                 "deployments": [_deployment_semantic(row) for row in deployments],
+                **({"submissions": submission_basis} if submission_basis else {}),
                 "candidates": [
                     row
                     for row in data.get("release_candidates", [])
@@ -581,6 +583,51 @@ def issue_snapshot(db, project, data, user, issue_id, *, store=None, execution=N
         "evidence": deepcopy(items),
         "requirement_id": requirement_id,
         "evidence_scopes": scopes,
-        "runtime_scopes": sorted(set(scopes.values())),
+        "evidence_scope_sets": {key: value for key, value in submission_scopes.items() if key in digests},
+        "runtime_scopes": sorted(set(scopes.values()) | {workspace for key, values in submission_scopes.items() if key in digests for workspace in values}),
         "evidence_digests": digests,
     }
+
+
+def _submission_evidence(evidence, db, project, issue, user, store):
+    """Reported external facts stay distinct from machine execution and test proof."""
+    from sqlalchemy import or_, select
+    from types import SimpleNamespace
+    from .delivery_task_submission_model import DeliveryTaskSubmission as Submission, DeliveryTaskSubmissionDecision as Decision
+    from .sql_models import User
+
+    linked = select(Decision.submission_id).where(Decision.tenant_id == project.tenant_id,
+        Decision.project_id == project.id, Decision.issue_id == issue.id)
+    columns = [Submission.id, Submission.task_id, Submission.submission_digest, Submission.definition_digest,
+        Submission.invalidated, Submission.native_boundary, Submission.source, Submission.counts, Submission.payload,
+        Decision.decision, Decision.review_id]
+    query = select(*columns).outerjoin(Decision, Decision.submission_id == Submission.id).where(Submission.tenant_id == project.tenant_id, Submission.project_id == project.id,
+        or_(Submission.issue_id == issue.id, Submission.id.in_(linked))).order_by(Submission.seq).limit(33)
+    rows = [SimpleNamespace(**dict(row)) for row in db.execute(query).mappings()]
+    actor = db.get(User, user.id, populate_existing=True)
+    basis, scope_sets = [], {}
+    for row in rows[:32]:
+        source = {"id": row.id, "digest": row.submission_digest, "definition_digest": row.definition_digest,
+            "invalidated": row.invalidated, "decision": row.decision,
+            "review_id": row.review_id}
+        basis.append(source)
+        workspaces = sorted({item["workspace_id"] for item in row.native_boundary.get("identities", []) if item.get("workspace_id")})
+        restricted = False
+        try:
+            assert_evidence_access(store, actor, project, workspaces)
+        except (HTTPException, CoreError):
+            restricted = True
+        identity = "submission:" + row.id
+        scope_sets[identity] = workspaces
+        evidence.add(identity, "submission", row.id,
+            _target(project, issue, view="tasks", task_id=row.task_id, submission_id=row.id),
+            status="restricted" if restricted else "invalidated" if row.invalidated else row.decision or "reported",
+            summary="runtime_restricted" if restricted else "external_delivery_reported",
+            facts={"submission_id": row.id, "evidence_source": "reported_external", "submission_digest": row.submission_digest}
+                if restricted else {"submission_id": row.id, "evidence_source": "reported_external",
+                    "submission_digest": row.submission_digest, "tool": row.source["name"], **row.counts},
+            excerpt="" if restricted else json.dumps({"summary": row.payload["summary"], "criteria": row.payload["criteria"],
+                "tests": row.payload["tests"], "artifacts": row.payload["artifacts"]}, ensure_ascii=False),
+            restricted=restricted, truncated=len(rows) > 32,
+            raw={**source, "payload": row.payload})
+    return basis, scope_sets

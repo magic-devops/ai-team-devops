@@ -22,6 +22,7 @@ from .delivery_deployment_contract import (
 from .delivery_execution_contract import ExecutionQueue
 from .delivery_execution_runtime_contract import ExecutionRuntimeControl
 from .delivery_execution_control_operation_contract import ControlOperationClose
+from .delivery_task_submission_contract import TaskDeliverySubmit, TaskDeliveryReview
 from .delivery_issue_contract import IssueDiagnosisAdopt, IssueDiagnosisDismiss
 from .delivery_release_contract import ReleaseCandidateCreate, ReleaseCandidateReview, ReleaseCandidateRevoke
 from .delivery_scheduling_contract import (
@@ -95,6 +96,8 @@ class Command(Input):
         "task.create",
         "task.update",
         "task.manual_review",
+        "task.delivery.submit",
+        "task.delivery.review",
         "tasks.schedule",
         "member.calendar.save",
         "tasks.plan",
@@ -620,7 +623,9 @@ class TaskReviewRecord(BaseModel):
     comment: str
     evidence_content: str
     evidence_url: str
-    source: Literal["manual"]
+    source: Literal["manual", "external"]
+    submission_id: str | None = None
+    submission_digest: str | None = None
     invalidated: bool
     invalidated_at: str | None
     invalidated_reason: str
@@ -635,7 +640,9 @@ class TaskReviewSummary(BaseModel):
     task_basis: str
     comment_summary: str = Field(max_length=240)
     has_evidence: bool
-    source: Literal["manual"]
+    source: Literal["manual", "external"]
+    submission_id: str | None = None
+    submission_digest: str | None = None
     invalidated: bool
     invalidated_at: str | None
     invalidated_reason: str
@@ -727,6 +734,8 @@ PAYLOADS = {
     "tasks.schedule": ScheduleChanges,
     "member.calendar.save": CalendarSave,
     "task.manual_review": TaskManualReview,
+    "task.delivery.submit": TaskDeliverySubmit,
+    "task.delivery.review": TaskDeliveryReview,
     "progress.record": ProgressRecord,
     "baseline.create": BaselineCreate,
     "execution.queue": ExecutionQueue,

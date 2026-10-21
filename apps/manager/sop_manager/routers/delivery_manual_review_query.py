@@ -10,13 +10,15 @@ from .delivery_query_index import scope
 from .delivery_query_read import _now, _stamp, _unchanged, metadata
 from .delivery_task_contract import snapshots_match
 from .sql_models import DeliveryTaskReview, Task
+from .delivery_task_submission_model import DeliveryTaskSubmissionDecision
+from .delivery_task_submission_service import assert_submission_access
 
 
 def _date(value):
     return value.isoformat() + "Z" if value else None
 
 
-def review_current(db, project, task_id, *, can_approve):
+def review_current(db, project, task_id, *, can_approve, user=None, store=None):
     with db.no_autoflush:
         stamp = _stamp(db, project)
         context = load_task_scope(db, project, task_id)
@@ -24,12 +26,14 @@ def review_current(db, project, task_id, *, can_approve):
         latest = context.reviews.get(task_id)
         effective = bool(
             latest is not None
-            and task_id not in context.executions
+            and (task_id not in context.executions or context.external_accepted(task_id))
             and latest.decision == "accept"
             and not latest.invalidated
             and current["verified"]
             and snapshots_match(latest.snapshot, context.snapshot(task_id))
         )
+        if latest and latest.id in context.external_proofs:
+            assert_submission_access(db, project, user, [context.external_proofs[latest.id]["id"]], store=store)
         _unchanged(db, project, stamp)
         return {
             **metadata(db, project, stamp),
@@ -54,14 +58,16 @@ def _summary(row):
         "task_basis": row.task_basis,
         "comment_summary": row.comment_summary,
         "has_evidence": bool(row.has_evidence),
-        "source": "manual",
+        "source": "external" if row.submission_id else "manual",
+        "submission_id": row.submission_id,
+        "submission_digest": row.submission_digest,
         "invalidated": row.invalidated,
         "invalidated_at": _date(row.invalidated_at),
         "invalidated_reason": row.invalidated_reason,
     }
 
 
-def list_reviews(db, project, user, task_id, *, limit=20, cursor=""):
+def list_reviews(db, project, user, task_id, *, limit=20, cursor="", store=None):
     if type(limit) is not int or not 1 <= limit <= 100:
         raise HTTPException(422, "Use a review page size of 1..100")
     review = DeliveryTaskReview
@@ -99,11 +105,14 @@ def list_reviews(db, project, user, task_id, *, limit=20, cursor=""):
             review.invalidated,
             review.invalidated_at,
             review.invalidated_reason,
-        ).where(*bounded)
+            DeliveryTaskSubmissionDecision.submission_id,
+            DeliveryTaskSubmissionDecision.submission_digest,
+        ).outerjoin(DeliveryTaskSubmissionDecision, DeliveryTaskSubmissionDecision.review_id == review.id).where(*bounded)
         if after is not None:
             query = query.where(review.seq < after)
         page = db.execute(query.order_by(review.seq.desc()).limit(limit + 1)).all()
         rows = page[:limit]
+        assert_submission_access(db, project, user, [row.submission_id for row in rows if row.submission_id], store=store)
         return {
             "project_id": project.id,
             "task_id": task_id,
@@ -115,7 +124,7 @@ def list_reviews(db, project, user, task_id, *, limit=20, cursor=""):
         }
 
 
-def review_detail(db, project, task_id, review_id):
+def review_detail(db, project, task_id, review_id, *, user=None, store=None):
     review = DeliveryTaskReview
     filters = (*_reviews(project, task_id), review.id == review_id)
     with db.no_autoflush:
@@ -141,6 +150,11 @@ def review_detail(db, project, task_id, review_id):
                 },
             )
         row = db.execute(select(review.__table__).where(*filters)).mappings().one()
+        decision = db.scalar(select(DeliveryTaskSubmissionDecision).where(
+            *scope(project, DeliveryTaskSubmissionDecision), DeliveryTaskSubmissionDecision.task_id == task_id,
+            DeliveryTaskSubmissionDecision.review_id == row["id"]))
+        if decision:
+            assert_submission_access(db, project, user, [decision.submission_id], store=store)
         value = {
             "id": row["id"],
             "task_id": row["task_id"],
@@ -152,7 +166,9 @@ def review_detail(db, project, task_id, review_id):
             "comment": row["comment"],
             "evidence_content": row["evidence_content"],
             "evidence_url": row["evidence_url"],
-            "source": "manual",
+            "source": "external" if decision else "manual",
+            "submission_id": decision.submission_id if decision else None,
+            "submission_digest": decision.submission_digest if decision else None,
             "invalidated": row["invalidated"],
             "invalidated_at": _date(row["invalidated_at"]),
             "invalidated_reason": row["invalidated_reason"],

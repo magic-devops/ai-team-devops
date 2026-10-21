@@ -174,12 +174,14 @@ def test_control_routes_and_close_payload_are_part_of_actual_openapi(bridge):
     command = schema["components"]["schemas"]["Command"]
     assert "execution.control.close" in command["properties"]["action"]["enum"]
     contracts = schema["paths"]["/api/v1/delivery/commands"]["post"]["x-delivery-command-contracts"]
-    assert set(contracts) == {"execution.start", "execution.retry", "execution.cancel", "execution.approval", "execution.control.close"}
+    controls = {"execution.start", "execution.retry", "execution.cancel", "execution.approval", "execution.control.close"}
+    assert controls <= set(contracts)
     close = contracts["execution.control.close"]["payload"]
     assert close["additionalProperties"] is False
     assert set(close["required"]) == set(close["properties"]) == {"id", "control_operation_id", "request_digest", "reason"}
     assert close["properties"]["request_digest"]["pattern"] == "^[0-9a-f]{64}$"
-    for contract in contracts.values():
+    for name in controls:
+        contract = contracts[name]
         result = contract["result"]
         assert result["additionalProperties"] is False
         assert set(result["required"]) == set(result["properties"]) == {"control_operation_id", "request_digest"}

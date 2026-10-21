@@ -35,6 +35,7 @@ from .errors import (
     SopServerError,
     SopTransportError,
 )
+from .task_submission import submission_command_body
 from .security import Auth, BearerAuth, HmacAuth, NoAuth, auth_from_env
 
 _log = logging.getLogger("sop_sdk")
@@ -495,6 +496,28 @@ class ManagerClient:
 
     def delivery_task(self, task_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/delivery/tasks/{_resource_segment(task_id)}")
+
+    def delivery_task_submission_current(self, task_id: str) -> dict[str, Any]:
+        """Read the exact current definition and native boundary before reporting."""
+        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions/current")
+
+    def delivery_task_submissions(self, task_id: str, *, limit: int = 20, cursor: str = "") -> dict[str, Any]:
+        """Read one bounded report page; report status is not runtime proof."""
+        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions",
+                             params=_requirement_page(limit=limit, cursor=cursor))
+
+    def delivery_task_submission(self, task_id: str, submission_id: str) -> dict[str, Any]:
+        if not isinstance(submission_id, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", submission_id) is None:
+            raise ValueError("submission ID must contain 1 to 64 safe ASCII characters")
+        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions/{_resource_segment(submission_id)}")
+
+    def delivery_task_submit(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Save this original external report; acceptance remains a later decision."""
+        return self.delivery_command({"action": "task.delivery.submit", **submission_command_body(body)})
+
+    def delivery_task_submit_review(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Record a human decision for the fixed report/digest and original version."""
+        return self.delivery_command({"action": "task.delivery.review", **submission_command_body(body)})
 
     def delivery_issues(
         self,

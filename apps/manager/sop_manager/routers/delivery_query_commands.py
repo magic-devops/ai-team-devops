@@ -9,6 +9,8 @@ from .sql_models import DeliveryEvent, DeliveryQueryState, DeliveryWorkspace, Pr
 
 def resource_kind(action):
     precise = {
+        "task.delivery.submit": "task_submission",
+        "task.delivery.review": "task_review",
         "tasks.schedule": "project",
         "release.policy.save": "release_policy",
         "release.ci.import": "ci_evidence",
@@ -44,6 +46,11 @@ def recorded_ack(project, action, resource_id, result, applied_version):
         refs.extend({"kind": "task", "id": task_id} for task_id in result.get("task_ids", []))
         if result.get("requirement_id"):
             refs.append({"kind": "requirement", "id": result["requirement_id"]})
+        if action in {"task.delivery.submit", "task.delivery.review"}:
+            if action == "task.delivery.review":
+                refs.append({"kind": "task_submission", "id": result["submission_id"]})
+            if result.get("issue_id"):
+                refs.append({"kind": "issue", "id": result["issue_id"]})
     unique = list({(ref["kind"], ref["id"]): ref for ref in refs}.values())
     return {
         "project_id": project.id,

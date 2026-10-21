@@ -106,7 +106,7 @@ class QualityIssue(ReleaseContract):
 
 
 class QualityProof(ReleaseContract):
-    source: Literal["native", "manual", "requirement", "none"]
+    source: Literal["native", "manual", "external", "requirement", "none"]
     id: str | None
     basis: str | None
     execution_id: str | None

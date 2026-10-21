@@ -30,6 +30,8 @@ import { executionDispatchRecoveryPending, useExecutionDispatchCommand, type Exe
 import { ExecutionQueueRecovery } from "./ExecutionQueueRecovery";
 import { ExecutionOperationRecovery, executionOperationPending } from "./ExecutionOperationRecovery";
 import { TaskExecutionHandoffRecovery } from "./TaskExecutionHandoffRecovery";
+import { DeliveryTaskSubmissionPanel } from "./DeliveryTaskSubmissionPanel";
+import { externalDeliveryRecoveryPending } from "@/lib/deliveryTaskSubmission";
 
 type TaskContentProps = {
   detail?: DeliveryTaskData;
@@ -243,6 +245,8 @@ export function DeliveryTaskDetail({
   const isActive = () => mounted.current && origin.current === projectSessionKey() && activeIdentity.current === identity && parentAccess.current?.() !== false;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const executionExit = useExecutionExitGuard();
+  const externalPending = useRef(externalDeliveryRecoveryPending(projectId, taskId));
+  const hasExternalPending = () => externalPending.current || externalDeliveryRecoveryPending(projectId, taskId);
   const [pinnedWorkspace, setPinnedWorkspace] = useState<DeliveryTaskData>();
   const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
     useState<DeliveryTaskData>();
@@ -257,7 +261,13 @@ export function DeliveryTaskDetail({
   const taskAccess = useRef({ error: false, write: false });
   const canUseQueueEditor = () => isActive() && !writePending.current && !operationRecoveryLive.current &&
     !taskAccess.current.error && taskAccess.current.write &&
+    !hasExternalPending() && executionExit.canNavigate() &&
     !(knownExecution.current && executionOperationPending(projectId, knownExecution.current));
+  const canWriteChild = () => canUseQueueEditor() && !queueLocked && ["idle", "refused"].includes(queueCommand.snapshot().phase) &&
+    !executionDispatchRecoveryPending(projectId, "execution.queue", taskId);
+  const canWriteExternal = () => isActive() && !writePending.current && !operationRecoveryLive.current && !hasExternalPending() &&
+    !queueLocked && ["idle", "refused"].includes(queueCommand.snapshot().phase) && !executionDispatchRecoveryPending(projectId, "execution.queue", taskId) &&
+    !(knownExecution.current && executionOperationPending(projectId, knownExecution.current)) && executionExit.canNavigate();
   const queuePending = (value: boolean) => {
     const pending = executionExit.setPending(`queue:${taskId}`, value || executionDispatchRecoveryPending(projectId, "execution.queue", taskId));
     const latest = latestWorkspace.current;
@@ -320,6 +330,9 @@ export function DeliveryTaskDetail({
       "tasks",
       "tasksSummary",
       "taskDependencies",
+      "delivery-task-submission-current",
+      "delivery-task-submission",
+      "delivery-task-submissions",
     ])
       void qc.invalidateQueries({ queryKey: [name] });
   };
@@ -342,6 +355,7 @@ export function DeliveryTaskDetail({
       executionDispatchRecoveryPending(projectId, "execution.queue", taskId) ||
       Boolean(operationRecoveryLive.current) ||
       Boolean(knownExecution.current && executionOperationPending(projectId, knownExecution.current)) ||
+      hasExternalPending() ||
       executionExit.pending || queueLocked || !executionExit.canNavigate() || !isActive()
     )
       throw new Error(t("deliveryTaskAcceptance.readonly"));
@@ -389,7 +403,7 @@ export function DeliveryTaskDetail({
         }} />}
       <EventReceiptReturn
         projectId={projectId}
-        disabled={executionExit.pending || queueLocked || busy}
+        disabled={executionExit.pending || hasExternalPending() || queueLocked || busy}
       />
       {query.isPending && <Skeleton active paragraph={{ rows: 3 }} />}
       {query.error && (
@@ -445,9 +459,9 @@ export function DeliveryTaskDetail({
           !query.isError &&
           !busy
         }
-        executionBlocked={executionExit.pending || queueLocked}
+        executionBlocked={executionExit.pending || hasExternalPending() || queueLocked}
         queueCommand={queueCommand}
-        isActive={() => isActive() && !writePending.current}
+        isActive={() => isActive() && !writePending.current && !hasExternalPending()}
         canSubmitQueue={canUseQueueEditor}
         onExecutionRecovery={rememberRecovery}
         onEditingChange={editingChanged}
@@ -467,12 +481,21 @@ export function DeliveryTaskDetail({
           onUnresolvedChange?.(pending);
         }}
       />
+      <DeliveryTaskSubmissionPanel key={`${projectId}:${sessionId}:${taskId}:external`} projectId={projectId} taskId={taskId} sessionId={sessionId}
+        disabled={executionExit.pending || queueLocked || Boolean(displayedOperationRecovery) || busy}
+        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={editingChanged}
+        onUnresolvedChange={(value) => {
+          externalPending.current = value || externalDeliveryRecoveryPending(projectId, taskId);
+          const pending = executionExit.setPending(`external:${taskId}`, externalPending.current);
+          onUnresolvedChange?.(pending);
+        }} />
       <DeliveryManualReviewPanel
         key={`${projectId}:${sessionId}:${taskId}`}
         projectId={projectId}
         sessionId={sessionId}
         taskId={taskId}
-        disabled={executionExit.pending || queueLocked || Boolean(displayedOperationRecovery) || busy || query.isError}
+        disabled={executionExit.pending || hasExternalPending() || queueLocked || Boolean(displayedOperationRecovery) || busy || query.isError}
+        canSubmit={canWriteChild}
         onSaved={saved}
         onEditingChange={editingChanged}
         onUnresolvedChange={(value) => {

@@ -71,6 +71,7 @@ class EvidenceTarget(IssueContract):
     issue_id: str = ""
     receipt_id: str = ""
     origin_id: str = ""
+    submission_id: str | None = None
 
 
 class EvidenceFact(IssueContract):
@@ -80,7 +81,7 @@ class EvidenceFact(IssueContract):
 
 class EvidenceItem(IssueContract):
     id: Identity
-    kind: Literal["issue", "task", "execution", "deployment", "node", "probe", "event"]
+    kind: Literal["issue", "task", "submission", "execution", "deployment", "node", "probe", "event"]
     label: str
     status: str | None = None
     summary: str

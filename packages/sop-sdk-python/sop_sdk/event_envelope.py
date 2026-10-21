@@ -240,14 +240,17 @@ def _validate_effect(value):
     if value["kind"] not in {
         "fact_recorded",
         "task_updated",
+        "task_delivery_submitted",
         "issue_created",
         "record_upserted",
         "record_deleted",
         "asset_materialized",
     }:
         raise EventProtocolError("invalid effect kind")
-    if value["target_kind"] not in {None, "task", "issue", "requirement", "sprint", "asset"}:
+    if value["target_kind"] not in {None, "task", "issue", "requirement", "sprint", "asset", "task_submission"}:
         raise EventProtocolError("invalid effect target kind")
+    if value["target_kind"] == "task_submission" and value["kind"] != "task_delivery_submitted":
+        raise EventProtocolError("submission target requires a submitted report effect")
     _nullable_text(value["target_id"], "effect.target_id")
 
 
@@ -317,6 +320,14 @@ def matching_receipts(
         receipt_id = text_field(item.get("receipt_id"), "receipt_id", maximum=256)
         stored_at = timestamp(item.get("stored_at"))
         state = _validate_processing(item["processing"])
+        effect = item["processing"]["result"]
+        if effect is not None and effect["kind"] == "task_delivery_submitted":
+            processing = item["processing"]
+            if (effect["target_kind"] != "task_submission" or not isinstance(effect["target_id"], str)
+                    or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", effect["target_id"]) is None
+                    or processing["handler"] != "task.delivery.submit"
+                    or state != "processed" or processing["attempts"] < 1 or processing["processed_at"] is None):
+                raise EventProtocolError("submission effect must identify an actual saved report")
         result[event_id] = DurableReceipt(
             identity,
             event_id,

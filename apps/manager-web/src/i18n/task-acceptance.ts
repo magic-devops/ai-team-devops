@@ -17,6 +17,7 @@ const zh = {
     task_acceptance_missing: "请填写任务自身条件，或明确选择需求条件。",
     task_missing: "任务已不存在或不在当前项目。",
     task_dispatch_stage_blocked: "请先重新打开任务和关联需求，再准备派发。",
+    task_dispatch_reopen_required: "外部交付已接手旧执行，请先明确重新打开任务，再准备新计划。",
     task_dependencies_blocked: "请解除阻塞，并验收前置任务。",
     task_execution_active: "请先审查或取消当前运行，再次派发。",
   },
@@ -94,6 +95,7 @@ const en: typeof zh = {
     task_missing: "Task no longer exists in this project.",
     task_dispatch_stage_blocked:
       "Reopen the task and linked requirement before dispatch.",
+    task_dispatch_reopen_required: "External delivery took over the old execution. Explicitly reopen the task before preparing a new plan.",
     task_dependencies_blocked:
       "Resolve blockers and verify predecessor delivery.",
     task_execution_active:
@@ -186,6 +188,7 @@ const ja: typeof zh = {
       "阻害要因を解消し、前提タスクを検収してください。",
     task_execution_active:
       "現在の実行を検収または取り消してから再割り当てしてください。",
+    task_dispatch_reopen_required: "外部交付が元の実行を引き継ぎました。タスクを明示的に再開してから新しい計画を作成してください。",
   },
   gateHint:
     "関連タスクに自身の条件を入力するか、担当する要求の条件を明示的に選択してください。失効・利用不可の参照元では段階を進められません。",

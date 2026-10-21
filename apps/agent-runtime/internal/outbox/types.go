@@ -186,6 +186,7 @@ func (s Scope) Validate() error {
 }
 
 var rfc3339Syntax = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$`)
+var submissionIdentity = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`)
 
 func validTime(value string) bool {
 	if !rfc3339Syntax.MatchString(value) || strings.HasPrefix(value, "0000-") {
@@ -213,8 +214,15 @@ func (r RemoteReceipt) Validate(id, digest string) error {
 		return fail("receipt_invalid", "invalid processing revision/attempts/timestamp")
 	}
 	if p.Result != nil {
+		if p.Result.TargetKind != nil && *p.Result.TargetKind == "task_submission" && p.Result.Kind != "task_delivery_submitted" {
+			return fail("receipt_invalid", "submission target requires a submitted report effect")
+		}
 		switch p.Result.Kind {
 		case "fact_recorded", "task_updated", "issue_created", "record_upserted", "record_deleted", "asset_materialized":
+		case "task_delivery_submitted":
+			if p.Result.TargetKind == nil || *p.Result.TargetKind != "task_submission" || p.Result.TargetID == nil || !submissionIdentity.MatchString(*p.Result.TargetID) || p.Handler == nil || *p.Handler != "task.delivery.submit" || p.State != "processed" || p.Attempts < 1 || p.ProcessedAt == nil {
+				return fail("receipt_invalid", "submission effect must identify an actual saved report")
+			}
 		default:
 			return fail("receipt_invalid", "invalid processing effect kind")
 		}

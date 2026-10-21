@@ -131,6 +131,19 @@ def _proof(context, task):
         "reviewer_id": None,
         "at": None,
     }
+    latest_review = context.reviews.get(task.id)
+    external = context.external_proofs.get(latest_review.id) if latest_review else None
+    from .delivery_task_submission_service import current_submission, external_is_latest_delivery
+
+    submitted = current_submission(context, task.id)
+    if submitted and (not external or submitted["id"] != external["id"]):
+        return {**result, "source": "external", "id": submitted["id"],
+                "basis": submitted["submission_digest"], "evidence_sha256": submitted["submission_digest"]}
+    if external and external_is_latest_delivery(context, task.id, external):
+        return {**result, "source": "external", "id": external["id"],
+                "basis": external["submission_digest"], "evidence_sha256": external["submission_digest"],
+                "reviewer_id": latest_review.reviewer_id,
+                "at": latest_review.created_at.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")}
     entry = context.executions.get(task.id)
     if entry:
         review = entry.get("review") or {}

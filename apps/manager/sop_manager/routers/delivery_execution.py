@@ -291,6 +291,9 @@ def _observe(db, project, state, entry, store, principal):
 
     run = store.get(principal, entry["workspace_id"], "runs", entry["run_id"])
     verification = VerificationContext(db, project, state)
+    from .delivery_task_submission_service import native_takeover
+
+    taken_over = bool(native_takeover(verification, entry))
     task = verification.tasks.get(entry["task_id"])
     requirement = verification.requirements.get(task.req_id) if task else None
     flow = state["flows"].setdefault(requirement.id, default_flow()) if requirement else None
@@ -312,11 +315,11 @@ def _observe(db, project, state, entry, store, principal):
     )
     if entry["status"] not in CLOSED:
         entry["status"] = "awaiting_review" if run["status"] == "completed" else run["status"]
-        if not entry["stale"]:
+        if not entry["stale"] and not taken_over:
             task.status = (
                 "blocked" if run["status"] in {"failed", "cancelled", "interrupted"} else "in_progress"
             )
-    if entry["status"] not in CLOSED and not entry["stale"] and run["status"] == "failed" and not entry.get("issue_id"):
+    if not taken_over and entry["status"] not in CLOSED and not entry["stale"] and run["status"] == "failed" and not entry.get("issue_id"):
         issue = Issue(
             id=identifier("ISS"),
             tenant_id=project.tenant_id,
@@ -420,6 +423,11 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
         if not entry.get("run_id"):
             raise HTTPException(409, {"code": "execution_handoff_pending",
                 "message": "The accepted handoff has no runtime plan yet. Observe its handoff state; sync and review never dispatch."})
+        if action == "execution.review":
+            from .delivery_task_submission_service import require_native_not_taken_over
+            from .delivery_verification import VerificationContext
+
+            require_native_not_taken_over(VerificationContext(db, project, state), entry)
         run, task, _, flow = _observe(db, project, state, entry, store, principal)
         if action == "execution.review":
             if entry["stale"]:

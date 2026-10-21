@@ -25,7 +25,8 @@ class VerificationContext:
     """One authorized project's canonical rows and effective approval facts."""
 
     def __init__(
-        self, db, project, data, *, tasks=None, requirements=None, issues=None, reviews=None, team=None
+        self, db, project, data, *, tasks=None, requirements=None, issues=None, reviews=None, team=None,
+        external_proofs=None, latest_submissions=None,
     ):
         self.project, self.data = project, data
 
@@ -55,6 +56,11 @@ class VerificationContext:
             )
             reviews = db.query(DeliveryTaskReview).join(latest, DeliveryTaskReview.seq == latest.c.seq)
         self.reviews = {row.task_id: row for row in reviews}
+        from .delivery_task_submission_service import load_external_proofs, load_latest_submissions
+
+        self.external_proofs = external_proofs if external_proofs is not None else load_external_proofs(
+            db, project, self.tasks, reviews=self.reviews.values())
+        self.latest_submissions = latest_submissions if latest_submissions is not None else load_latest_submissions(db, project, self.tasks)
         self.reset_proof()
 
     def reset_proof(self):
@@ -203,7 +209,12 @@ class VerificationContext:
                 }
             )
         entry = self.executions.get(task_id)
-        if entry and entry["status"] not in {"accepted", "changes_requested", "cancelled"}:
+        from .delivery_task_submission_service import native_takeover_closed
+
+        replaced_failed = bool(entry and entry["status"] == "failed" and native_takeover_closed(self, entry))
+        if replaced_failed and task.status == "blocked":
+            reasons.append({"code": "task_dispatch_reopen_required", "message": "Explicitly reopen the task before preparing a new native execution after external takeover."})
+        if entry and entry["status"] not in {"accepted", "changes_requested", "cancelled"} and not replaced_failed:
             reasons.append(
                 {
                     "code": "task_execution_active",
@@ -270,11 +281,37 @@ class VerificationContext:
             and bool(review.get("evidence_sha256"))
         )
 
+    def external_accepted(self, task_id):
+        from .delivery_task_submission_service import external_review_valid
+
+        review = self.reviews.get(task_id)
+        proof = self.external_proofs.get(review.id) if review else None
+        return bool(external_review_valid(self, task_id, review, proof)
+                    and snapshots_match(review.snapshot, self.snapshot(task_id)))
+
+    def delivery_accepted(self, task_id):
+        from .delivery_task_submission_service import current_submission, external_is_latest_delivery
+
+        review = self.reviews.get(task_id)
+        proof = self.external_proofs.get(review.id) if review else None
+        submitted = current_submission(self, task_id)
+        if submitted:
+            return bool(proof and proof["id"] == submitted["id"] and self.external_accepted(task_id))
+        if proof and external_is_latest_delivery(self, task_id, proof):
+            return self.external_accepted(task_id)
+        return self.native_accepted(task_id)
+
     def delivery_status(self, task_id):
         """One six-state delivery vocabulary shared by progress and scheduling."""
         task = self.tasks[task_id]
         planned = self.data.get("task_details", {}).get(task_id, {})
         flow = self.data.get("flows", {}).get(task.req_id, {})
+        from .delivery_task_submission_service import current_submission
+
+        submitted = current_submission(self, task_id)
+        if (submitted and not submitted["decision_id"]
+                and not planned.get("blocked_reason") and not flow.get("blocked_reason") and not self.blocked(task_id)):
+            return "awaiting_review"
         if (
             task.status == "blocked"
             or planned.get("blocked_reason")
@@ -311,7 +348,8 @@ class VerificationContext:
             status = task.status
             if self.data.get("task_details", {}).get(task.id, {}).get("blocked_reason"):
                 status = "blocked"
-            elif task.id in self.executions and not self.native_accepted(task.id) and status == "completed":
+            elif ((task.id in self.executions or task.id in self.latest_submissions or self.reviews.get(task.id) and self.reviews[task.id].id in self.external_proofs)
+                  and not self.delivery_accepted(task.id) and status == "completed"):
                 status = "in_progress"
             tasks.append(
                 {
@@ -367,12 +405,12 @@ class VerificationContext:
             and snapshots_match(review.snapshot, self.snapshot(task_id))
             and (not task.req_id or task.req_id in self.requirements)
         )
-        # Runtime tasks retain their stricter current run review boundary.
-        value = (
-            self.native_accepted(task_id)
-            if task_id in self.executions
-            else (manual or self.requirement_accepted(task.req_id))
-        )
+        from .delivery_task_submission_service import current_submission
+
+        # A current fixed report cannot borrow manual or older native approval.
+        value = (self.delivery_accepted(task_id) if current_submission(self, task_id) or review and review.id in self.external_proofs else
+                 self.native_accepted(task_id) if task_id in self.executions else
+                 (manual or self.requirement_accepted(task.req_id)))
         self._verified[task_id] = bool(value)
         return bool(value)
 

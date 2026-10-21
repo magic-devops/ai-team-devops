@@ -110,6 +110,9 @@ def observations(db, project, user, state, entry, store, execution, permissions,
     more, rows = len(rows) > limit, rows[:limit]
     verification = VerificationContext(db, project, state)
     actionable = verification.execution_snapshot_current(entry)
+    from .delivery_task_submission_service import native_takeover
+
+    taken_over = bool(native_takeover(verification, entry))
     executor_invalidated = verification.pending_executor_binding_invalidated(entry)
     stale = not actionable
     run_data = run["data"] if run else {}
@@ -226,7 +229,7 @@ def observations(db, project, user, state, entry, store, execution, permissions,
             else "passed",
         },
         "permissions": {
-            "can_start": project.status == "active"
+            "can_start": not taken_over and project.status == "active"
             and permissions["write"]
             and "execute" in principal.permissions
             and target_ready,
@@ -235,7 +238,7 @@ def observations(db, project, user, state, entry, store, execution, permissions,
             and bool(run_id or "requirement" in entry.get("snapshot", {}))
             and entry["status"] not in CLOSED
             and (not run or run["status"] != "completed" or stale),
-            "can_review": actionable
+            "can_review": not taken_over and actionable
             and permissions["approve"]
             and "approve" in principal.permissions
             and entry["status"] not in CLOSED

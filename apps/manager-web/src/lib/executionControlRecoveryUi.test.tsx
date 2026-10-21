@@ -7,6 +7,7 @@ import { ExecutionRuntimePanel } from "../../subapps/ai-rd-center/src/pages/deli
 import { DeliveryExecutionInspector } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryExecutionInspector";
 import { ExecutionObservationCard } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionObservationCard";
 import { ExecutionSyncControl } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionSyncControl";
+import { ExecutionReviewControl } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionReviewControl";
 import { ExecutionOperationRecovery } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionOperationRecovery";
 import { executionControlRecoveryPending, executionControlStorageKey } from "./executionControlCommand";
 import { setSession, USER_KEY } from "./authStorage";
@@ -45,6 +46,7 @@ vi.mock("react", async () => ({
     return slots[index].value;
   },
   useCallback: (callback: unknown) => callback,
+  useId: () => `review-field-${h.frame}`,
   useEffect: (effect: () => void | (() => void)) => { (h.effects[h.frame] ||= []).push(effect); },
   useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
 }));
@@ -74,7 +76,7 @@ const observation: ExecutionObservations = { project_id: "P", execution_id: "E",
 function ack(body: any) {
   return { project_id: "P", action: body.action, resource: { kind: "execution", id: "E" }, applied_version: body.expected_version + 1, version: body.expected_version + 1,
     query_generation: 2, replayed: false, affected_refs: [{ kind: "execution", id: "E" }],
-    result: body.action === "execution.sync" ? null : { control_operation_id: "C", request_digest: "b".repeat(64) } };
+    result: ["execution.sync", "execution.review"].includes(body.action) ? null : { control_operation_id: "C", request_digest: "b".repeat(64) } };
 }
 function frame<T>(name: string, callback: () => T): T { h.frame = name; h.next = 0; h.effects[name] = []; return callback(); }
 function nodes(node: ReactNode): any[] {
@@ -107,8 +109,10 @@ async function cardControlChain(onCommand: Parameters<typeof ExecutionObservatio
   const renderCard = () => frame("card", () => ExecutionObservationCard({ entry: execution, projectId: "P", active: true,
     sessionId: "selected-session", workspaceVersion: 7, isActive: () => true, onCommand, onSaved: saved, onUnresolvedChange: unresolved }));
   renderCard(); h.effects.card[0](); await settle();
-  find(renderCard(), Input.TextArea, (props) => props.id === "runtime-review-E").onChange({ target: { value: "Review the fixed execution" } });
   const card = renderCard(), panel = nodes(card).find((node) => node.type === ExecutionRuntimePanel)!;
+  const review = nodes(card).find((node) => node.type === ExecutionReviewControl)!;
+  const renderReview = () => frame("chain-review", () => ExecutionReviewControl(review.props));
+  find(renderReview(), Input.TextArea).onChange({ target: { value: "Review the fixed execution" } });
   const renderPanel = () => frame("chain-panel", () => ExecutionRuntimePanel(panel.props));
   renderPanel(); h.effects["chain-panel"][0](); await settle();
   const retained = nodes(renderPanel()).find((node) => node.type === ExecutionRuntimeControl)!;
@@ -117,7 +121,7 @@ async function cardControlChain(onCommand: Parameters<typeof ExecutionObservatio
   await button(renderControl(), "preview").onClick();
   const sync = nodes(card).find((node) => node.type === ExecutionSyncControl)!;
   const renderSync = (patch: Partial<Parameters<typeof ExecutionSyncControl>[0]> = {}) => frame("sync", () => ExecutionSyncControl({ ...sync.props, ...patch }));
-  return { card, renderControl, renderSync };
+  return { card, renderControl, renderSync, renderReview };
 }
 function recreate() { h.frames = {}; h.effects = {}; }
 async function settle() { for (let index = 0; index < 24; index++) await Promise.resolve(); }
@@ -370,7 +374,7 @@ describe("actual execution runtime control recovery", () => {
   it("blocks old card sync and review callbacks while control is sending, unknown or confirmed but awaiting local cleanup", async () => {
     const onCommand = vi.fn(async () => {}), chain = await cardControlChain(onCommand);
     const sync = action(chain.renderSync(), "sync-execution");
-    const review = find(chain.card, Button, (props) => props.children === "deliveryRuntime.reject");
+    const review = action(chain.renderReview(), "reject-execution-review");
     expect(sync.disabled).toBe(false); expect(review.disabled).toBe(false);
     h.mode = "pending"; const sending = button(chain.renderControl(), "confirm").onClick();
     sync.onClick(); review.onClick(); await settle();
@@ -385,8 +389,8 @@ describe("actual execution runtime control recovery", () => {
     expect(onCommand).not.toHaveBeenCalled(); expect(saved).not.toHaveBeenCalled(); expect(h.sent).toHaveLength(2);
     h.storageFail = "none"; await action(chain.renderControl(), "finish-confirmed").onClick();
     chain.renderSync({ workspaceVersion: 8 });
-    await sync.onClick(); review.onClick(); await settle();
-    expect(onCommand.mock.calls).toEqual([["execution.review", { id: "E", decision: "request_changes", comment: "Review the fixed execution", run_version: 9 }]]);
+    await sync.onClick(); await settle();
+    expect(onCommand).not.toHaveBeenCalled();
     expect(h.sent[2]).toMatchObject({ action: "execution.sync", payload: { id: "E" } });
     expect(saved).toHaveBeenCalledTimes(2); expect(h.sent).toHaveLength(3);
   });

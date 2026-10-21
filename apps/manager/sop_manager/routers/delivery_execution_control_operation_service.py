@@ -266,7 +266,9 @@ def _fresh_authority(db, project, row, state, store, execution, *, launch=False,
         raise HTTPException(409, "The fixed run changed; explicitly review a new preview")
     if launch:
         from hermes_core.run_controls import pending_stop
+        from .delivery_task_submission_service import require_native_not_taken_over
 
+        require_native_not_taken_over(VerificationContext(db, project, state), entry)
         if project.status != "active" or not run or not VerificationContext(db, project, state).execution_snapshot_current(entry):
             raise HTTPException(409, "The accepted launch context changed")
         if (run["id"] != (effect_run_id or row.run_id)

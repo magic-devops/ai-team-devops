@@ -73,7 +73,9 @@ export type ManualTaskReview = {
   comment: string;
   evidence_content: string;
   evidence_url: string;
-  source: "manual";
+  source: "manual" | "external";
+  submission_id?: string | null;
+  submission_digest?: string | null;
   invalidated: boolean;
   invalidated_at: string | null;
   invalidated_reason: string;
@@ -87,6 +89,8 @@ export type ManualReviewSummary = Pick<
   | "reviewer"
   | "task_basis"
   | "source"
+  | "submission_id"
+  | "submission_digest"
   | "invalidated"
   | "invalidated_at"
   | "invalidated_reason"

@@ -15,6 +15,7 @@ from .event_common import authorize, digest, fail, identifier, inbox, now, proce
 def handler(event):
     known = {
         "sop.task.status_changed": "task.status",
+        "sop.task.delivery_submitted": "task.delivery.submit",
         "sop.issue.opened": "issue.create",
         "sop.agent.heartbeat": "heartbeat.record",
     }
@@ -43,7 +44,12 @@ def command_for(event):
     data.pop("expected_version")
     for key in ("tenant_id", "project_id"):
         data.pop(key, None)
-    if event.type == "sop.task.status_changed":
+    if event.type == "sop.task.delivery_submitted":
+        if set(data) != {"report"} or not isinstance(data["report"], dict) or data["report"].get("task_id") != event.subject:
+            fail("event_business_input_invalid", "The complete external report must fix the event's task", 422)
+        action = "task.delivery.submit"
+        payload = data["report"]
+    elif event.type == "sop.task.status_changed":
         if set(data) - {"status", "notes", "confidence"}:
             fail("event_business_input_invalid", "Unsupported Task status fields", 422)
         if "notes" in data and (not isinstance(data["notes"], str) or len(data["notes"]) > 2000):
@@ -69,6 +75,8 @@ def command_for(event):
 
 
 def _effect(body, ack):
+    if body.action == "task.delivery.submit":
+        return {"kind": "task_delivery_submitted", "target_kind": "task_submission", "target_id": ack["resource"]["id"]}
     if body.action == "task.update":
         return {"kind": "task_updated", "target_kind": "task", "target_id": ack["resource"]["id"]}
     if body.action == "issue.create":
@@ -194,7 +202,8 @@ def process(db, project, user, receipt_id, request=None, *, retry=None):
                 if saved:
                     from .delivery_query_commands import replay_ack
 
-                    ack = replay_ack(db, project, saved.version, user=producer)
+                    ack = replay_ack(db, project, saved.version, user=producer,
+                        store=getattr(request.app.state, "hermes_store", None) if request else None)
                     effect = _effect(body, ack)
                     context = nullcontext()
                 else:

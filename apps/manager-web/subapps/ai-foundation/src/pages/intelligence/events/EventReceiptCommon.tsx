@@ -58,6 +58,7 @@ export function EventProcessingTags({
   const fact =
     processing.state === "processed" &&
     processing.result?.kind === "fact_recorded";
+  const submission = processing.state === "processed" && processing.result?.kind === "task_delivery_submitted";
   return (
     <div className="event-receipt-tags">
       <Tag>{t("eventReceipts.stored")}</Tag>
@@ -65,14 +66,14 @@ export function EventProcessingTags({
         color={
           processing.state === "failed"
             ? "error"
-            : processing.state === "processed"
+            : submission ? "blue" : processing.state === "processed"
               ? "success"
               : "default"
         }
       >
         {t(
           "eventReceipts." +
-            (only ? "storedOnly" : fact ? "factRecorded" : processing.state),
+            (only ? "storedOnly" : submission ? "task_delivery_submitted" : fact ? "factRecorded" : processing.state),
         )}
       </Tag>
     </div>
@@ -143,7 +144,7 @@ export function EventEffectResult({
   const target = effect.target_kind && effect.target_id;
   const supported =
     effect.target_kind &&
-    ["task", "issue", "requirement"].includes(effect.target_kind);
+    ["task", "issue", "requirement", "task_submission"].includes(effect.target_kind);
   return (
     <section className="event-receipt-result">
       <h4>{t("eventReceipts.result")}</h4>

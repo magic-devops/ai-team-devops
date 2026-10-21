@@ -195,6 +195,37 @@ def execution_control_write_scope(db, tenant_id, project_id, control_id):
     return _scope(db, tenant_id, project_id, "execution_control_write:" + control_id)
 
 
+def task_submission_write_scope(db, tenant_id, project_id, submission_id):
+    return _scope(db, tenant_id, project_id, "task_submission_write:" + submission_id)
+
+
+def task_submission_invalidation_scope(db, tenant_id, project_id):
+    return _scope(db, tenant_id, project_id, "task_submission_invalidation")
+
+
+def _check_submission_write(db, table, scope, operation, old, values):
+    if table.name == "tasks" and operation == "update" and values.get("status") == "completed":
+        from .routers.delivery_task_submission_model import DeliveryTaskSubmission
+
+        latest = db.connection().execute(select(DeliveryTaskSubmission.id, DeliveryTaskSubmission.invalidated).where(
+            DeliveryTaskSubmission.tenant_id == scope[0], DeliveryTaskSubmission.project_id == scope[1],
+            DeliveryTaskSubmission.task_id == old["id"]).order_by(DeliveryTaskSubmission.seq.desc()).limit(1)).first()
+        if latest and not latest.invalidated and not _permission(db, scope, "task_submission_write:" + latest.id):
+            _deny("task_submission_review_required", "Complete reported external delivery through its fixed report acceptance")
+    if table.name not in {"delivery_task_submissions", "delivery_task_submission_decisions"}:
+        return
+    from .routers.delivery_task_submission_model import valid_invalidation
+
+    if operation == "update" and table.name == "delivery_task_submissions":
+        if _permission(db, scope, "task_submission_invalidation") and valid_invalidation(old, values):
+            return
+    if operation == "insert":
+        submission_id = values.get("id") if table.name == "delivery_task_submissions" else values.get("submission_id")
+        if _permission(db, scope, "task_submission_write:" + str(submission_id)):
+            return
+    _deny("task_submission_immutable", "Only its canonical command can append a fixed submission or decision; invalidation is permanent")
+
+
 def execution_control_projection_scope(db, tenant_id, project_id, control_id):
     return _scope(db, tenant_id, project_id, "execution_control_projection:" + control_id)
 
@@ -519,6 +550,8 @@ def _flow_invalidation(original, changed):
 
 
 def _restricted_write(db, table, scope, operation, old, values):
+    if table.name == "delivery_task_submissions" and operation == "update":
+        return _permission(db, scope, "task_submission_invalidation") is not None
     if table.name == "delivery_execution_control_operations" and operation == "update":
         return _permission(db, scope, "execution_control_write:" + old["id"]) is not None
     if table.name == "delivery_workspaces" and _control_permission(db, scope):
@@ -639,6 +672,7 @@ def _check_write(db, table, operation, old, values, *, user_cascade=False):
     scope = _scope_for_row(db, table, values if operation == "insert" else old)
     if scope is None:
         return
+    _check_submission_write(db, table, scope, operation, old, values)
     _check_control_write(db, table, scope, operation, old, values)
     _check_handoff_write(db, table, scope, operation, old, values)
     _check_discussion_write(db, table, scope, operation, old, values)

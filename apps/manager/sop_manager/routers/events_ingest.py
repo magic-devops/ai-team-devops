@@ -59,6 +59,10 @@ def _intake(db, project, user, credential, item, event):
     rid = identifier()
     kind = handler(event)
     plan = None
+    if event.type == "sop.task.delivery_submitted":
+        from .task_submission_event_access import plan_submission_event
+
+        plan = plan_submission_event(db, project, event)
     if kind == "sync.asset":
         from .event_assets import plan_asset
 
@@ -208,6 +212,10 @@ def ingest(
         row = db.get(m.EventProcessing, rid, populate_existing=True)
         if row.state == "pending" and row.handler and project.status != "archived":
             row = process(db, project, actor, rid, request)
+        from .task_submission_event_access import require_submission_event_access
+
+        require_submission_event_access(db, project, actor, inbox(db, project, rid), row,
+            getattr(request.app.state, "hermes_store", None))
         for result in results:
             if result["receipt_id"] == rid:
                 result["processing"] = processing(row)
@@ -261,7 +269,7 @@ def event_detail(
     from .event_query import detail
 
     project, actor, permissions, _ = authorize(db, user, project_id, request)
-    return detail(db, project, actor, permissions, receipt_id)
+    return detail(db, project, actor, permissions, receipt_id, store=getattr(request.app.state, "hermes_store", None))
 
 
 @router.get("/{receipt_id}/attempts", response_model=c.AttemptPage)
@@ -277,7 +285,7 @@ def event_attempts(
     from .event_query import attempts
 
     project, actor, _, _ = authorize(db, user, project_id, request)
-    return attempts(db, project, actor, receipt_id, limit, cursor)
+    return attempts(db, project, actor, receipt_id, limit, cursor, store=getattr(request.app.state, "hermes_store", None))
 
 
 @router.post("/{receipt_id}:retry", response_model=c.RetryAck)
@@ -297,6 +305,10 @@ def retry_event(
     if not body.reason.strip():
         fail("event_reason_required", "A reviewed recovery reason is required", 422)
     original = inbox(db, project, receipt_id)
+    from .task_submission_event_access import require_submission_event_access
+
+    require_submission_event_access(db, project, actor, original, db.get(m.EventProcessing, receipt_id),
+        getattr(request.app.state, "hermes_store", None))
     key = digest(json.dumps([project.tenant_id, project.id, actor.id, receipt_id, body.idempotency_key]))
     fingerprint = digest(body.model_dump_json())
     saved = db.scalar(select(m.EventProcessingAttempt).where(m.EventProcessingAttempt.retry_key == key))
@@ -306,6 +318,8 @@ def retry_event(
         return {**saved.ack, "replayed": True}
     require_project_operation(db, project.tenant_id, project.id)
     project, actor, permissions, _ = authorize(db, actor, project.id, request)
+    require_submission_event_access(db, project, actor, original, db.get(m.EventProcessing, receipt_id, populate_existing=True),
+        getattr(request.app.state, "hermes_store", None))
     saved = db.scalar(select(m.EventProcessingAttempt).where(m.EventProcessingAttempt.retry_key == key))
     if saved:
         if saved.request_hash != fingerprint:
@@ -323,4 +337,6 @@ def retry_event(
         retry={"key": key, "fingerprint": fingerprint, "revision": body.expected_revision},
     )
     saved = db.scalar(select(m.EventProcessingAttempt).where(m.EventProcessingAttempt.retry_key == key))
+    require_submission_event_access(db, project, actor, original, db.get(m.EventProcessing, receipt_id, populate_existing=True),
+        getattr(request.app.state, "hermes_store", None))
     return saved.ack

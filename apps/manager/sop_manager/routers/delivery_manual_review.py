@@ -10,6 +10,7 @@ from .delivery_verification import VerificationContext
 from .sql_models import DeliveryTaskReview, DeliveryWorkspace
 
 REASONS = {
+    "manual_review_external_submission": "Review the fixed external delivery report through its own acceptance action.",
     "manual_review_execution_managed": "Review this task through its execution evidence.",
     "task_owner_missing": "Assign a responsible project person or agent.",
     "task_owner_unavailable": "Choose an active available responsible project person or agent.",
@@ -30,6 +31,10 @@ def current_review(context, task_id, *, can_approve):
     if snapshot is None:
         return None
     codes = []
+    from .delivery_task_submission_service import current_submission
+
+    if current_submission(context, task_id):
+        codes.append("manual_review_external_submission")
     if task_id in context.executions:
         codes.append("manual_review_execution_managed")
     if not snapshot["owner"]:
@@ -103,6 +108,9 @@ def invalidate_reviews(db, project, *, verification=None):
         data = reconcile(db, project, workspace.data) if workspace else initial_state()
         verification = VerificationContext(db, project, data)
     context = verification
+    from .delivery_task_submission_service import invalidate_submissions, load_external_proofs, external_review_valid
+
+    invalidate_submissions(db, project, context)
     rows = (
         db.query(DeliveryTaskReview)
         .filter_by(
@@ -113,15 +121,20 @@ def invalidate_reviews(db, project, *, verification=None):
         )
         .all()
     )
+    proofs = load_external_proofs(db, project, context.tasks, reviews=rows)
     for row in rows:
         missing = row.task_id not in context.tasks
         if (
             missing
             or not snapshots_match(row.snapshot, context.snapshot(row.task_id))
-            or row.task_id in context.executions
+            or row.id in proofs and not external_review_valid(context, row.task_id, row, proofs[row.id])
+            or row.task_id in context.executions and row.id not in proofs
         ):
             row.invalidated = True
             row.invalidated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             row.invalidated_reason = "task_review_task_missing" if missing else "task_review_basis_changed"
     db.flush()
+    from .delivery_task_submission_service import sync_submission_review_invalidation
+
+    sync_submission_review_invalidation(db, project, context)
     context.reset_proof()

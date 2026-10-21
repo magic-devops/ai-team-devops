@@ -97,6 +97,7 @@ const zh = {
   },
   reasons: {
     manual_review_execution_managed: "此任务有关联执行，请审查原执行记录。",
+    manual_review_external_submission: "已有外部交付报告，请在外部交付区审核该固定原件。",
     manual_review_requires_human: "任务须唯一归属当前活跃的人类成员。",
     manual_review_requirement_missing: "关联需求已不可用，请先修复任务关联。",
     manual_review_permission_required: "需要当前项目的审查权限。",
@@ -220,6 +221,7 @@ const en = {
   reasons: {
     manual_review_execution_managed:
       "Review the associated execution for this task.",
+    manual_review_external_submission: "Review the fixed report in the external delivery section.",
     manual_review_requires_human: "The task must have one active human owner.",
     manual_review_requirement_missing:
       "The associated requirement is unavailable; repair the task link first.",
@@ -343,6 +345,7 @@ const ja = {
   reasons: {
     manual_review_execution_managed:
       "このタスクに関連する実行をレビューしてください。",
+    manual_review_external_submission: "外部交付欄で固定された報告をレビューしてください。",
     manual_review_requires_human: "タスクには有効な人の担当者が一人必要です。",
     manual_review_requirement_missing:
       "関連要件が利用できません。タスクの関連を修正してください。",

@@ -699,6 +699,10 @@ from .delivery_execution_control_operation_model import register_control_operati
 
 DeliveryExecutionControlOperation = register_control_operation_model(Base)
 
+from .delivery_task_submission_model import register_submission_models  # noqa: E402
+
+DeliveryTaskSubmission, DeliveryTaskSubmissionDecision = register_submission_models(Base)
+
 
 def create_all():
     from sop_manager.schema_upgrade import require_current_schema

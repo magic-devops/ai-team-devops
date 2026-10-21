@@ -178,7 +178,16 @@ def _reconcile_execution_evidence(db, project, data, *, context=None):
                     or entry["status"] != "accepted"
                     or entry["stale"]
                     or latest[entry["task_id"]]["id"] != entry["id"]
+                    or entry["task_id"] in context.latest_submissions
+                    and not context.latest_submissions[entry["task_id"]]["invalidated"]
                 )
+            elif artifact.get("source") == "external-delivery":
+                task_id = artifact.get("task_id")
+                review = context.reviews.get(task_id)
+                proof = context.external_proofs.get(review.id) if review else None
+                artifact["stale"] = bool(not proof or proof["id"] != artifact.get("submission_id")
+                    or review.id != artifact.get("review_id") or proof["submission_digest"] != artifact.get("evidence_sha256")
+                    or not context.external_accepted(task_id))
 
 
 def remember_basis(db, project, data):
@@ -217,6 +226,7 @@ def materialize(db, project, data, user, *, verification=None, progress_only=Fal
             latest
             and (latest["status"] != "accepted" or latest.get("stale"))
             and task["status"] == "completed"
+            and not verification.external_accepted(task["id"])
         ):
             task["status"] = "in_progress"
         task["owner"] = verification.owner(verification.tasks[task["id"]])

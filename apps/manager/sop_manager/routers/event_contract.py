@@ -47,12 +47,13 @@ class EffectResult(Strict):
     kind: Literal[
         "fact_recorded",
         "task_updated",
+        "task_delivery_submitted",
         "issue_created",
         "record_upserted",
         "record_deleted",
         "asset_materialized",
     ]
-    target_kind: Literal["task", "issue", "requirement", "sprint", "asset"] | None
+    target_kind: Literal["task", "issue", "requirement", "sprint", "asset", "task_submission"] | None
     target_id: str | None
 
 

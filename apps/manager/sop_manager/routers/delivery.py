@@ -43,6 +43,10 @@ from .delivery_execution_contract import (
 )
 from .delivery_execution_handoff_contract import ExecutionHandoffDetail, TaskHandoffPage
 from .delivery_execution_control_operation_contract import ControlOperationDetail, ControlOperationPage, command_openapi_contracts
+from .delivery_task_submission_contract import (
+    SubmissionCurrent, SubmissionDetail, SubmissionLocator, SubmissionPage,
+    command_openapi_contracts as submission_openapi_contracts,
+)
 from .delivery_execution_runtime_contract import (
     ExecutionControlPreviewInput,
     ExecutionControlPreviewResponse,
@@ -1468,6 +1472,73 @@ def execution_control_operation(
         getattr(request.app.state, "hermes_store", None))
 
 
+@router.get("/tasks/{task_id}/delivery-submissions/current", response_model=SubmissionCurrent)
+def task_submission_current(
+    task_id: Annotated[str, Path(min_length=1, max_length=64)], request: Request,
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_task_submission_query import submission_current
+
+    project = _progress_project(db, user, project_id)
+    return submission_current(db, project, user, task_id,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None))
+
+
+@router.get("/tasks/{task_id}/delivery-submissions", response_model=SubmissionPage)
+def task_submissions(
+    task_id: Annotated[str, Path(min_length=1, max_length=64)], request: Request,
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str, Query(max_length=4000)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_task_submission_query import submission_list
+
+    project = _progress_project(db, user, project_id)
+    return submission_list(db, project, user, task_id, limit=limit, cursor=cursor,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None))
+
+
+@router.get("/tasks/{task_id}/delivery-submissions/{submission_id}", response_model=SubmissionDetail)
+def task_submission(
+    task_id: Annotated[str, Path(min_length=1, max_length=64)],
+    submission_id: Annotated[str, Path(min_length=1, max_length=64)], request: Request,
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_task_submission_query import submission_detail
+
+    project = _progress_project(db, user, project_id)
+    return submission_detail(db, project, user, task_id, submission_id,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None))
+
+
+@router.get("/delivery-submissions/{submission_id}/locator", response_model=SubmissionLocator)
+def task_submission_locator(
+    submission_id: Annotated[str, Path(min_length=1, max_length=64)], request: Request,
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_issue_evidence import assert_evidence_access
+    from .delivery_task_submission_model import DeliveryTaskSubmission
+    from .delivery_task_submission_service import submission_runtime_scopes
+
+    project = _progress_project(db, user, project_id)
+    task_id = db.scalar(select(DeliveryTaskSubmission.task_id).where(
+        DeliveryTaskSubmission.tenant_id == project.tenant_id,
+        DeliveryTaskSubmission.project_id == project.id, DeliveryTaskSubmission.id == submission_id))
+    if task_id is None:
+        raise HTTPException(404, "Submission not found in this project")
+    current = db.get(User, user.id, populate_existing=True)
+    assert_evidence_access(getattr(request.app.state, "hermes_store", None), current, project,
+        submission_runtime_scopes(db, project, submission_id))
+    return {"project_id": project.id, "task_id": task_id, "submission_id": submission_id}
+
+
 def _runtime_entry(db, project, execution_id):
     row = db.get(DeliveryWorkspace, project.id)
     state = reconcile(db, project, row.data) if row else initial_state()
@@ -1562,6 +1633,7 @@ def execution_control_preview(
 @router.get("/tasks/{task_id}/reviews", response_model=TaskReviewsResponse)
 def task_reviews(
     task_id: str,
+    request: Request,
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -1578,12 +1650,14 @@ def task_reviews(
         task_id,
         limit=limit,
         cursor=cursor,
+        store=getattr(request.app.state, "hermes_store", None),
     )
 
 
 @router.get("/tasks/{task_id}/review-current", response_model=TaskReviewCurrentResponse)
 def task_review_current(
     task_id: str,
+    request: Request,
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
@@ -1591,13 +1665,15 @@ def task_review_current(
     from .delivery_manual_review_query import review_current
 
     project = _project(db, user, project_id)
-    return review_current(db, project, task_id, can_approve=_permissions(db, user, project)["approve"])
+    return review_current(db, project, task_id, can_approve=_permissions(db, user, project)["approve"],
+        user=user, store=getattr(request.app.state, "hermes_store", None))
 
 
 @router.get("/tasks/{task_id}/reviews/{review_id}", response_model=TaskReviewDetailResponse)
 def task_review_detail(
     task_id: str,
     review_id: str,
+    request: Request,
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
@@ -1605,7 +1681,8 @@ def task_review_detail(
     from .delivery_manual_review_query import review_detail
 
     project = _project(db, user, project_id)
-    return review_detail(db, project, task_id, review_id)
+    return review_detail(db, project, task_id, review_id,
+        user=user, store=getattr(request.app.state, "hermes_store", None))
 
 
 @router.post("/task-plan-preview")
@@ -1735,6 +1812,7 @@ def _command_permission(action, payload):
         "execution.approval",
         "baseline.create",
         "task.manual_review",
+        "task.delivery.review",
     }:
         return "approve"
     return "write"
@@ -1765,7 +1843,12 @@ def project_lifecycle_preview(
     )
 
 
-@router.post("/commands", response_model=CommandAck, openapi_extra=command_openapi_contracts())
+@router.post("/commands", response_model=CommandAck, openapi_extra={
+    "x-delivery-command-contracts": {
+        **command_openapi_contracts()["x-delivery-command-contracts"],
+        **submission_openapi_contracts()["x-delivery-command-contracts"],
+    },
+})
 def execute(
     body: Command,
     user: Annotated[User, Depends(current_user)],
@@ -1990,6 +2073,11 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
                 + (list(source.runtime_scopes) if source is not None else [])
             )
         )
+        if body.action in {"task.delivery.submit", "task.delivery.review"}:
+            from .delivery_task_submission_service import submission_runtime_scopes
+
+            event_data["command_ack_access"] = sorted(set(event_data["command_ack_access"] +
+                submission_runtime_scopes(db, project, event_data["result"]["submission_id"])))
         db.flush()
         if body.action not in {"project.lifecycle", "baseline.create"} and not body.action.startswith(
             ("release.", "deployment.")
@@ -2062,6 +2150,13 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
 
 
 def _apply(db, project, user, data, action, payload, request, *, command_key=""):
+    if action in {"task.delivery.submit", "task.delivery.review"}:
+        from .delivery_task_submission_service import apply_submission
+
+        return apply_submission(db, project, user, data, action, payload,
+            store=getattr(request.app.state, "hermes_store", None) if request else None,
+            execution=getattr(request.app.state, "hermes_execution", None) if request else None,
+            command_key=command_key)
     if action in {"issue.create", "sync.record.apply"}:
         from .event_business import apply_canonical
 

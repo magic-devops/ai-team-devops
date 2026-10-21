@@ -9,6 +9,7 @@ import typer
 
 from .._util import console, get_client, warn
 from . import delivery_discussion
+from sop_sdk.task_submission import load_submission_command
 
 app = typer.Typer(
     help="项目交付：context / requirements / requirement / requirement-definition / requirement-records / requirement-record / requirement-impact / requirement-impact-items / requirement-impact-item / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / progress-freeze-proof / baselines / baseline / baseline-items / baseline-item / baseline-comparison / baseline-comparison-items / baseline-comparison-item / observation / observation-items / observation-item / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
@@ -1017,6 +1018,48 @@ def command(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=F
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc
+
+
+@app.command("submission-current")
+def submission_current(task_id: Annotated[str, typer.Option("--id")]):
+    """读取任务当前定义和原生执行停止边界，不自动采用新依据。"""
+    _query_output("delivery_task_submission_current", task_id)
+
+
+@app.command("submissions")
+def submissions(task_id: Annotated[str, typer.Option("--id")],
+                limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+                cursor: Annotated[str, typer.Option("--cursor")] = ""):
+    """单页读取外部交付报告；测试结论为报告内容，不等于运行证明。"""
+    _query_output("delivery_task_submissions", task_id, limit=limit, cursor=cursor)
+
+
+@app.command("submission")
+def submission(task_id: Annotated[str, typer.Option("--id")], submission_id: Annotated[str, typer.Option("--submission")]):
+    """读取确切原报告、证据和人工决定。"""
+    _query_output("delivery_task_submission", task_id, submission_id)
+
+
+def _submit_original(file: Path, method: str):
+    try:
+        body = load_submission_command(file)
+        with get_client() as client:
+            console.print_json(data=getattr(client, method)(body))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("task-submit")
+def task_submit(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """保存原交付报告文件；冲突不更换版本/键，超时后复用同一文件。"""
+    _submit_original(file, "delivery_task_submit")
+
+
+@app.command("task-submit-review")
+def task_submit_review(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """提交固定报告/摘要的人工验收原件，不从报告直接推断通过。"""
+    _submit_original(file, "delivery_task_submit_review")
 
 
 @app.command("execution-preview")

@@ -93,11 +93,18 @@ def unresolved_stop_targets(db, project, data):
 
 def require_previous_stops(db, project, user, state, task_id, store, *, exclude=""):
     """A new handoff cannot bypass unknown previous execution side effects."""
-    from hermes_core.run_controls import pending_stop
+    from hermes_core.run_controls import pending_stop, stop_view
+    from .delivery_verification import VerificationContext
+    from .delivery_task_submission_service import native_takeover, native_takeover_closed
+    from .delivery_execution_control_operation_service import active_controls
 
+    verification = VerificationContext(db, project, state)
     for previous in state.get("executions", []):
         if previous.get("task_id") != task_id or previous["id"] == exclude:
             continue
+        takeover = native_takeover(verification, previous)
+        if takeover and (not native_takeover_closed(verification, previous) or active_controls(db, project, previous["id"])):
+            raise HTTPException(409, {"code": "execution_external_takeover_unresolved", "message": "The original external takeover closure or an old accepted control is unresolved."})
         unresolved = previous.get("stop_pending") or (
             previous.get("status") == "cancelled" and previous.get("run_id") and not previous.get("stop_snapshot")
         )
@@ -107,6 +114,9 @@ def require_previous_stops(db, project, user, state, task_id, store, *, exclude=
         if previous.get("run_id"):
             try:
                 _, _, _, run = _read(db, project, user, state, previous, store)
+                stop = stop_view(run)
+                if takeover and (run["status"] not in {"completed", "failed", "cancelled"} or not stop or stop.get("state") not in {"confirmed", "not_started"}):
+                    raise HTTPException(409, {"code": "execution_stop_unresolved", "message": "The retired native execution still requires positive terminal and physical stop evidence."})
                 if pending_stop(run):
                     raise HTTPException(409, {"code": "execution_stop_unresolved",
                                               "message": "The previous execution has no confirmed stop."})
@@ -219,13 +229,20 @@ def _require_managed_source(store, principal, entry, run):
 def _controls(db, project, user, state, entry, store, execution, principal, workspace, run, permissions, *, ignore_control_ids=()):
     from .delivery_verification import VerificationContext
 
-    current = VerificationContext(db, project, state).execution_snapshot_current(entry)
+    verification = VerificationContext(db, project, state)
+    current = verification.execution_snapshot_current(entry)
+    from .delivery_task_submission_service import native_takeover
+
+    takeover = native_takeover(verification, entry)
     common = _base_control_reasons(project, permissions, principal, entry)
     try:
         _require_managed_source(store, principal, entry, run)
     except (HTTPException, CoreError):
         common.append(_reason("execution_source_changed", "The runtime envelope no longer identifies this delivery intent."))
     fresh = _fresh_control_reasons(project, current, workspace, run, common)
+    takeover_reason = _reason("execution_external_takeover", "This original execution is retained as history after external takeover; prepare a new plan to execute again.") if takeover else None
+    if takeover_reason:
+        fresh.append(takeover_reason)
     if not fresh:
         try:
             _validate_configuration(db, project, user, state, entry, store, execution, principal, run)
@@ -263,7 +280,7 @@ def _controls(db, project, user, state, entry, store, execution, principal, work
     approval.extend(approval_reasons)
     return current, selected_approval, {"start": _capability(start), "retry": _capability(retry),
         "cancel": _capability(cancel), "approval": _capability(approval),
-        "approval_reject": _capability([*cancel, *approval_reasons])}
+        "approval_reject": _capability([*cancel, *approval_reasons, *([takeover_reason] if takeover_reason else [])])}
 
 
 def _selected_capability(controls, action, decision):

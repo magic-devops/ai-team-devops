@@ -12,11 +12,12 @@ export type EventEffect = {
   kind:
     | "fact_recorded"
     | "task_updated"
+    | "task_delivery_submitted"
     | "issue_created"
     | "record_upserted"
     | "record_deleted"
     | "asset_materialized";
-  target_kind: "task" | "issue" | "requirement" | "sprint" | "asset" | null;
+  target_kind: "task" | "issue" | "requirement" | "sprint" | "asset" | "task_submission" | null;
   target_id: string | null;
 };
 export type EventProcessing = {
