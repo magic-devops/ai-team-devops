@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sop_manager.routers import delivery
 from sop_manager.routers import sql_models as m
 from sop_manager.routers.auth_sql import current_user, current_user_or_apikey
+from sop_manager.routers.delivery_query_index import SCHEMA_VERSION
 from sqlalchemy import event, select
 from test_event_handoff import env, frozen, result, send, version  # noqa: F401
 
@@ -227,7 +228,7 @@ def test_explicit_rebuild_repairs_only_verified_origins_in_archived_projects(env
     assert table_snapshot(sessions) == before
     rebuilt = client.post("/api/v1/delivery/query/rebuild")
     assert rebuilt.status_code == 200, rebuilt.text
-    assert rebuilt.json()["query_state"]["schema_version"] == 5
+    assert rebuilt.json()["query_state"]["schema_version"] == SCHEMA_VERSION
     assert rebuilt.json()["origin_rebuild"] == {"added": 1, "existing": 0, "skipped": 0}
     after = table_snapshot(sessions)
     for table in before:

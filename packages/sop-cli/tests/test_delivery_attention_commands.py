@@ -96,6 +96,30 @@ def test_inbox_empty_filtered_page_does_not_claim_the_entire_inbox_is_empty(monk
     assert "当前没有待处理事项" not in output.output and "next_cursor" not in output.output
 
 
+def test_inbox_text_identifies_external_acceptance_and_the_exact_report_without_extra_reads(monkeypatch):
+    item = {"id": "task:T", "resource_id": "T", "title": "External report", "status": "awaiting_review",
+            "categories": ["acceptance"], "acceptance_kind": "external",
+            "target": {"view": "list", "requirement_id": "R", "detail": "tasks", "task_id": "T", "submission_id": "S-report", "work_order_id": None}}
+    seen = use_manager(monkeypatch, inbox_page(items=[item], total=1, has_more=False, next_cursor=None))
+    output = CliRunner().invoke(delivery.app, ["inbox", "--category", "acceptance"])
+    assert output.exit_code == 0, output.output
+    assert "外部交付待验收" in output.output and "报告 S-report" in output.output
+    assert "awaiting_review" in output.output and len(seen) == 1
+    assert seen[0].url.path == "/api/v1/delivery/inbox"
+
+
+def test_inbox_json_keeps_active_work_order_and_reported_blocked_classification(monkeypatch):
+    item = {"id": "task:T", "resource_id": "T", "title": "Held work", "status": "blocked", "categories": ["work", "blocked"],
+            "acceptance_kind": None, "target": {"view": "list", "requirement_id": "", "detail": "tasks", "task_id": "T", "submission_id": None, "work_order_id": "W-held"}}
+    expected = inbox_page(items=[item], scope="mine", category="blocked", total=1, has_more=False, next_cursor=None)
+    seen = use_manager(monkeypatch, expected)
+    output = CliRunner().invoke(delivery.app, ["inbox", "--category", "blocked", "--json"])
+    assert output.exit_code == 0, output.output
+    assert json.loads(output.output) == expected and len(seen) == 1
+    text = CliRunner().invoke(delivery.app, ["inbox", "--category", "blocked"])
+    assert text.exit_code == 0 and "工单 W-held" in text.output
+
+
 @pytest.mark.parametrize(
     "arguments", [["--scope", "all"], ["--category", "wrong"], ["--limit", "0"], ["--limit", "101"]]
 )

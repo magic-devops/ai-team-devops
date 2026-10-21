@@ -17,6 +17,8 @@ class InboxTarget(ReadModel):
     detail: str
     task_id: str | None = None
     issue_id: str | None = None
+    submission_id: str | None = None
+    work_order_id: str | None = None
 
 
 class InboxCounts(ReadModel):
@@ -44,7 +46,7 @@ class InboxItem(ReadModel):
     blocked_reasons: list[str] = Field(max_length=5)
     blocked_reason_count: int = Field(ge=0)
     overdue: bool
-    acceptance_kind: Literal["manual", "execution"] | None = None
+    acceptance_kind: Literal["manual", "execution", "external"] | None = None
     target: InboxTarget
 
 

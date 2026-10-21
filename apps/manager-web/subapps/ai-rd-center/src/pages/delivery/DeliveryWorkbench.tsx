@@ -373,6 +373,7 @@ function ProjectDelivery() {
     taskId = "",
     push = false,
     filters: Partial<DeliveryRoute> = {},
+    deliverySelection?: Pick<DeliveryInboxTarget, "submission_id" | "work_order_id">,
   ) => {
     if (!executionExit.canNavigate()) return;
     if (["quality", "releases", "discussions"].includes(nextView)) {
@@ -380,11 +381,6 @@ function ProjectDelivery() {
       detail = "details";
       taskId = "";
     }
-    setView(nextView);
-    setSelectedId(id);
-    setDetailTab(detail);
-    setSelectedTaskId(taskId);
-    setSelectedIssueId(filters.issue || "");
     const hash = deliveryInboxHash(
       {
         view: nextView,
@@ -392,22 +388,33 @@ function ProjectDelivery() {
         detail,
         task_id: taskId,
         issue_id: filters.issue,
+        ...(deliverySelection && Object.hasOwn(deliverySelection, "submission_id") ? { submission_id: deliverySelection.submission_id } : {}),
+        ...(deliverySelection && Object.hasOwn(deliverySelection, "work_order_id") ? { work_order_id: deliverySelection.work_order_id } : {}),
       },
       { inboxScope, inboxCategory, resourceKind, showArchived, ...filters },
       location.hash,
+      projectId,
     );
+    const targetHash = ["quality", "releases"].includes(nextView)
+      ? releaseHash({ ...parseReleaseRoute(location.hash), view: nextView as "quality" | "releases", releaseId: "", evidenceId: "", qualityId: "" }, location.hash)
+      : nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash);
+    const scopedHash = preserveProjectContext(targetHash, location.hash, projectId);
+    setView(nextView);
+    setSelectedId(id);
+    setDetailTab(detail);
+    setSelectedTaskId(taskId);
+    setSelectedIssueId(filters.issue || "");
     history[push ? "pushState" : "replaceState"](
       null,
       "",
-      `${location.pathname}${location.search}${preserveCollaborationRoute(["quality", "releases"].includes(nextView) ? releaseHash({ ...parseReleaseRoute(location.hash), view: nextView as "quality" | "releases", releaseId: "", evidenceId: "", qualityId: "" }, location.hash) : preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash), location.hash)}`,
+      `${location.pathname}${location.search}${preserveCollaborationRoute(scopedHash, location.hash)}`,
     );
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const setIssueRoute = (id: string) => {
     if (!executionExit.canNavigate()) return;
-    const params = new URLSearchParams(location.hash.split("?")[1]);
-    params.set("view", "issues");
-    params.set("project_id", projectId);
+    const destination = deliveryInboxHash({ view: "issues", requirement_id: "", detail: "details", issue_id: id }, {}, location.hash, projectId);
+    const params = new URLSearchParams(destination.split("?")[1]);
     params.delete("diagnosis_id");
     if (id) params.set("issue", id);
     else params.delete("issue");
@@ -489,10 +496,7 @@ function ProjectDelivery() {
       !target.requirement_id &&
       !["team", "timeline"].includes(target.view)
     ) {
-      location.hash = preserveProjectContext(
-        deliveryInboxHref(target),
-        location.hash,
-      );
+      location.hash = deliveryInboxHref(target, {}, location.hash, projectId);
       return;
     }
     navigate(
@@ -502,6 +506,7 @@ function ProjectDelivery() {
       target.task_id || "",
       true,
       { issue: target.issue_id || "" },
+      target,
     );
   };
   const locateTask = () => {

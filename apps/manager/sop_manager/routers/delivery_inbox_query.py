@@ -22,13 +22,14 @@ def _audience(user, can_approve, scope_kind):
         return flags
     own = "user:" + user.id
     personal = data["mine_owner_id"].as_string() == own
+    delivery_actor = data["mine_delivery_actor_id"].as_string() == own
     requirement_personal = data["mine_requirement_owner_id"].as_string() == own
     issue = data["item"]["kind"].as_string() == "issue"
     return {
-        "work": and_(flags["work"], personal),
+        "work": and_(flags["work"], or_(personal, delivery_actor)),
         "approval": and_(flags["approval"], literal(can_approve)),
         "acceptance": and_(flags["acceptance"], or_(personal, requirement_personal, literal(can_approve))),
-        "blocked": and_(flags["blocked"], or_(personal, and_(issue, requirement_personal))),
+        "blocked": and_(flags["blocked"], or_(personal, delivery_actor, and_(issue, requirement_personal))),
     }
 
 

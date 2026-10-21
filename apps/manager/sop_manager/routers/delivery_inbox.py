@@ -58,7 +58,40 @@ def _flow(requirement):
     return {**default_flow(), **(requirement.get("flow") or {})}
 
 
-def _task_reasons(task, requirement, issues):
+def derive_task_attention(verification):
+    """Use the same proof context without exposing originals or editing a Task.
+
+    The identifiers locate existing protected detail reads. They do not grant
+    access to a report, packet, progress message, runtime or acceptance action.
+    """
+    from .delivery_manual_review import current_review
+    from .delivery_task_submission_service import current_submission, native_takeover
+
+    result = {}
+    for task_id in verification.tasks:
+        activity = verification.work_order_activity.get(task_id)
+        submitted = current_submission(verification, task_id)
+        entry = verification.executions.get(task_id)
+        status = verification.delivery_status(task_id)
+        manual = (current_review(verification, task_id, can_approve=True)
+            if activity is None and not submitted and not entry and verification.tasks[task_id].status == "completed" else None)
+        result[task_id] = {
+            "delivery_status": status,
+            "current_submission_id": submitted["id"] if submitted else None,
+            "submission_pending": bool(activity is None and submitted and not submitted["decision_id"] and status == "awaiting_review"),
+            "work_order_active": activity is not None,
+            "work_order_id": activity.get("id") if activity else None,
+            "work_order_state": activity["state"] if activity else None,
+            "reported_status": activity["reported_status"] if activity else None,
+            "claimant_id": activity.get("claimant_id") if activity else None,
+            "delivery_actor_id": activity.get("claimant_id") if activity is not None else submitted.get("submitted_by") if submitted else None,
+            "manual_eligible": bool(manual and manual["eligible"]),
+            "native_eligible": activity is None and not submitted and not (entry and native_takeover(verification, entry)),
+        }
+    return result
+
+
+def _task_reasons(task, requirement, issues, attention=None):
     planning = task.get("planning") or {}
     reasons = []
     if planning.get("blocked_reason"):
@@ -68,6 +101,8 @@ def _task_reasons(task, requirement, issues):
         reasons.append("Task is blocked")
     if requirement and _flow(requirement).get("blocked_reason"):
         reasons.append(str(_flow(requirement)["blocked_reason"]))
+    if attention and attention.get("work_order_active") and attention.get("reported_status") == "blocked":
+        reasons.append("External work reported a blocker")
     reasons.extend(_issue_reason(issue) for issue in issues)
     return list(dict.fromkeys(reasons))
 
@@ -118,6 +153,8 @@ def _item(kind, record, requirement, owner_id, categories, reasons, today, *, ta
         "view": "issues" if kind == "issue" else "list",
         "requirement_id": rid,
         "detail": "tasks" if task else "details",
+        "submission_id": None,
+        "work_order_id": None,
     }
     if tid:
         target["task_id"] = tid
@@ -202,7 +239,7 @@ def _sort(item):
     )
 
 
-def build_inbox(snapshot, user, scope="mine", now=None, *, evaluated_gates=None):
+def build_inbox(snapshot, user, scope="mine", now=None, *, evaluated_gates=None, task_attention=None):
     """Project authorized current records without changing their state or evidence."""
     if scope not in {"mine", "team"}:
         raise ValueError("scope must be mine or team")
@@ -213,6 +250,7 @@ def build_inbox(snapshot, user, scope="mine", now=None, *, evaluated_gates=None)
     tasks = snapshot.get("tasks") or []
     issues = [i for i in snapshot.get("issues") or [] if i.get("status") not in RESOLVED]
     roster = snapshot.get("members") or []
+    task_attention = task_attention or {}
     requirement_by_id = {r["id"]: r for r in requirements}
     task_by_id = {t["id"]: t for t in tasks}
     mine_requirements = {r["id"] for r in requirements if _owned(_flow(r)["owner_id"], roster, user_id)}
@@ -221,11 +259,16 @@ def build_inbox(snapshot, user, scope="mine", now=None, *, evaluated_gates=None)
         for t in tasks
         if t.get("owner_active", True) is not False and _owned(t.get("owner_id"), roster, user_id)
     }
+    actor_tasks = {
+        task_id for task_id, attention in task_attention.items()
+        if attention.get("delivery_actor_id")
+        and _owned("user:" + attention["delivery_actor_id"], roster, user_id)
+    }
     issues_by_task = defaultdict(list)
     for issue in issues:
         issues_by_task[issue.get("task_id")].append(issue)
     task_reasons = {
-        t["id"]: _task_reasons(t, requirement_by_id.get(t.get("req_id")), issues_by_task[t["id"]])
+        t["id"]: _task_reasons(t, requirement_by_id.get(t.get("req_id")), issues_by_task[t["id"]], task_attention.get(t["id"]))
         for t in tasks
     }
     reasons_by_requirement = _requirement_reasons(requirements, tasks, task_reasons)
@@ -245,10 +288,12 @@ def build_inbox(snapshot, user, scope="mine", now=None, *, evaluated_gates=None)
             scope,
             can_approve,
             today,
+            task_attention,
+            actor_tasks,
         )
     )
     items.extend(
-        _issue_items(issues, task_by_id, requirement_by_id, mine_tasks, mine_requirements, scope, today)
+        _issue_items(issues, task_by_id, requirement_by_id, mine_tasks | actor_tasks, mine_requirements, scope, today)
     )
     items.sort(key=_sort)
     counts = {category: sum(category in item["categories"] for item in items) for category in CATEGORIES}
@@ -275,46 +320,51 @@ def _requirement_reasons(requirements, tasks, task_reasons):
     return result
 
 
-def _task_items(snapshot, tasks, requirements, reasons, mine, mine_requirements, scope, can_approve, today):
+def _task_items(snapshot, tasks, requirements, reasons, mine, mine_requirements, scope, can_approve, today, task_attention, actor_tasks):
     entries = snapshot.get("executions") or []
     by_id = {e["id"]: e for e in entries}
     latest = {e.get("task_id"): e for e in entries}
     result = []
     for task in tasks:
         requirement = requirements.get(task.get("req_id"))
-        native = _awaiting(task, requirement, by_id.get(task.get("execution_id")), latest)
+        attention = task_attention.get(task["id"], {})
+        active_order = attention.get("work_order_active", False)
+        current_submission = attention.get("current_submission_id")
+        external = attention.get("submission_pending", False)
+        native = (not active_order and not current_submission and attention.get("native_eligible", True)
+            and _awaiting(task, requirement, by_id.get(task.get("execution_id")), latest))
         manual = (
-            task["id"] not in latest
+            not active_order and not current_submission and attention.get("manual_eligible", True)
+            and task["id"] not in latest
             and task.get("recorded_status", task.get("status")) == "completed"
             and task.get("verified") is not True
         )
-        awaiting = native or manual
+        awaiting = external or native or manual
         personal = task["id"] in mine
         categories = set()
         if awaiting and (
             scope == "team" or personal or task.get("req_id") in mine_requirements or can_approve
         ):
             categories.add("acceptance")
-        if scope == "team" or personal:
-            if not awaiting and task.get("status") not in FINISHED:
+        if scope == "team" or personal or task["id"] in actor_tasks:
+            recorded_needs_action = task.get("recorded_status", task.get("status")) == "completed" and task.get("verified") is not True
+            if not awaiting and (active_order or task.get("status") not in FINISHED or recorded_needs_action):
                 categories.add("work")
             if reasons[task["id"]]:
                 categories.add("blocked")
         if categories:
-            result.append(
-                _item(
-                    "task",
-                    task,
-                    requirement,
-                    task.get("owner_id"),
-                    categories,
-                    reasons[task["id"]],
-                    today,
-                    task=task,
-                    status="recorded_completed" if manual else "awaiting_review" if native else None,
-                    acceptance_kind="manual" if manual else "execution" if native else None,
-                )
+            status = (attention.get("delivery_status") if active_order or current_submission else
+                "recorded_completed" if manual else "awaiting_review" if native else None)
+            item = _item(
+                "task", task, requirement, task.get("owner_id"), categories,
+                reasons[task["id"]], today, task=task, status=status,
+                acceptance_kind="external" if external else "manual" if manual else "execution" if native else None,
             )
+            if active_order:
+                item["target"]["work_order_id"] = attention.get("work_order_id")
+            elif current_submission:
+                item["target"]["submission_id"] = current_submission
+            result.append(item)
     return result
 
 

@@ -58,6 +58,23 @@ def test_inbox_defaults_to_the_first_twenty_items_without_loading_more_pages():
     assert dict(seen[0].url.params) == {"scope": "mine", "category": "all", "limit": "20"}
 
 
+@pytest.mark.parametrize("category,kind,selection", [
+    ("acceptance", "external", {"submission_id": "S-fixed", "work_order_id": None}),
+    ("blocked", None, {"submission_id": None, "work_order_id": "W-held"}),
+])
+def test_external_attention_preserves_exact_targets_without_opening_protected_originals(category, kind, selection):
+    seen = []
+    item = {"id": "task:T", "kind": "task", "resource_id": "T", "acceptance_kind": kind,
+            "categories": [category], "target": {"view": "list", "requirement_id": "R", "detail": "tasks", "task_id": "T", **selection}}
+    expected = {"project_id": "selected", "scope": "mine", "category": category, "items": [item],
+                "total": 1, "limit": 20, "has_more": False, "next_cursor": None}
+    with attention_client(lambda request: seen.append(request) or httpx.Response(200, json=expected)) as client:
+        assert client.delivery_inbox(category=category) == expected
+    assert len(seen) == 1 and seen[0].method == "GET"
+    assert seen[0].url.path == "/api/v1/delivery/inbox"
+    assert seen[0].headers["X-Project-Id"] == "selected"
+
+
 @pytest.mark.parametrize(
     "options",
     [

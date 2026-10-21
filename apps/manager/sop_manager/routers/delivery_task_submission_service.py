@@ -411,7 +411,7 @@ def load_latest_submissions(db, project, task_ids, *, input_budget=None):
     if not ids:
         return {}
     latest = select(func.max(Submission.seq).label("seq")).where(*_scope(project, Submission), Submission.task_id.in_(ids)).group_by(Submission.task_id).subquery()
-    columns = (Submission.id, Submission.task_id, Submission.submission_digest, Submission.definition_digest, Submission.native_boundary,
+    columns = (Submission.id, Submission.task_id, Submission.submitted_by, Submission.submission_digest, Submission.definition_digest, Submission.native_boundary,
                Submission.invalidated, Decision.id.label("decision_id"))
     query = select(*columns).join(latest, Submission.seq == latest.c.seq).outerjoin(Decision, Decision.submission_id == Submission.id)
     if input_budget is not None:

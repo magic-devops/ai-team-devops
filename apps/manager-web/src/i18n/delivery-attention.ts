@@ -1,8 +1,10 @@
 const zh = {
   manualAcceptance: "待人工验收",
   executionAcceptance: "执行结果待验收",
+  externalAcceptance: "外部交付报告待人工验收",
   openManualAcceptance: "打开人工验收",
   openExecutionAcceptance: "审查执行结果",
+  openExternalAcceptance: "审查外部交付报告",
   pageCount: "第 {{page}} 页 · 当前筛选共 {{total}} 项",
   firstPage: "刷新首屏",
   nextPage: "下一页",
@@ -14,8 +16,10 @@ const zh = {
 const en = {
   manualAcceptance: "Awaiting manual acceptance",
   executionAcceptance: "Execution awaiting acceptance",
+  externalAcceptance: "External delivery awaiting human acceptance",
   openManualAcceptance: "Open manual acceptance",
   openExecutionAcceptance: "Review execution result",
+  openExternalAcceptance: "Review external delivery report",
   pageCount: "Page {{page}} · {{total}} matching items",
   firstPage: "Refresh first page",
   nextPage: "Next page",
@@ -27,8 +31,10 @@ const en = {
 const ja = {
   manualAcceptance: "手動検収待ち",
   executionAcceptance: "実行結果の検収待ち",
+  externalAcceptance: "外部成果報告の受入確認待ち",
   openManualAcceptance: "手動検収を開く",
   openExecutionAcceptance: "実行結果を確認",
+  openExternalAcceptance: "外部成果報告を確認",
   pageCount: "{{page}} ページ · 条件に一致する {{total}} 件",
   firstPage: "先頭ページを更新",
   nextPage: "次のページ",

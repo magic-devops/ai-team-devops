@@ -466,7 +466,8 @@ def test_external_progress_reader_uses_one_scoped_thin_sql_projection_without_lo
             activity = active_activity(db, project, [task["id"], "unrelated-task"])
         finally:
             event.remove(engine, "before_cursor_execute", capture)
-        assert activity == {task["id"]: {"state": "claimed", "reported_status": "blocked"}}
+        assert activity == {task["id"]: {"state": "claimed", "reported_status": "blocked",
+            "id": order["work_order_id"], "claimant_id": "lead"}}
         assert len(statements) == 1
         query = statements[0].lower()
         assert "tenant_id" in query and "project_id" in query and "active_task_id" in query

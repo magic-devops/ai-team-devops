@@ -1,11 +1,12 @@
 /** Actual page callbacks and persistent/session-bound consumer definitions; not executed in this stage. */
 import { isValidElement, type ReactNode } from "react";
-import { Button, Checkbox, Input, Modal, Select } from "antd";
+import { Button, Checkbox, Input, Modal, Select, Table, Tag } from "antd";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { request } from "./http";
 import { setSession, USER_KEY } from "./authStorage";
 import { externalWorkOrderCopy } from "../i18n/external-work-orders";
 import { ExternalWorkOrderPanel, WorkOrderFacts } from "../components/ExternalWorkOrderPanel";
+import { WorkOrderStatusBadges, WorkOrderReportedProgress } from "../components/ExternalWorkOrderPresentation";
 import { ActivitySourceLinks } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryActivityFeed";
 import { parseExternalWorkOrderRoute } from "./externalWorkOrderRoute";
 import { ProjectWorkOrders } from "../../subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench";
@@ -22,7 +23,7 @@ vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "zh-CN" } }) }));
 vi.mock("./http", async () => ({ ...await vi.importActual<typeof import("./http")>("./http"), request: vi.fn() }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }), useQuery: (options: any) => {
-  h.queries.push(options); const key = options.queryKey[0], data = key === "delivery-task-detail" ? h.taskData : key === "delivery-work-order-current" ? h.current : key === "delivery-work-order-exact" ? h.detail : key === "delivery-work-order-report-current" ? h.reportCurrent : key === "delivery-work-order-report-choice" ? h.reportDetail : key === "delivery-work-orders" ? { ...h.current, items: [h.detail.work_order], total: 1, limit: 20, next_cursor: null } : undefined;
+  h.queries.push(options); const key = options.queryKey[0], data = key === "delivery-task-detail" ? h.taskData : key === "delivery-work-order-current" ? h.current : key === "delivery-work-order-exact" ? h.detail : key === "delivery-work-order-report-current" ? h.reportCurrent : key === "delivery-work-order-report-choice" ? h.reportDetail : ["delivery-work-orders", "delivery-work-orders-directory"].includes(key) ? { ...h.current, items: [h.detail.work_order], total: 1, limit: 20, next_cursor: null } : undefined;
   const error = key === "delivery-work-order-current" ? h.currentError : key === "delivery-work-orders-directory" ? h.directoryError : null;
   return { data, error, isError: Boolean(error), isPending: !data, isFetching: false, refetch: vi.fn(async () => ({ data, isError: Boolean(error) })) };
 } }));
@@ -121,8 +122,8 @@ it("still prepares an explicit queued cancellation from exact detail when curren
   expect(button(panel(), copy.confirm)).toBeDefined(); expect(h.sent).toHaveLength(0);
 });
 it("labels reported progress, pending cancellation and accepted human review as separate facts", () => {
-  const order = { ...h.detail.work_order, state: "reported", claimed_by: { id: "U", name: "Claimant" }, progress: { percent: null, status: "running", message: "Actual message", source: "external_reported", reported_at: now }, delivery_state: "accepted" };
-  const tree = frame("facts", () => WorkOrderFacts({ order })); expect(JSON.stringify(tree)).toContain(copy.noProgress); expect(JSON.stringify(tree)).toContain(copy.deliveryStates.accepted); expect(JSON.stringify(tree)).not.toContain("50%");
+  const order = { ...h.detail.work_order, state: "reported", claimed_by: { id: "U", name: "Claimant" }, progress: { percent: null, status: "running", message: "Actual message", source: "external_reported", reported_at: now }, submission: { id: "S", digest }, delivery_state: "accepted" };
+  const tree = frame("facts", () => WorkOrderFacts({ order })); expect(JSON.stringify(tree)).toContain(copy.percentUnknown); expect(JSON.stringify(tree)).toContain(copy.deliveryStates.accepted); expect(JSON.stringify(tree)).not.toContain("50%");
 });
 it("uses the actual activity source consumer to link W with its real related Task, independently of ref order", () => {
   const w = { kind: "work_order" as const, id: "W", label: "Actual work", available: true, reason: null }, task = { kind: "task" as const, id: "T", label: "Actual task", available: true, reason: null };
@@ -142,6 +143,72 @@ it("renders the preserved safe portfolio return as an actual guarded header acti
   expect(action.href).toBe(portfolio); expect(action.disabled).toBe(false); action.onClick(event); expect(event.preventDefault).not.toHaveBeenCalled();
   h.canWrite = false;
   setSession("other-fixture-token", "AnotherProject", "tenant"); action.onClick(event); expect(event.preventDefault).toHaveBeenCalledTimes(1);
+});
+it("uses the same actual directory status and progress components on desktop and narrow screens without treating 100 percent as acceptance", () => {
+  location.hash = "#/ecosystem/a2a/dispatch?project_id=P";
+  const order = h.detail.work_order;
+  order.state = "claimed"; order.progress = { percent: 100, status: "blocked", message: "Review found a real failing check", source: "external_reported", reported_at: now };
+  const tree = workbench(), table = find(tree, Table);
+  const status = table.columns.find((column: any) => column.key === "state").render(null, order);
+  const progress = table.columns.find((column: any) => column.key === "progress").render(null, order);
+  expect(status.type).toBe(WorkOrderStatusBadges); expect(progress.type).toBe(WorkOrderReportedProgress);
+  expect(find(tree, WorkOrderStatusBadges).order).toBe(order); expect(find(tree, WorkOrderReportedProgress).order).toBe(order);
+  const badges = WorkOrderStatusBadges(status.props), reported = WorkOrderReportedProgress(progress.props);
+  expect(JSON.stringify(reported)).toContain(copy.blockedProgress); expect(JSON.stringify(reported)).toContain("100%"); expect(JSON.stringify(reported)).toContain(order.progress.message);
+  expect(JSON.stringify(badges)).not.toContain(copy.deliveryStates.accepted);
+  expect(nodes(badges).filter((node) => node.type === Tag && node.props.color === "success")).toHaveLength(0);
+});
+it("distinguishes a reported unknown percentage from no report and keeps invalidation visible on narrow screens", () => {
+  location.hash = "#/ecosystem/a2a/dispatch?project_id=P";
+  h.detail.work_order.invalidated = true;
+  h.detail.work_order.progress = { percent: null, status: "running", message: "Still checking the logs", source: "external_reported", reported_at: now };
+  const tree = workbench(), progress = WorkOrderReportedProgress(find(tree, WorkOrderReportedProgress));
+  expect(JSON.stringify(progress)).toContain(copy.percentUnknown); expect(JSON.stringify(progress)).not.toContain(copy.noProgress);
+  expect(JSON.stringify(WorkOrderStatusBadges(find(tree, WorkOrderStatusBadges)))).toContain(copy.states.stale);
+  h.detail.work_order.progress = null;
+  expect(JSON.stringify(WorkOrderReportedProgress(find(workbench(), WorkOrderReportedProgress)))).toContain(copy.noProgress);
+});
+it.each(["running", "blocked"])("shows a closed work order's last %s report as history and offers only its original detail", (status) => {
+  location.hash = "#/ecosystem/a2a/dispatch?project_id=P";
+  const order = h.detail.work_order;
+  order.state = "closed"; order.claimed_by = { id: "U", name: "Claimant" }; order.claimed_at = now;
+  order.progress = { percent: 100, status, message: "Last report before the external work stopped", source: "external_reported", reported_at: now };
+  order.closure = { kind: "external_reported_stop", actor: { id: "U", name: "Claimant" }, comment: "External work stopped", at: now };
+  const tree = workbench(), table = find(tree, Table), action = table.columns.find((column: any) => column.key === "actions").render(null, order);
+  expect(action.props.children).toBe(copy.openOrder); expect(action.props.children).not.toBe(copy.openBlockedOrder);
+  const progress = WorkOrderReportedProgress(find(tree, WorkOrderReportedProgress));
+  expect(JSON.stringify(progress)).toContain(copy.observed); expect(find(progress, "time").dateTime).toBe(now);
+  expect(JSON.stringify(WorkOrderStatusBadges(find(tree, WorkOrderStatusBadges)))).not.toContain(copy.deliveryStates.accepted);
+});
+it.each([
+  ["awaiting_review", "openReport"], ["changes_requested", "openChanges"], ["accepted", "openAcceptanceRecord"], ["invalidated", "openReport"],
+])("opens the precise existing S directly from both directory actions for %s and preserves the current page", (state, label) => {
+  location.hash = "#/ecosystem/a2a/evidence?project_id=P&cursor=current-page";
+  const background = location.hash, order = h.detail.work_order;
+  order.state = "reported"; order.submission = { id: "S", digest }; order.delivery_state = state;
+  const tree = workbench(), table = find(tree, Table), desktop = table.columns.find((column: any) => column.key === "actions").render(null, order);
+  const mobile = find(tree, Button, (props) => props["data-action"] === "work-order-next");
+  expect(desktop.props.children).toBe(copy[label as keyof typeof copy]); expect(mobile.children).toBe(desktop.props.children); expect(mobile.href).toBe(desktop.props.href);
+  const params = new URLSearchParams(mobile.href.split("?")[1]);
+  expect(mobile.href.split("?")[0]).toBe("#/tasks/execution"); expect(params.get("project_id")).toBe("P"); expect(params.get("task_id")).toBe("T"); expect(params.get("work_order_id")).toBe("W"); expect(params.get("submission_id")).toBe("S"); expect(params.get("return_to")).toBe(background);
+  expect(JSON.stringify(WorkOrderStatusBadges(find(tree, WorkOrderStatusBadges)))).toContain(copy.deliveryStates[state as keyof typeof copy.deliveryStates]);
+  const event = { preventDefault: vi.fn() }; mobile.onClick(event); expect(event.preventDefault).not.toHaveBeenCalled();
+  setSession("other-fixture-token", "AnotherProject", "tenant"); mobile.onClick(event); expect(event.preventDefault).toHaveBeenCalledOnce(); expect(location.hash).toBe(background);
+});
+it("opens the exact W for an unlinked blocker and keeps the existing draft exit guard on a captured report link", () => {
+  location.hash = "#/ecosystem/a2a/dispatch?project_id=P&status=claimed&cursor=current-page";
+  h.detail.work_order.state = "claimed"; h.detail.work_order.progress = { percent: null, status: "blocked", message: "Need access", source: "external_reported", reported_at: now };
+  const action = find(workbench(), Button, (props) => props["data-action"] === "work-order-next");
+  expect(action.children).toBe(copy.openBlockedOrder); expect(action.href).toBeUndefined(); action.onClick();
+  expect(parseExternalWorkOrderRoute(location.hash)).toMatchObject({ projectId: "P", taskId: "T", workOrderId: "W", invalid: false });
+  location.hash = "#/ecosystem/a2a/dispatch?project_id=P"; h.frames = {};
+  h.detail.work_order.state = "reported"; h.detail.work_order.submission = { id: "S", digest }; h.detail.work_order.delivery_state = "awaiting_review";
+  const captured = find(workbench(), Button, (props) => props["data-action"] === "work-order-next"), event = { preventDefault: vi.fn() };
+  location.hash = "#/ecosystem/a2a/dispatch?project_id=P&task_id=T&work_order_id=W";
+  find(workbench(), ExternalWorkOrderPanel).onEditingChange(true);
+  captured.onClick(event); expect(event.preventDefault).toHaveBeenCalledOnce();
+  find(workbench(), ExternalWorkOrderPanel).onEditingChange(false);
+  captured.onClick(event); expect(event.preventDefault).toHaveBeenCalledTimes(1);
 });
 it("protects the actual standalone draft from view and portfolio navigation until its close callback clears the draft slot", () => {
   location.hash = "#/ecosystem/a2a/dispatch?project_id=P&task_id=T&work_order_id=W&return_to=%23%2Fprojects%2Fportfolio";

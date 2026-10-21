@@ -1,14 +1,15 @@
 import { useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, Empty, Input, Select, Space, Table, Tag } from "antd";
+import { Alert, Button, Empty, Input, Select, Space, Table } from "antd";
 import { useTranslation } from "react-i18next";
 import { getProjectId, getSessionRevision } from "@/lib/authStorage";
 import { ProjectContextGate } from "@/components/ProjectContextGate";
 import { ExternalWorkOrderPanel } from "@/components/ExternalWorkOrderPanel";
+import { WorkOrderReportedProgress, WorkOrderStatusBadges, workOrderNextAction } from "@/components/ExternalWorkOrderPresentation";
 import { externalWorkOrderCopy, externalWorkOrderReason } from "@/i18n/external-work-orders";
 import { executionRuntimeProblem } from "@/lib/executionRuntime";
 import { projectSessionKey } from "@/lib/projectPortfolio";
-import { externalWorkOrderHref, parseExternalWorkOrderRoute, type ExternalWorkOrderRoute } from "@/lib/externalWorkOrderRoute";
+import { externalWorkOrderHref, externalWorkOrderTaskHref, parseExternalWorkOrderRoute, type ExternalWorkOrderRoute } from "@/lib/externalWorkOrderRoute";
 import { readWorkOrders, readWorkOrderTasks, workOrderStates, type WorkOrderSummary } from "@/lib/externalWorkOrders";
 import { useExecutionExitGuard } from "@/lib/executionExitGuard";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
@@ -40,6 +41,12 @@ export function ProjectWorkOrders() {
   const errorText = (cause: unknown) => { const value = executionRuntimeProblem(cause); return value.message === "workOrderInvalid" ? copy.responseInvalid : value.message === "workOrderScopeChanged" ? copy.scopeChanged : value.code ? externalWorkOrderReason(i18n.language, value) : value.message || copy.readFailed; };
   const failure = (cause: unknown, refresh: () => unknown) => <Alert role="alert" type="warning" showIcon title={copy.readFailed} description={errorText(cause)} action={<Button onClick={() => { if (active()) void refresh(); }}>{copy.refresh}</Button>} />;
   const openOrder = (order: WorkOrderSummary) => go({ view: route.view === "reports" ? "reports" : "orders", taskId: order.task_id, workOrderId: order.id, cursor: "" });
+  const nextAction = (order: WorkOrderSummary) => {
+    const action = workOrderNextAction(order, i18n.language);
+    return action.kind === "report" && order.submission
+      ? <Button size="small" data-action="work-order-next" aria-label={`${action.label} · ${order.task_title}`} disabled={exit.pending} href={externalWorkOrderTaskHref(projectId, order.task_id, order.id, order.submission.id, location.hash)} onClick={(event) => { if (!active() || !exit.canNavigate()) event.preventDefault(); }}>{action.label}</Button>
+      : <Button size="small" data-action="work-order-next" aria-label={`${action.label} · ${order.task_title}`} disabled={exit.pending} onClick={() => openOrder(order)}>{action.label}</Button>;
+  };
   const rows = !orders.error && active() && orders.data?.project_id === projectId ? orders.data.items : [];
   if (!ready) return <Alert role="alert" type="warning" showIcon title={copy.scopeChanged} />;
   return <div className="w-full space-y-4">
@@ -63,15 +70,16 @@ export function ProjectWorkOrders() {
       </div>
     </WorkbenchPanel> : <WorkbenchPanel title={route.view === "reports" ? copy.openReport : copy.history} actions={<Space wrap>{route.view !== "reports" && <Select aria-label={copy.status} value={route.status} className="min-w-48" options={[{ value: "", label: copy.all }, ...workOrderStates.map((state) => ({ value: state, label: label(state) }))]} onChange={(status) => go({ status, cursor: "" })} />}<Button loading={orders.isFetching} onClick={() => { if (active()) void orders.refetch(); }}>{copy.refresh}</Button></Space>}>
       {orders.error ? <div className="space-y-2">{failure(orders.error, orders.refetch)}{route.cursor && <Button onClick={() => go({ cursor: "" })}>{copy.first}</Button>}</div> : <>
-        <Table<WorkOrderSummary> className="hidden md:block" rowKey="id" size="small" dataSource={rows} loading={orders.isFetching} pagination={false} scroll={{ x: 860 }} columns={[
+        <p className="mb-3 text-xs text-[var(--muted)]">{copy.directoryHint}</p>
+        <Table<WorkOrderSummary> className="hidden md:block" rowKey="id" size="small" dataSource={rows} loading={orders.isFetching} pagination={false} scroll={{ x: 1040 }} columns={[
           { title: copy.task, key: "task", render: (_value, order) => <Button type="link" size="small" onClick={() => openOrder(order)}>{order.task_title}</Button> },
           { title: copy.member, key: "executor", render: (_value, order) => <span>{order.executor.name}<small className="block text-[var(--muted)]">{order.executor.tool}</small></span> },
-          { title: copy.status, key: "state", render: (_value, order) => <Space wrap><Tag>{label(order.state)}</Tag>{order.invalidated && <Tag color="warning">{copy.states.stale}</Tag>}</Space> },
+          { title: copy.status, key: "state", width: 220, render: (_value, order) => <WorkOrderStatusBadges order={order} /> },
           { title: copy.claimedBy, key: "claimant", render: (_value, order) => order.claimed_by?.name || "—" },
-          { title: copy.progress, key: "progress", render: (_value, order) => order.progress?.percent == null ? copy.noProgress : `${order.progress.percent}%` },
-          { title: copy.nextAction, key: "actions", render: (_value, order) => <Button size="small" onClick={() => openOrder(order)}>{order.submission ? copy.openReport : copy.order}</Button> },
+          { title: copy.progress, key: "progress", width: 240, render: (_value, order) => <WorkOrderReportedProgress order={order} /> },
+          { title: copy.nextAction, key: "actions", render: (_value, order) => nextAction(order) },
         ]} locale={{ emptyText: copy.empty }} />
-        <div className="space-y-2 md:hidden">{rows.map((order) => <article key={order.id} className="space-y-2 rounded-lg border border-[var(--border)] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{order.task_title}</strong><Tag>{label(order.state)}</Tag></div><p className="text-sm">{order.executor.name} · {order.claimed_by?.name || copy.states.queued}</p><p className="text-xs text-[var(--muted)]">{order.progress?.percent == null ? copy.noProgress : `${order.progress.percent}%`}</p><Button size="small" onClick={() => openOrder(order)}>{order.submission ? copy.openReport : copy.order}</Button></article>)}{!rows.length && !orders.isFetching && <Empty description={copy.empty}><p>{copy.emptyHint}</p></Empty>}</div>
+        <div className="space-y-2 md:hidden">{rows.map((order) => <article key={order.id} className="space-y-3 rounded-lg border border-[var(--border)] p-3"><div><Button type="link" size="small" className="!h-auto !whitespace-normal !px-0 text-left" onClick={() => openOrder(order)}>{order.task_title}</Button><div className="mt-1"><WorkOrderStatusBadges order={order} /></div></div><p className="text-sm">{order.executor.name}<small className="block text-[var(--muted)]">{copy.claimedBy}: {order.claimed_by?.name || "—"}</small></p><WorkOrderReportedProgress order={order} />{nextAction(order)}</article>)}{!rows.length && !orders.isFetching && <Empty description={copy.empty}><p>{copy.emptyHint}</p></Empty>}</div>
         <div className="mt-3 flex flex-wrap justify-between gap-2 text-sm"><span>{orders.data ? `${copy.history} · ${orders.data.total}` : copy.loading}</span><Space wrap>{route.cursor && <Button onClick={() => go({ cursor: "" })}>{copy.first}</Button>}{orders.data?.next_cursor && <Button disabled={orders.isFetching} onClick={() => go({ cursor: orders.data!.next_cursor! })}>{copy.next}</Button>}</Space></div>
       </>}
     </WorkbenchPanel>}

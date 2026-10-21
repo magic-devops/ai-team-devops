@@ -4,6 +4,7 @@ export function deliveryBlocker(
   translate: (key: string, values?: Record<string, string>) => string,
 ) {
   if (reason === "Task is blocked") return translate("task");
+  if (reason === "External work reported a blocker") return translate("externalWorkOrder");
   const dependency = /^Dependency not complete: (.+)$/.exec(reason);
   if (dependency) return translate("dependency", { id: dependency[1] });
   const issue = /^Unresolved issue (\S+): ([\s\S]*)$/.exec(reason);

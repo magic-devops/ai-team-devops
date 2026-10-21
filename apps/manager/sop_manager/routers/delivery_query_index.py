@@ -9,7 +9,7 @@ from .delivery_progress_facts import metrics
 from .delivery_scheduling import planning_basis
 from .sql_models import DeliveryQueryFact, DeliveryQueryState, DeliveryWorkspace
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 FLOW_FIELDS = (
     "stage",
     "revision",
@@ -233,11 +233,12 @@ def _reference_facts(project, evaluation):
 
 
 def _inbox_facts(project, evaluation):
-    from .delivery_inbox import build_inbox
+    from .delivery_inbox import build_inbox, derive_task_attention
 
     snapshot = evaluation.snapshot
     roster = {member["id"]: member for member in snapshot["members"]}
     requirements = {row["id"]: row for row in snapshot["requirements"]}
+    task_attention = derive_task_attention(evaluation.verification)
 
     def human_owner(owner_id):
         member = roster.get(owner_id)
@@ -246,13 +247,14 @@ def _inbox_facts(project, evaluation):
     rows = []
     # Team facts contain every category. Current reader permissions are applied in SQL.
     evaluated_gates = {row["id"]: row["flow"]["gates"] for row in snapshot["requirements"]}
-    for item in build_inbox(snapshot, {"id": ""}, scope="team", evaluated_gates=evaluated_gates)["items"]:
+    for item in build_inbox(snapshot, {"id": ""}, scope="team", evaluated_gates=evaluated_gates, task_attention=task_attention)["items"]:
         requirement = requirements.get(item["requirement_id"])
         requirement_owner = (requirement or {}).get("flow", {}).get("owner_id", "")
         data = {
             "item": item,
             "mine_owner_id": human_owner(item["owner_id"]),
             "mine_requirement_owner_id": human_owner(requirement_owner),
+            "mine_delivery_actor_id": human_owner("user:" + actor) if (actor := task_attention.get(item["task_id"], {}).get("delivery_actor_id")) else "",
             "priority_rank": {"P0": "0", "P1": "1", "P2": "2", "P3": "3"}.get(item["priority"], "4"),
             **{category: category in item["categories"] for category in ("work", "approval", "acceptance", "blocked")},
         }

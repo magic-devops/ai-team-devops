@@ -1080,6 +1080,15 @@ def inbox(
         categories = ", ".join(item.get("categories", []))
         status = f" · {item['status']}" if item.get("status") else ""
         console.print(f"[{categories}] {item.get('title', '')} ({item.get('resource_id', '')}){status}", markup=False)
+        acceptance = {"manual": "人工交付待验收", "execution": "执行交付待验收", "external": "外部交付待验收"}.get(item.get("acceptance_kind"))
+        if acceptance:
+            console.print(f"  {acceptance}", markup=False)
+        target = item.get("target")
+        if isinstance(target, dict):
+            refs = [f"{label} {target[key]}" for key, label in (("submission_id", "报告"), ("work_order_id", "工单"))
+                    if isinstance(target.get(key), str) and target[key]]
+            if refs:
+                console.print("  " + " · ".join(refs), markup=False)
     if not items:
         console.print("本页没有匹配事项。")
     if has_more and result.get("next_cursor"):

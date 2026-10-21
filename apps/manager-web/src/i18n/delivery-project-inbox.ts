@@ -58,6 +58,7 @@ const zh = {
   },
   blocker: {
     task: "任务已阻塞",
+    externalWorkOrder: "外部执行方已报告受阻，请打开工单处理",
     dependency: "依赖任务尚未完成：{{id}}",
     issue: "未解决问题 {{id}}：{{title}}",
   },
@@ -171,6 +172,7 @@ const en: typeof zh = {
   },
   blocker: {
     task: "Task is blocked",
+    externalWorkOrder: "The external executor reported a blocker. Open the work order to follow up.",
     dependency: "Dependency not complete: {{id}}",
     issue: "Unresolved issue {{id}}: {{title}}",
   },
@@ -282,6 +284,7 @@ const ja: typeof zh = {
   },
   blocker: {
     task: "タスクがブロックされています",
+    externalWorkOrder: "外部実行担当者から障害が報告されました。作業依頼を開いて対応してください。",
     dependency: "依存タスクが未完了：{{id}}",
     issue: "未解決の問題 {{id}}：{{title}}",
   },

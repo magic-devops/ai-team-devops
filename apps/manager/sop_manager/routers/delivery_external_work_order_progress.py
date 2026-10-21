@@ -11,11 +11,12 @@ def active_activity(db, project, task_ids):
     if not selected:
         return {}
     rows = db.execute(
-        select(Order.active_task_id, Order.state, Order.progress["status"].as_string())
+        select(Order.active_task_id, Order.state, Order.progress["status"].as_string(),
+               Order.id, Order.claimed_by["id"].as_string())
         .where(Order.tenant_id == project.tenant_id, Order.project_id == project.id,
                Order.active_task_id.in_(selected))
     )
     return {
-        task_id: {"state": state, "reported_status": status}
-        for task_id, state, status in rows
+        task_id: {"state": state, "reported_status": status, "id": identity, "claimant_id": claimant}
+        for task_id, state, status, identity, claimant in rows
     }

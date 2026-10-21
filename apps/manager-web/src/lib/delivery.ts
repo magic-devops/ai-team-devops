@@ -195,6 +195,8 @@ export type DeliveryInboxTarget = {
   detail: string;
   task_id?: string;
   issue_id?: string;
+  submission_id?: string | null;
+  work_order_id?: string | null;
 };
 export type DeliveryInboxItem = {
   id: string;
@@ -211,7 +213,7 @@ export type DeliveryInboxItem = {
   categories: ("work" | "approval" | "acceptance" | "blocked")[];
   blocked_reasons: string[];
   blocked_reason_count: number;
-  acceptance_kind: "manual" | "execution" | null;
+  acceptance_kind: "manual" | "execution" | "external" | null;
   overdue: boolean;
   target: DeliveryInboxTarget;
 };

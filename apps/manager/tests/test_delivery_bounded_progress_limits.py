@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 from sop_manager.project_write_guard import progress_snapshot_write_scope
 from sop_manager.routers import sql_models as m
+from sop_manager.routers.delivery_query_index import SCHEMA_VERSION
 from sqlalchemy import delete, event, insert, inspect, select, update
 from sqlalchemy.orm import Session
 from test_delivery_bounded_progress import seed, snapshot
@@ -149,7 +150,7 @@ def test_old_schema_requires_explicit_rebuild_but_history_is_independent_and_get
     assert client.get("/api/v1/delivery/progress/baselines/B-fixed/tasks/T-0").status_code == 200
     assert snapshot(sessions) == before
     rebuilt = client.post("/api/v1/delivery/query/rebuild")
-    assert rebuilt.status_code == 200 and rebuilt.json()["query_state"]["schema_version"] == 5
+    assert rebuilt.status_code == 200 and rebuilt.json()["query_state"]["schema_version"] == SCHEMA_VERSION
     assert client.get("/api/v1/delivery/progress/freeze-proof").json()["complete"]
 
 

@@ -3,6 +3,9 @@ import {
   type DeliveryInboxTarget,
   type DeliveryResource,
 } from "./delivery";
+import { applyTaskDeliverySelection } from "./taskDeliveryRoute";
+import { safeExecutionReturn } from "./executionCommands";
+import { safePortfolioReturn } from "./projectPortfolioRoute";
 
 export const deliveryViews = [
   "overview",
@@ -114,13 +117,14 @@ export function normalizeInboxTarget(
   target: DeliveryInboxTarget,
 ): DeliveryInboxTarget {
   return target.view === "issues" && target.issue_id
-    ? { ...target, requirement_id: "", task_id: "", detail: "details" }
+    ? { ...target, requirement_id: "", task_id: "", detail: "details", submission_id: null, work_order_id: null }
     : target;
 }
 export function deliveryInboxHash(
   target: DeliveryInboxTarget,
   filters: Partial<DeliveryRoute> = {},
   source = "",
+  projectId = "",
 ) {
   target = normalizeInboxTarget(target);
   const params = new URLSearchParams(source.split("?")[1]);
@@ -157,10 +161,10 @@ export function deliveryInboxHash(
       if (key.startsWith("discussion_")) params.delete(key);
   }
   params.set("view", target.view);
-  for (const key of ["requirement", "detail", "task", "issue"])
+  for (const key of ["requirement", "detail", "task", "task_id", "issue"])
     params.delete(key);
   if (target.requirement_id) params.set("requirement", target.requirement_id);
-  if (target.requirement_id) params.set("detail", target.detail);
+  if (target.requirement_id || target.task_id) params.set("detail", target.detail);
   if (target.task_id) params.set("task", target.task_id);
   if (target.issue_id) params.set("issue", target.issue_id);
   if (filters.inboxScope) params.set("inbox_scope", filters.inboxScope);
@@ -190,16 +194,39 @@ export function deliveryInboxHash(
         ? params.set(key, String(filters[field]))
         : params.delete(key);
   }
-  return `#/dev-flow?${params}`;
+  if (projectId) params.set("project_id", projectId);
+  return applyTaskDeliverySelection(`#/dev-flow?${params}`, source, target);
 }
 export function deliveryInboxHref(
   target: DeliveryInboxTarget,
   filters: Partial<DeliveryRoute> = {},
+  source = "",
+  projectId = "",
 ) {
   target = normalizeInboxTarget(target);
-  return target.task_id && !target.requirement_id
-    ? `#/tasks/execution?task_id=${encodeURIComponent(target.task_id)}`
-    : deliveryInboxHash(target, filters);
+  const hash = deliveryInboxHash(target, filters, source, projectId);
+  if (!target.task_id || target.requirement_id) return hash;
+  const selected = new URLSearchParams(hash.split("?")[1]);
+  const params = new URLSearchParams({ task_id: target.task_id });
+  for (const key of ["project_id", "submission_id", "work_order_id", "delivery_report"]) {
+    const value = selected.get(key);
+    if (value) params.set(key, value);
+  }
+  const [path, query] = source.split("?"), background = new URLSearchParams(query);
+  const sameProject = background.getAll("project_id").length <= 1 &&
+    (!background.has("project_id") || background.get("project_id") === params.get("project_id"));
+  if (sameProject && params.has("project_id")) {
+    if (path === "#/dev-flow" && background.get("view") === "inbox") {
+      background.set("project_id", params.get("project_id")!);
+      for (const key of ["submission_id", "work_order_id", "delivery_report", "task", "task_id", "requirement", "detail"]) background.delete(key);
+      const back = safeExecutionReturn(`${path}?${background}`);
+      if (back) params.set("return_to", back);
+    } else {
+      const back = safePortfolioReturn(background.get("return_to") || "");
+      if (back) params.set("return_to", back);
+    }
+  }
+  return `#/tasks/execution?${params}`;
 }
 export function filterDeliveryInbox<
   T extends { categories: string[]; overdue: boolean },

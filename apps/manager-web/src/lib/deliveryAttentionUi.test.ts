@@ -232,6 +232,23 @@ describe("delivery attention interactions", () => {
     alert.props.action.props.onClick();
     expect(input.onFirstPage).toHaveBeenCalledOnce();
   });
+  it("labels external acceptance separately and dispatches the exact report and work-order target unchanged", () => {
+    const input = props();
+    const target = { view: "list", requirement_id: "R", detail: "tasks", task_id: "T-external", submission_id: "S-external", work_order_id: "W-external" };
+    input.data.items = [{ ...input.data.items[1], id: "external", resource_id: "T-external", title: "External report ready for human review", task_id: "T-external", acceptance_kind: "external", target }];
+    const html = renderToStaticMarkup(createElement(DeliveryInbox, input));
+    expect(html).toContain("deliveryAttention.externalAcceptance"); expect(html).not.toContain("deliveryAttention.executionAcceptance");
+    const action = controls(DeliveryInbox(input)).find((node) => node.props.children === "deliveryAttention.openExternalAcceptance");
+    expect(action).toBeDefined(); action.props.onClick(); expect(input.onOpen).toHaveBeenCalledWith(target);
+  });
+  it("translates the external blocker projection and keeps the existing exact W action without implying acceptance", () => {
+    const input = props(); input.category = "blocked";
+    const target = { view: "list", requirement_id: "R", detail: "tasks", task_id: "T-external", submission_id: null, work_order_id: "W-external" };
+    input.data.items = [{ ...input.data.items[1], id: "external", resource_id: "T-external", title: "Claimant reported a blocker", task_id: "T-external", status: "blocked", acceptance_kind: null, categories: ["blocked"], blocked_reason_count: 1, blocked_reasons: ["External work reported a blocker"], target }];
+    const html = renderToStaticMarkup(createElement(DeliveryInbox, input));
+    expect(html).toContain("deliveryProject.blocker.externalWorkOrder"); expect(html).not.toContain("External work reported a blocker"); expect(html).not.toContain("deliveryAttention.externalAcceptance");
+    controls(DeliveryInbox(input)).find((node) => node.props.children === "deliveryProject.open").props.onClick(); expect(input.onOpen).toHaveBeenCalledWith(target);
+  });
   it("keeps requirement items usable when no task navigation is pending", () => {
     const input = props();
     input.navigationBusy = "";
@@ -387,7 +404,7 @@ describe("delivery attention interactions", () => {
     unsubscribe();
     client.clear();
   });
-  it("keeps manual and execution acceptance and pagination recovery translated in all three languages", () => {
+  it("keeps manual, native and external acceptance and pagination recovery translated in all three languages", () => {
     for (const translation of Object.values(deliveryAttentionTranslations)) {
       expect(translation.manualAcceptance).not.toBe(
         translation.executionAcceptance,
@@ -395,6 +412,8 @@ describe("delivery attention interactions", () => {
       expect(translation.openManualAcceptance).not.toBe(
         translation.openExecutionAcceptance,
       );
+      expect(translation.externalAcceptance).toBeTruthy(); expect(translation.externalAcceptance).not.toBe(translation.executionAcceptance);
+      expect(translation.openExternalAcceptance).toBeTruthy(); expect(translation.openExternalAcceptance).not.toBe(translation.openExecutionAcceptance);
       expect(translation.pageCount).toContain("{{page}}");
       expect(translation.pageCount).toContain("{{total}}");
       expect(translation.changed).toBeTruthy();
@@ -445,6 +464,16 @@ describe("delivery attention interactions", () => {
     await render().retry();
     expect(onOpen).toHaveBeenCalledWith({ ...original, requirement_id: "" });
   });
+  it("keeps exact external S and W selections when the actual inbox locator refreshes the task's requirement", async () => {
+    const onOpen = vi.fn();
+    const input = { projectId: "P", sessionId: "S", view: "inbox", scope: "team", category: "acceptance", cursor: "", canNavigate: () => true, onOpen };
+    state.next = 0;
+    const navigation = useDeliveryInboxNavigation(input);
+    const target = { view: "list", requirement_id: "old-R", detail: "tasks", task_id: "T-external", submission_id: "S-external", work_order_id: "W-external" };
+    vi.mocked(fetchTaskDetail).mockResolvedValue({ project_id: "P", task: { id: "T-external", req_id: "current-R" } } as any);
+    await navigation.open(target);
+    expect(onOpen).toHaveBeenCalledWith({ ...target, requirement_id: "current-R" });
+  });
   it("rejects late task navigation after session, view, category or page changes and respects the exit guard", async () => {
     const onOpen = vi.fn();
     let canNavigate = true;
@@ -467,6 +496,8 @@ describe("delivery attention interactions", () => {
       requirement_id: "old-R",
       detail: "tasks",
       task_id: "T",
+      submission_id: "S-external",
+      work_order_id: "W-external",
     };
     for (const patch of [
       { view: "overview" },

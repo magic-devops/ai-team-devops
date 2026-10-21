@@ -219,6 +219,8 @@ def test_blocked_work_and_related_issue_are_deduplicated_by_domain_entity(env):
         "detail": "tasks",
         "task_id": own["id"],
         "issue_id": "ISS-inbox",
+        "submission_id": None,
+        "work_order_id": None,
     }
     assert inbox(client, scope="team")["counts"]["blocked"] == 4
 
@@ -287,6 +289,8 @@ def test_current_successful_execution_is_one_acceptance_item_without_unverified_
         "requirement_id": rid,
         "detail": "tasks",
         "task_id": current["id"],
+        "submission_id": None,
+        "work_order_id": None,
     }
     assert result["counts"]["acceptance"] == 1
     assert result["counts"]["work"] == 0

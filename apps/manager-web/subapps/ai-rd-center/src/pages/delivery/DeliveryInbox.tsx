@@ -80,15 +80,17 @@ export function DeliveryInbox({
         }).format(new Date(`${date.slice(0, 10)}T12:00:00Z`))
       : tp("unscheduled");
   const statusLabel = (item: DeliveryInboxItem) =>
-    item.acceptance_kind === "manual"
-      ? ta("manualAcceptance")
-      : item.acceptance_kind === "execution"
-        ? ta("executionAcceptance")
-        : t(`deliveryProject.status.${item.status}`, {
-            defaultValue: t(`delivery.statuses.${item.status}`, {
-              defaultValue: item.status,
-            }),
-          });
+    item.acceptance_kind === "external"
+      ? ta("externalAcceptance")
+      : item.acceptance_kind === "manual"
+        ? ta("manualAcceptance")
+        : item.acceptance_kind === "execution"
+          ? ta("executionAcceptance")
+          : t(`deliveryProject.status.${item.status}`, {
+              defaultValue: t(`delivery.statuses.${item.status}`, {
+                defaultValue: item.status,
+              }),
+            });
   const openItem = (item: DeliveryInboxItem) =>
     onOpen({
       ...item.target,
@@ -299,11 +301,13 @@ export function DeliveryInbox({
                         )}
                         onClick={() => openItem(item)}
                       >
-                        {item.acceptance_kind === "manual"
-                          ? ta("openManualAcceptance")
-                          : item.acceptance_kind === "execution"
-                            ? ta("openExecutionAcceptance")
-                            : tp("open")}
+                        {item.acceptance_kind === "external"
+                          ? ta("openExternalAcceptance")
+                          : item.acceptance_kind === "manual"
+                            ? ta("openManualAcceptance")
+                            : item.acceptance_kind === "execution"
+                              ? ta("openExecutionAcceptance")
+                              : tp("open")}
                       </Button>
                     </div>
                   </article>
