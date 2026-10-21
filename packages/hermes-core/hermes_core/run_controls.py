@@ -5,6 +5,8 @@ import time
 import uuid
 from datetime import datetime
 
+from sqlalchemy import insert
+
 from .agents import validate_bound_profiles
 from .execution_targets import validate_execution_target_snapshot
 from .models import CoreError
@@ -61,40 +63,63 @@ def stop_request_data(run, reason, *, state='unknown'):
                 confirmed_at=None, evidence=None)
 
 
-def _authorize(store, principal, workspace, permission):
+def _authorize(store, principal, workspace, permission, *, conn=None):
     if permission not in principal.permissions or (principal.workspace_ids is not None and workspace not in principal.workspace_ids):
         raise CoreError('forbidden', 'Execution workspace permission required', 403)
-    return store.get(principal, '', 'workspaces', workspace)
+    return store.get(principal, '', 'workspaces', workspace) if conn is None else store._get(conn, principal, '', 'workspaces', workspace)
 
 
-def _managed(store, principal, workspace, run, managed):
+def _managed(store, principal, workspace, run, managed, *, conn=None):
     if run['data'].get('deployment_source'):
         raise CoreError('managed_deployment', 'Use the managed deployment operation', 409)
     source = run['data'].get('task_source') or {}
     if source.get('task_id'):
-        task = store.get(principal, workspace, 'tasks', source['task_id'])
+        task = store.get(principal, workspace, 'tasks', source['task_id']) if conn is None else store._get(conn, principal, workspace, 'tasks', source['task_id'])
         if task['data'].get('source', {}).get('kind') == 'manager.delivery' and not managed:
             raise CoreError('managed_execution', 'Use the project delivery execution control', 409)
 
 
-def apply_run_action(store, execution, principal, workspace, run_id, action, body, *, managed=False, receipt_request=None):  # noqa: C901 - shared authorization and transactional state machine
-    _authorize(store, principal, workspace, 'execute')
-    run = store.get(principal, workspace, 'runs', run_id)
-    _managed(store, principal, workspace, run, managed)
+def apply_run_action(store, execution, principal, workspace, run_id, action, body, *, managed=False, receipt_request=None):
+    """Standalone wrapper; managed composition uses the caller's existing transaction."""
+    with (store.engine.connect() if body.dry_run else store.transaction()) as conn:
+        return apply_run_action_in_transaction(store, conn, execution, principal, workspace, run_id, action, body,
+                                               managed=managed, receipt_request=receipt_request)
+
+
+def apply_run_action_in_transaction(store, conn, execution, principal, workspace, run_id, action, body, *, managed=False, receipt_request=None, semantic_cancel=None):  # noqa: C901
+    _authorize(store, principal, workspace, 'execute', conn=conn)
+    run = store._get(conn, principal, workspace, 'runs', run_id)
+    _managed(store, principal, workspace, run, managed, conn=conn)
     if action not in {'start', 'retry', 'cancel'}:
         raise CoreError('unknown_action', 'Unsupported run control', 404)
     request = body.model_dump() if receipt_request is None else receipt_request
     if not body.dry_run:
-        cached = store.receipt(principal, workspace, f'run.{action}:{run_id}', body.idempotency_key, request)
+        cached = store._receipt(conn, principal, workspace, f'run.{action}:{run_id}', body.idempotency_key, request)[1]
         if cached is not None:
             return cached
-    if run['version'] != body.expected_version:
+    if semantic_cancel is not None:
+        if action != 'cancel' or not managed:
+            raise CoreError('invalid_control', 'Semantic cancellation requires a managed cancel', 422)
+        semantic_cancel(conn, run)
+    if semantic_cancel is None and run['version'] != body.expected_version:
         raise CoreError('version_conflict', 'Run changed; reload before applying this action', 409)
     if action in {'start', 'retry'} and run['data'].get('task_source'):
-        task = store.get(principal, workspace, 'tasks', run['data']['task_source']['task_id'])
+        task = store._get(conn, principal, workspace, 'tasks', run['data']['task_source']['task_id'])
         link = task['data'].get('delivery', {})
         if link.get('run_id') != run_id or link.get('phase') != 'executing':
             raise CoreError('delivery_closed', 'Dispatch a new plan from the task before executing', 409)
+    if action == 'cancel' and managed and semantic_cancel is not None and run['status'] in {'completed', 'failed', 'cancelled'}:
+        # The fixed attempt became terminal after preview. Preserve that actual
+        # run and its stop/unknown evidence; this records observation, not an
+        # invented physical cancellation or a new not-started stop request.
+        if not body.dry_run:
+            receipt_id, cached = store._receipt(conn, principal, workspace, f'run.cancel:{run_id}', body.idempotency_key, request)
+            if cached is not None:
+                return cached
+            store._record(conn, principal, workspace, run, 'run.cancel.observed_terminal', uuid.uuid4().hex,
+                          {'status': run['status']})
+            conn.execute(insert(store.receipts).values(id=receipt_id, request_hash=digest(request), result=run, created_at=now()))
+        return run
     allowed = {'start': {'planned'}, 'retry': {'failed'}, 'cancel': {'planned', 'queued', 'running', 'interrupted', 'retrying'}}
     if managed:
         allowed['start'].add('queued')
@@ -144,11 +169,10 @@ def apply_run_action(store, execution, principal, workspace, run_id, action, bod
         return {'status': 'cancelled', 'data': {**data, 'execution_owner': None, 'lease_expires_at': None, 'stop_request': stop}}
 
     if body.dry_run:
-        with store.engine.connect() as conn:
-            guard(conn)
+        guard(conn)
         return run
-    return store.mutate(principal, workspace, 'runs', run_id, operation='run.' + action,
-        key=body.idempotency_key, request=request, trace=uuid.uuid4().hex, expected=body.expected_version,
+    return store._mutate(conn, principal, workspace, 'runs', run_id, operation='run.' + action,
+        key=body.idempotency_key, request=request, trace=uuid.uuid4().hex, expected=run['version'] if semantic_cancel is not None else body.expected_version,
         transform=transition, precondition=guard)
 
 
@@ -186,14 +210,21 @@ def acknowledge_stop(store, principal, workspace, run_id, *, request_id, owner, 
         request=request, trace=uuid.uuid4().hex, expected=None, transform=record, precondition=guard)
 
 
-def decide_approval(store, execution, principal, workspace, approval_id, body, *, managed=False, receipt_request=None):  # noqa: C901 - approval validation and crash recovery
-    _authorize(store, principal, workspace, 'approve')
+def decide_approval(store, execution, principal, workspace, approval_id, body, *, managed=False, receipt_request=None):
+    """Approval decision and rejected-run transition commit or roll back together."""
+    with (store.engine.connect() if body.dry_run else store.transaction()) as conn:
+        return decide_approval_in_transaction(store, conn, execution, principal, workspace, approval_id, body,
+                                              managed=managed, receipt_request=receipt_request)
+
+
+def decide_approval_in_transaction(store, conn, execution, principal, workspace, approval_id, body, *, managed=False, receipt_request=None):  # noqa: C901
+    _authorize(store, principal, workspace, 'approve', conn=conn)
     if body.decision == 'approve':
-        _authorize(store, principal, workspace, 'execute')
-    approval = store.get(principal, workspace, 'approvals', approval_id)
+        _authorize(store, principal, workspace, 'execute', conn=conn)
+    approval = store._get(conn, principal, workspace, 'approvals', approval_id)
     run_id = approval['data']['run_id']
-    run = store.get(principal, workspace, 'runs', run_id)
-    _managed(store, principal, workspace, run, managed)
+    run = store._get(conn, principal, workspace, 'runs', run_id)
+    _managed(store, principal, workspace, run, managed, conn=conn)
     request = body.model_dump() if receipt_request is None else receipt_request
 
     def guard(conn):
@@ -220,21 +251,20 @@ def decide_approval(store, execution, principal, workspace, approval_id, body, *
                 'data': {**item['data'], 'decision': body.decision, 'decided_by': principal.actor}}
 
     if body.dry_run:
-        with store.engine.connect() as conn:
-            guard(conn)
+        guard(conn)
         if approval['version'] != body.expected_version or approval['status'] != 'pending':
             raise CoreError('approval_closed', 'Approval changed', 409)
         return {'approval': approval, 'run': run, 'resume': None}
-    result = store.mutate(principal, workspace, 'approvals', approval_id, operation='approval.decision',
+    result = store._mutate(conn, principal, workspace, 'approvals', approval_id, operation='approval.decision',
         key=body.idempotency_key, request=request, trace=uuid.uuid4().hex,
         expected=body.expected_version, transform=transform, precondition=guard)
-    current = store.get(principal, workspace, 'runs', run_id)
+    current = store._get(conn, principal, workspace, 'runs', run_id)
     resume = None
     if current['status'] == 'interrupted' and current['data'].get('active_node') == result['data'].get('node_id'):
         if result['status'] == 'approved':
             resume = {'approval_id': approval_id, 'approval_version': result['version']}
         elif result['status'] == 'rejected':
-            current = store.mutate(principal, workspace, 'runs', run_id, operation='approval.rejected', key=body.idempotency_key,
+            current = store._mutate(conn, principal, workspace, 'runs', run_id, operation='approval.rejected', key=body.idempotency_key,
                 request=request, trace=uuid.uuid4().hex, expected=current['version'], transform=lambda item: {
                     'status': 'failed', 'data': {**item['data'], 'error': 'Execution approval was rejected',
                     'execution_owner': None, 'lease_expires_at': None, 'recovery_requires_review': False,

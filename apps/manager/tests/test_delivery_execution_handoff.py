@@ -124,13 +124,19 @@ def test_pending_cancel_closes_core_gate_before_confirming_not_started(bridge):
     assert bridge[2].list(bridge[3], bridge[4]["id"], "runs") == []
 
 
-def test_unreachable_core_cannot_confirm_not_started_cancellation(bridge, monkeypatch):
-    from hermes_core.managed_handoff import ManagedHandoff
+def test_unreachable_core_accepts_original_but_cannot_confirm_not_started(bridge, monkeypatch):
+    from sop_manager.routers import delivery_execution_control_operation_service as controls
+    from sop_manager.routers.delivery_execution_control_operation_model import DeliveryExecutionControlOperation
     ack, _ = accept(bridge)
-    monkeypatch.setattr(ManagedHandoff, "close", lambda *a, **kw: (_ for _ in ()).throw(OSError("Core unavailable")))
+    monkeypatch.setattr(controls.ManagedControls, "apply", lambda *a, **kw: (_ for _ in ()).throw(OSError("Core unavailable")))
     response = cancel_execution(bridge[0], ack["resource"]["id"])
-    assert response.status_code == 503
-    assert row(bridge, ack["resource"]["id"])["state"] == "accepted"
+    assert response.status_code == 200 and response.json()["result"]["control_operation_id"]
+    with bridge[1]() as db:
+        control = db.get(DeliveryExecutionControlOperation, response.json()["result"]["control_operation_id"])
+        assert control.state == "retry_wait" and control.effect is None
+        entry = db.get(DeliveryWorkspace, "project").data["executions"][-1]
+        assert not entry.get("stop_snapshot")
+    assert not bridge[2].list(bridge[3], bridge[4]["id"], "runs")
 
 
 def test_originator_revoked_before_new_handoff_does_not_gain_system_execute(bridge):
@@ -160,45 +166,53 @@ def test_claimed_then_cancelled_original_rejects_a_late_worker(bridge):
     assert not bridge[2].list(bridge[3], bridge[4]["id"], "runs")
 
 
-def test_core_close_commit_then_cancel_sql_rollback_can_replay_the_terminal_fence(bridge, monkeypatch):
-    from sop_manager.routers import delivery_execution_runtime_controls as controls
+def test_core_close_commit_then_manager_projection_failure_keeps_original_acceptance_ack(bridge, monkeypatch):
+    from sop_manager.routers import delivery_execution_control_operation_service as controls
     from sop_manager.routers.delivery_execution_handoff import _principal, _request
     from hermes_core.managed_handoff import ManagedHandoff
+    from test_delivery_execution import drain_controls
 
-    ack, _ = accept(bridge); execution_id = ack["resource"]["id"]
-    actual = controls._transition_cancel
-    monkeypatch.setattr(controls, "_transition_cancel", lambda *a: (_ for _ in ()).throw(HTTPException(503, "Manager cancel commit unavailable")))
-    assert cancel_execution(bridge[0], execution_id).status_code == 503
-    assert row(bridge, execution_id)["state"] == "accepted"
+    ack, _ = accept(bridge)
+    execution_id = ack["resource"]["id"]
+    actual = controls.project_control
+    monkeypatch.setattr(controls, "project_control", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("Manager projection unavailable")))
+    response = cancel_execution(bridge[0], execution_id)
+    assert response.status_code == 200
     with bridge[1]() as db:
         handoff = db.get(DeliveryExecutionHandoff, row(bridge, execution_id)["id"])
         fact = ManagedHandoff(bridge[2], bridge[0].app.state.hermes_execution).probe(_principal(handoff), handoff.workspace_id, **_request(handoff))
     assert fact["state"] == "closed" and fact["run_id"] is None and fact["closed"] is True
-    monkeypatch.setattr(controls, "_transition_cancel", actual)
-    assert cancel_execution(bridge[0], execution_id).status_code == 200
+    monkeypatch.setattr(controls, "project_control", actual)
+    drain_controls(bridge, monkeypatch=monkeypatch, now=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1))
     assert row(bridge, execution_id)["state"] == "cancelled"
     assert not bridge[2].list(bridge[3], bridge[4]["id"], "runs")
 
 
-def test_plan_wins_cancel_race_returns_real_identity_and_requires_a_new_preview(bridge, monkeypatch):
+def test_plan_wins_accepted_cancel_race_records_real_plan_and_requires_new_preview(bridge, monkeypatch):
     from hermes_core.managed_handoff import ManagedHandoff
+    from sop_manager.routers import delivery_execution_control_operation_service as controls
+    from sop_manager.routers.delivery_execution_control_operation_model import DeliveryExecutionControlOperation
+    from sop_manager.routers.delivery_execution_handoff import _request
 
-    ack, _ = accept(bridge); execution_id = ack["resource"]["id"]
-    actual_close = ManagedHandoff.close
-    actual_dispatch = ManagedHandoff.dispatch
-    def plan_then_close(service, principal, workspace, **kwargs):
-        actual_dispatch(service, bridge[3], workspace, **kwargs)
-        return actual_close(service, principal, workspace, **kwargs)
-    monkeypatch.setattr(ManagedHandoff, "close", plan_then_close)
-    response = cancel_execution(bridge[0], execution_id)
-    assert response.status_code == 409 and response.json()["detail"]["code"] == "handoff_already_planned"
-    assert row(bridge, execution_id)["state"] == "accepted"
-    assert len(bridge[2].list(bridge[3], bridge[4]["id"], "runs")) == 1
-    observed = bridge[0].get(f"/api/v1/delivery/executions/{execution_id}/runtime")
-    assert observed.status_code == 200 and observed.json()["run_id"]
+    ack, _ = accept(bridge)
+    execution_id = ack["resource"]["id"]
     with bridge[1]() as db:
+        h = db.get(DeliveryExecutionHandoff, row(bridge, execution_id)["id"])
+        dispatch = _request(h)
+    actual = controls.ManagedControls.apply
+    def plan_then_apply(service, principal, workspace, **kwargs):
+        ManagedHandoff(bridge[2], bridge[0].app.state.hermes_execution).dispatch(bridge[3], workspace, fence=1, **dispatch)
+        return actual(service, principal, workspace, **kwargs)
+    monkeypatch.setattr(controls.ManagedControls, "apply", plan_then_apply)
+    response = cancel_execution(bridge[0], execution_id)
+    assert response.status_code == 200
+    with bridge[1]() as db:
+        control = db.get(DeliveryExecutionControlOperation, response.json()["result"]["control_operation_id"])
+        assert control.outcome == "needs_review" and control.effect["outcome"] == "handoff_planned"
+        assert control.run_id is None and control.effect["handoff"]["run_id"]
         entry = db.get(DeliveryWorkspace, "project").data["executions"][-1]
-        assert entry["status"] == "pending_dispatch" and not entry.get("stop_snapshot")
+        assert entry["status"] == "planned" and not entry.get("stop_snapshot")
+    assert len(bridge[2].list(bridge[3], bridge[4]["id"], "runs")) == 1
 
 
 @pytest.mark.parametrize("status", ["planning", "paused", "archived"])
@@ -235,21 +249,24 @@ def test_blocked_receipt_probe_failure_never_reenables_new_dispatch(bridge, monk
     assert not bridge[2].list(bridge[3], bridge[4]["id"], "runs")
 
 
-def test_blocked_original_recovers_a_committed_core_closure_without_new_authority(bridge, monkeypatch):
-    from sop_manager.routers import delivery_execution_runtime_controls as controls
+def test_blocked_handoff_recovers_committed_closure_after_control_projection_loss(bridge, monkeypatch):
+    from sop_manager.routers import delivery_execution_control_operation_service as controls
 
-    ack, _ = accept(bridge); execution_id = ack["resource"]["id"]
+    ack, _ = accept(bridge)
+    execution_id = ack["resource"]["id"]
     with bridge[1]() as db:
-        db.get(User, "lead").role = "developer"; db.commit()
+        db.get(User, "lead").role = "developer"
+        db.commit()
     handoff_once(bridge[0].app, bridge[1])
     assert row(bridge, execution_id)["state"] == "blocked"
     with bridge[1]() as db:
-        db.get(User, "lead").role = "super_admin"; db.commit()
-    monkeypatch.setattr(controls, "_transition_cancel", lambda *a: (_ for _ in ()).throw(HTTPException(503, "Manager cancel commit unavailable")))
-    assert cancel_execution(bridge[0], execution_id).status_code == 503
+        db.get(User, "lead").role = "super_admin"
+        db.commit()
+    monkeypatch.setattr(controls, "project_control", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("Manager projection unavailable")))
+    assert cancel_execution(bridge[0], execution_id).status_code == 200
     with bridge[1]() as db:
-        db.get(User, "lead").status = "disabled"; db.commit()
-    assert handoff_once(bridge[0].app, bridge[1], now=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)) == 1
+        db.get(User, "lead").status = "disabled"
+        db.commit()
     assert row(bridge, execution_id)["state"] == "cancelled"
     assert not bridge[2].list(bridge[3], bridge[4]["id"], "runs")
 
@@ -347,34 +364,28 @@ def test_core_atomic_failure_leaves_no_partial_envelope_and_retries_the_same_ori
     assert len(bridge[2].list(bridge[3], bridge[4]["id"], "runs")) == 1
 
 
-def test_closure_recovery_is_safe_but_does_not_fabricate_a_lost_cancel_command_ack(bridge, monkeypatch):
-    from sop_manager.routers import delivery_execution_runtime_controls as controls
+def test_a_closure_without_a_manager_admission_does_not_fabricate_an_old_ack(bridge):
     from sop_manager.routers.delivery_execution_handoff import _principal, _request
     from sop_manager.routers.sql_models import DeliveryEvent
     from hermes_core.managed_handoff import ManagedHandoff
 
-    ack, _ = accept(bridge); execution_id = ack["resource"]["id"]
-    preview = bridge[0].post("/api/v1/delivery/execution-control-preview", json={
-        "id": execution_id, "action": "execution.cancel", "reason": "Confirm the accepted plan cannot start"})
-    assert preview.status_code == 200
-    fixed = preview.json()
-    body = {"action": "execution.cancel", "payload": fixed["payload"], "expected_version": fixed["version"],
-            "idempotency_key": "lost-cancel-ack-original"}
-    monkeypatch.setattr(controls, "_transition_cancel", lambda *a: (_ for _ in ()).throw(HTTPException(503, "Manager cancel commit unavailable")))
-    assert bridge[0].post("/api/v1/delivery/commands", json=body).status_code == 503
-    assert handoff_once(bridge[0].app, bridge[1], now=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)) == 1
-    current = row(bridge, execution_id)
-    assert current["state"] == "cancelled"
+    ack, _ = accept(bridge)
+    execution_id = ack["resource"]["id"]
+    fixed = bridge[0].post("/api/v1/delivery/execution-control-preview", json={
+        "id": execution_id, "action": "execution.cancel", "reason": "Confirm the old pending original"}).json()
+    body = {"action": "execution.cancel", "payload": fixed["payload"], "expected_version": fixed["version"], "idempotency_key": "old-unadmitted-cancel"}
+    # Explicitly seed the legacy partial fact: there was never a Manager admission.
     with bridge[1]() as db:
-        handoff = db.get(DeliveryExecutionHandoff, current["id"])
-        replay = ManagedHandoff(bridge[2], bridge[0].app.state.hermes_execution).dispatch(
-            _principal(handoff), handoff.workspace_id, fence=handoff.fence + 1, **_request(handoff))
-        assert replay["state"] == "closed" and replay["run_id"] is None
+        handoff = db.get(DeliveryExecutionHandoff, row(bridge, execution_id)["id"])
+        fact = ManagedHandoff(bridge[2], bridge[0].app.state.hermes_execution).close(
+            _principal(handoff), handoff.workspace_id, fence=1, **_request(handoff))
+        assert fact["state"] == "closed"
+    handoff_once(bridge[0].app, bridge[1])
+    assert row(bridge, execution_id)["state"] == "cancelled"
+    with bridge[1]() as db:
         assert db.query(DeliveryEvent).filter_by(action="execution.cancel").count() == 0
-    # This is an explicit remaining reconciliation gap, never a fabricated success:
-    # H proves safe closure, while the old command's SQL version/ACK never committed.
-    retry = bridge[0].post("/api/v1/delivery/commands", json=body)
-    assert retry.status_code == 409 and "resource" not in retry.json()
+    replay = bridge[0].post("/api/v1/delivery/commands", json=body)
+    assert replay.status_code == 409 and "resource" not in replay.json()
     assert not bridge[2].list(bridge[3], bridge[4]["id"], "runs")
 
 

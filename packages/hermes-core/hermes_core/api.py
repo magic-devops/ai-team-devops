@@ -69,7 +69,7 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
     repository = Repository(execution)
     delivery = Delivery(store, repository)
     agents = Agents(store)
-    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key", "target_snapshot", "deployment_source", "stop_request"}
+    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key", "target_snapshot", "deployment_source", "stop_request", "managed_activation_id"}
 
     def require(principal: Principal, action: str):
         if action not in principal.permissions:
@@ -472,7 +472,7 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
 
     combined = APIRouter()
     combined.include_router(create_collaboration_router(store, identity, actor_directory=actor_directory))
-    combined.include_router(create_remote_router(store, identity))
+    combined.include_router(create_remote_router(store, identity, execution))
     combined.include_router(create_scheduling_router(store, execution, identity))
     combined.include_router(router)
     return combined

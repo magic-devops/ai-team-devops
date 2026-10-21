@@ -21,6 +21,7 @@ from .delivery_deployment_contract import (
 )
 from .delivery_execution_contract import ExecutionQueue
 from .delivery_execution_runtime_contract import ExecutionRuntimeControl
+from .delivery_execution_control_operation_contract import ControlOperationClose
 from .delivery_issue_contract import IssueDiagnosisAdopt, IssueDiagnosisDismiss
 from .delivery_release_contract import ReleaseCandidateCreate, ReleaseCandidateReview, ReleaseCandidateRevoke
 from .delivery_scheduling_contract import (
@@ -125,6 +126,7 @@ class Command(Input):
         "execution.start",
         "execution.retry",
         "execution.approval",
+        "execution.control.close",
         "progress.record",
         "baseline.create",
     ]
@@ -734,6 +736,7 @@ PAYLOADS = {
     "execution.start": ExecutionRuntimeControl,
     "execution.retry": ExecutionRuntimeControl,
     "execution.approval": ExecutionRuntimeControl,
+    "execution.control.close": ControlOperationClose,
     "project.update": ProjectEdit,
     "resource.save": ResourceSave,
     "resource.archive": ResourceArchive,

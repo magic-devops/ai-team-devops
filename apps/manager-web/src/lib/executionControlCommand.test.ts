@@ -29,13 +29,11 @@ function original(action: ExecutionControlAction = "execution.cancel", decision?
   return executionControlOriginal(prepareExecutionControl("P", "E", preview(action, decision), "original-control-key"), "W");
 }
 function ack(value: ExecutionControlOriginal) {
-  const launches = value.action === "execution.start" || value.action === "execution.retry" || value.action === "execution.approval" && value.payload.decision === "approve";
   return {
     project_id: "P", action: value.action, resource: { kind: "execution", id: "E" },
     applied_version: value.intent.version + 1, version: value.intent.version + 1,
     query_generation: 2, replayed: false, affected_refs: [{ kind: "execution", id: "E" }],
-    result: { run_id: "R", run_version: 10, replayed_runtime: false,
-      ...(launches ? { start_run: { workspace_id: "W", run_id: "R", attempt: Number(value.payload.attempt) + (value.action === "execution.retry" ? 1 : 0), resume: null } } : {}) },
+    result: { control_operation_id: "C", request_digest: "b".repeat(64) },
   };
 }
 function harness(send: (value: ExecutionControlOriginal) => Promise<unknown>) {
@@ -121,7 +119,7 @@ describe("execution control durable original and strict acknowledgement", () => 
   });
 
   it.each([
-    "project", "action", "resource", "refs", "refs-extra", "refs-duplicate", "version", "result-null", "run", "run-version", "replayed-runtime", "workspace", "attempt", "start-run",
+    "project", "action", "resource", "refs", "refs-extra", "refs-duplicate", "version", "result-null", "control-empty", "digest", "extra-effect", "missing-control",
   ])("does not acknowledge mismatched %s evidence", async (field) => {
     const value = original("execution.retry"), answer: any = ack(value);
     if (field === "project") answer.project_id = "Q";
@@ -132,31 +130,34 @@ describe("execution control durable original and strict acknowledgement", () => 
     if (field === "refs-duplicate") answer.affected_refs.push({ kind: "execution", id: "E" });
     if (field === "version") answer.applied_version++;
     if (field === "result-null") answer.result = null;
-    if (field === "run") answer.result.run_id = "foreign-run";
-    if (field === "run-version") answer.result.run_version = 8;
-    if (field === "replayed-runtime") answer.result.replayed_runtime = "yes";
-    if (field === "workspace") answer.result.start_run.workspace_id = "foreign-workspace";
-    if (field === "attempt") answer.result.start_run.attempt = 2;
-    if (field === "start-run") delete answer.result.start_run;
+    if (field === "control-empty") answer.result.control_operation_id = "";
+    if (field === "digest") answer.result.request_digest = "not-a-digest";
+    if (field === "extra-effect") answer.result.start_run = { workspace_id: "W", run_id: "R", attempt: 3, resume: null };
+    if (field === "missing-control") delete answer.result.control_operation_id;
     expect(validExecutionControlAck("P", "E", value, answer)).toBe(false);
     const command = harness(async () => answer).create(); await command.run(value);
     expect(command.snapshot()).toMatchObject({ phase: "unknown", original: value });
   });
 
-  it("accepts only the fixed approval resume identity and its next version", () => {
-    const value = original("execution.approval", "approve"), answer: any = ack(value);
-    answer.result.start_run.resume = { approval_id: "AP", approval_version: 5 };
-    expect(validExecutionControlAck("P", "E", value, answer)).toBe(true);
-    for (const resume of [{ approval_id: "foreign", approval_version: 5 }, { approval_id: "AP", approval_version: 4 }, { approval_id: "AP", approval_version: 6 }]) {
-      expect(validExecutionControlAck("P", "E", value, { ...answer, result: { ...answer.result, start_run: { ...answer.result.start_run, resume } } })).toBe(false);
+  it("uses a historical approval receipt only for saved local cleanup, never a new transport success", async () => {
+    const value = original("execution.approval", "approve"), answer: any = { ...ack(value), result: { run_id: "R", run_version: 10, replayed_runtime: false,
+      start_run: { workspace_id: "W", run_id: "R", attempt: 2, resume: { approval_id: "AP", approval_version: 5 } } } };
+    expect(validExecutionControlAck("P", "E", value, answer)).toBe(false);
+    const saved = harness(vi.fn()); saved.restore(JSON.stringify({ phase: "succeeded", original: value, ack: answer }));
+    expect(saved.create().snapshot().phase).toBe("idle");
+    const live = harness(async () => answer).create(); await live.run(value); expect(live.snapshot().phase).toBe("unknown");
+    for (const resume of [{ approval_id: "foreign", approval_version: 5 }, { approval_id: "AP", approval_version: 4 }]) {
+      const invalid = harness(vi.fn()); invalid.restore(JSON.stringify({ phase: "succeeded", original: value, ack: { ...answer, result: { ...answer.result, start_run: { ...answer.result.start_run, resume } } } }));
+      expect(invalid.create().snapshot().phase).toBe("unknown");
     }
   });
 
-  it("accepts a genuine not-started cancellation without inventing a run or attempt in its result", () => {
+  it("accepts a pending cancellation without claiming it is stopped or inventing a run in its result", () => {
     const fixed = preview(); fixed.payload.run_id = ""; fixed.payload.run_version = 0;
     const value = executionControlOriginal(prepareExecutionControl("P", "E", fixed, "not-started-control-key"), "W");
-    const answer = { ...ack(value), result: { run_id: "", run_version: 0, replayed_runtime: false } };
+    const answer = ack(value);
     expect(validExecutionControlAck("P", "E", value, answer)).toBe(true);
+    expect(Object.keys(answer.result)).toEqual(["control_operation_id", "request_digest"]);
   });
 
   it("retains a known ACK through local persistence and cleanup failures, and never replays its effect", async () => {

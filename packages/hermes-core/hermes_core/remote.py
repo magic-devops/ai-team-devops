@@ -537,7 +537,7 @@ def recover_expired_remote(store: Store, principal: Principal, workspace: str) -
         cursor = rows[-1]["id"]
 
 
-def create_remote_router(store: Store, identity: Callable):  # noqa: C901
+def create_remote_router(store: Store, identity: Callable, execution=None):  # noqa: C901
     credential_table = _remote_credentials(store)
     initialize_target_storage(store)
     router = APIRouter(prefix=API_BASE, tags=["Hermes Remote Execution"])
@@ -779,15 +779,28 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
                         "remote_worker_version": body.worker_version, "remote_claim_key": body.idempotency_key,
                         "recovery_requires_review": False}}
 
-                claimed = store.mutate(principal, workspace, "runs", run["id"], operation="remote.claimed",
-                                       key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
-                                       expected=run["version"], transform=take,
-                                       audit_data={"node_id": node.id},
-                                       precondition=lambda conn, current=run: (
-                                           _assert_device_active_in_tx(store, conn, device, credential_table,
-                                                                       identity_data.credential_secret),
-                                           _assert_run_still_remote_executable(store, conn, principal, workspace,
-                                                                               current, device["id"])))
+                from .managed_controls import claim_launch_in_transaction, launch_authority
+
+                try:
+                    # Device authentication remains independent. For managed
+                    # runs, current project authority precedes every Core lock;
+                    # a later node must still use this exact activation ticket.
+                    with launch_authority(store, execution, principal, workspace, run) as (controller, ticket):
+                        with store.transaction() as conn:
+                            store._get(conn, principal, "", "workspaces", workspace)
+                            current = store._get(conn, principal, workspace, "runs", run["id"])
+                            _assert_device_active_in_tx(store, conn, device, credential_table, identity_data.credential_secret)
+                            _assert_run_still_remote_executable(store, conn, controller, workspace, current, device["id"])
+                            claim_launch_in_transaction(store, conn, controller, workspace, current, ticket,
+                                owner=owner, node_id=node.id, resume=ticket["resume"] if ticket else None)
+                            claimed = store._mutate(conn, principal, workspace, "runs", run["id"], operation="remote.claimed",
+                                key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
+                                expected=run["version"], transform=take, audit_data={"node_id": node.id})
+                except CoreError as exc:
+                    if exc.status in {403, 409} and (run["data"].get("managed_activation_id")
+                            or exc.code in {"managed_launch_required", "managed_launch_authority"}):
+                        continue
+                    raise
                 persisted_owner = str(claimed["data"].get("execution_owner") or owner)
                 persisted_node_id = str(claimed["data"].get("active_node") or node.id)
                 persisted_node = next(candidate for candidate in nodes if candidate.id == persisted_node_id)

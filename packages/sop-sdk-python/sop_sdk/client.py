@@ -587,6 +587,24 @@ class ManagerClient:
     def delivery_execution_runtime(self, execution_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}/runtime")
 
+    def delivery_execution_controls(self, execution_id: str, *, limit: int = 20, cursor: str = "") -> dict[str, Any]:
+        """Read one page of accepted controls; do not dispatch or follow cursors."""
+        if not isinstance(execution_id, str) or len(execution_id) > 64:
+            raise ValueError("execution ID must contain 1 to 64 characters")
+        if not isinstance(cursor, str) or any(127 <= ord(char) <= 159 for char in cursor):
+            raise ValueError("invalid opaque control cursor")
+        return self._request(
+            "GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}/control-operations",
+            params=_delivery_query_params(limit=limit, cursor=cursor),
+        )
+
+    def delivery_execution_control(self, execution_id: str, operation_id: str) -> dict[str, Any]:
+        """Read an exact accepted control and its current processing facts."""
+        if any(not isinstance(value, str) or len(value) > 64 for value in (execution_id, operation_id)):
+            raise ValueError("execution and control IDs must contain 1 to 64 characters")
+        return self._request("GET",
+            f"/api/v1/delivery/executions/{_resource_segment(execution_id)}/control-operations/{_resource_segment(operation_id)}")
+
     def delivery_execution_output(
         self, execution_id: str, node_id: str, *, attempt: int,
         stream: str = "stdout", cursor: str = "", limit: int = 50,

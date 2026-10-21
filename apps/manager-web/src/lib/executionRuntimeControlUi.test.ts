@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExecutionRuntimeControl } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionRuntimeControl";
 import type { ExecutionRuntime } from "./executionRuntime";
 import { request } from "./http";
+import type { ExecutionControlOperationsRead } from "./executionControlOperations";
 const hooks = vi.hoisted(() => ({
   values: [] as unknown[],
   refs: [] as any[],
@@ -88,6 +89,7 @@ const render = () => {
     sessionId: "one",
     workspaceId: "W",
     runtime,
+    controlRead: { isReadable: () => true, hasPending: () => false, accept: vi.fn(), readable: true, items: [], operation: null } as unknown as ExecutionControlOperationsRead,
     onSaved: saved,
     onObserved: observed,
     onUnresolvedChange: unresolved,
@@ -175,10 +177,9 @@ beforeEach(() => {
       if (path.endsWith("/runtime")) return runtime;
       sent.push(JSON.parse(String(init?.body)));
       if (fail) throw new Error(fail);
-      const body = sent.at(-1), starts = ["execution.start", "execution.retry"].includes(body.action) || body.action === "execution.approval" && body.payload.decision === "approve";
+      const body = sent.at(-1);
       return { project_id: "P", action: body.action, resource: { kind: "execution", id: "E" },
-        result: { run_id: "R", run_version: 10, replayed_runtime: false,
-          ...(starts ? { start_run: { workspace_id: "W", run_id: "R", attempt: body.payload.attempt + (body.action === "execution.retry" ? 1 : 0), resume: null } } : {}) },
+        result: { control_operation_id: "C", request_digest: "b".repeat(64) },
         affected_refs: [{ kind: "execution", id: "E" }], applied_version: version + 1, version: version + 1, query_generation: 2, replayed: false };
     });
 });

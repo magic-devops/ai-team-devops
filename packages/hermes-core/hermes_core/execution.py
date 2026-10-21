@@ -203,9 +203,13 @@ class Execution:
                         proc.kill()
                         proc.wait()
 
-    def execute(self, principal: Principal, workspace: str, run_id: str, *, resume=None, expected_attempt=None):
+    def execute(self, principal: Principal, workspace: str, run_id: str, *, resume=None, expected_attempt=None, launch_id=None):
+        from .managed_controls import claim_launch_in_transaction, launch_authority, read_run_for_launch
+
         owner = uuid.uuid4().hex
-        run = self.store.get(principal, workspace, "runs", run_id)
+        # Initial discovery is a pure SELECT. Manager authority must be entered
+        # before the first Core transaction/row lock, including on PostgreSQL.
+        run = read_run_for_launch(self.store, principal, workspace, run_id)
         if run["data"].get("target_device_id"):
             return
         if run["status"] not in {"queued", "interrupted", "retrying"}:
@@ -238,8 +242,17 @@ class Execution:
                     validate_execution_target_snapshot(self.store, self, principal, workspace, snapshot, provider=provider, conn=conn)
 
         try:
-            run = self.store.mutate(principal, workspace, "runs", run_id, operation="run.claimed", key=owner,
-                request={}, trace=owner, expected=run["version"], transform=claim, precondition=validate_plan)
+            with launch_authority(self.store, self, principal, workspace, run, launch_id=launch_id) as (current, ticket):
+                principal = current
+                with self.store.transaction() as conn:
+                    self.store._get(conn, principal, "", "workspaces", workspace)
+                    run = self.store._get(conn, principal, workspace, "runs", run_id)
+                    validate_plan(conn)
+                    claim_launch_in_transaction(self.store, conn, principal, workspace, run, ticket,
+                                                owner=owner, resume=resume)
+                    run = self.store._mutate(conn, principal, workspace, "runs", run_id,
+                        operation="run.claimed", key=owner, request={"launch_id": launch_id}, trace=owner,
+                        expected=run["version"], transform=claim)
         except CoreError:
             return
         root = run["data"]["workspace_root"]

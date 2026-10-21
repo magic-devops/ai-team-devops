@@ -41,14 +41,19 @@ def mount_hermes_workspace(app):
     execution = Execution(store, data_dir)
     execution.allowed_roots = tuple(Path(root).expanduser().resolve() for root in os.getenv("HERMES_EXECUTION_ROOTS", "").split(os.pathsep) if root.strip())
     execution.allow_commands = os.getenv("HERMES_ALLOW_MANAGER_EXECUTION") == "1"
+    from .delivery_execution_control_operation_service import launch_authority
+
+    execution.managed_launch_authority = launch_authority(SessionLocal, store, execution)
     previous_lifespan = app.router.lifespan_context
 
     @asynccontextmanager
     async def lifespan(application):
         from .delivery_sync import delivery_sync_lifespan
+        from .delivery_execution_schedule import control_launch_lifespan
 
-        async with previous_lifespan(application), execution.lifespan(application), delivery_sync_lifespan(application):
-            yield
+        with control_launch_lifespan(application):
+            async with previous_lifespan(application), execution.lifespan(application), delivery_sync_lifespan(application):
+                yield
 
     app.router.lifespan_context = lifespan
 

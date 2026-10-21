@@ -33,6 +33,7 @@ import { executionControlRecoveryPending } from "@/lib/executionControlCommand";
 import { executionDispatchRecoveryPending } from "@/lib/executionDispatchCommand";
 import { handoffAccessFailure, useExecutionHandoffQuery, type ExecutionHandoffRead } from "@/lib/executionHandoff";
 import { ExecutionHandoffStatus, handoffControlsId } from "./ExecutionHandoffStatus";
+import { useExecutionControlOperations } from "@/lib/executionControlOperations";
 
 export function ExecutionStageFacts({
   observation,
@@ -147,6 +148,8 @@ export function ExecutionObservationCard({
   access.current = { disabled, isActive };
   const ownHandoff = useExecutionHandoffQuery(projectId, entry.id, entry.task_id, sessionId, Boolean(entry.handoff_id) && !handoffRead, isActive);
   const handoff = handoffRead || ownHandoff, handoffAccess = useRef(handoff); handoffAccess.current = handoff;
+  const controlRead = useExecutionControlOperations(projectId, entry.id, entry.task_id, entry.workspace_id, sessionId, isActive);
+  const saved = (ack: DeliveryCommandAck) => { controlRead.accept(ack); onSaved(ack); };
   const cursor = useRef<string>();
   const controller = useRef<AbortController>();
   const readingRef = useRef(false);
@@ -243,7 +246,7 @@ export function ExecutionObservationCard({
   if (entry.handoff_id && handoffAccessFailure(handoff.error)) return <article>
     <ExecutionHandoffStatus projectId={projectId} executionId={entry.id} taskId={entry.task_id} sessionId={sessionId} read={handoff} isActive={isActive} />
     {executionOperationPending(projectId, entry.id) && <ExecutionOperationRecovery projectId={projectId} executionId={entry.id} sessionId={sessionId}
-      isActive={() => access.current.isActive?.() !== false} onSaved={onSaved} onUnresolvedChange={onUnresolvedChange} />}
+      isActive={() => access.current.isActive?.() !== false} onSaved={saved} onUnresolvedChange={onUnresolvedChange} />}
   </article>;
   return (
     <article
@@ -356,7 +359,7 @@ export function ExecutionObservationCard({
       </Space>
       <section id={handoffControlsId(projectId, entry.id, sessionId)} tabIndex={-1}>
       {recovering ? <ExecutionOperationRecovery projectId={projectId} executionId={entry.id} sessionId={sessionId}
-        isActive={() => access.current.isActive?.() !== false} onSaved={onSaved} onUnresolvedChange={(value) => {
+        isActive={() => access.current.isActive?.() !== false} onSaved={saved} onUnresolvedChange={(value) => {
           const retained = executionOperationPending(projectId, entry.id);
           runtimePending.current = executionControlRecoveryPending(projectId, entry.id);
           syncPending.current = executionDispatchRecoveryPending(projectId, "execution.sync", entry.id);
@@ -382,6 +385,7 @@ export function ExecutionObservationCard({
         projectId={projectId}
         executionId={entry.id}
         workspaceId={entry.workspace_id}
+        controlRead={controlRead}
         isActive={() => !actionPending.current && !syncPending.current && !executionDispatchRecoveryPending(projectId, "execution.sync", entry.id) && access.current.isActive?.() !== false}
         sessionId={sessionId}
         active={active}

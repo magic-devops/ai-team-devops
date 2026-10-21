@@ -21,6 +21,10 @@ def bridge(env, tmp_path, monkeypatch):  # noqa: F811 - pytest fixture injection
     executor = Execution(store, tmp_path, agentd=sys.executable)
     executor.allowed_roots = (tmp_path.resolve(),)
     client.app.state.hermes_execution = executor
+    client.app.state.delivery_control_sessions = sessions
+    from sop_manager.routers.delivery_execution_control_operation_service import launch_authority
+
+    executor.managed_launch_authority = launch_authority(sessions, store, executor)
     from hermes_core import execution_targets
 
     original_which = execution_targets.shutil.which
@@ -93,7 +97,61 @@ def cancel_execution(client, execution_id, reason="Human reviewed this cancellat
     })
     assert preview.status_code == 200, preview.text
     fixed = preview.json()
-    return command(client, "execution.cancel", fixed["payload"], version=fixed["version"])
+    response = command(client, "execution.cancel", fixed["payload"], version=fixed["version"])
+    if response.status_code == 200:
+        # Inspection helper explicitly runs the durable owner after admission.
+        # Raw HTTP contract tests never call this helper and observe acceptance.
+        from sop_manager.routers.delivery_execution_control_operation_service import control_once
+        from datetime import datetime, timedelta, timezone
+        from sop_manager.routers.delivery_execution_handoff import claim_handoff, process_claim
+        from sop_manager.routers.delivery_execution_handoff_model import DeliveryExecutionHandoff
+
+        sessions = client.app.state.delivery_control_sessions
+        control_once(client.app, sessions)
+        # Reconcile this H even if an earlier worker held an unexpired lease;
+        # advance only the test clock and never dispatch another test's E.
+        with sessions() as db:
+            handoff = db.query(DeliveryExecutionHandoff).filter_by(execution_id=execution_id).one_or_none()
+            claim = claim_handoff(db, handoff.id, now=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=2)) if handoff else None
+            db.commit()
+        if claim:
+            process_claim(client.app, sessions, claim)
+        exported = client.get("/api/v1/delivery/workspace")
+        assert exported.status_code == 200, exported.text
+        envelope = {key: response.json()[key] for key in ("project_id", "action", "resource", "result", "affected_refs", "applied_version", "version", "query_generation", "replayed")}
+        return response.__class__(response.status_code, json={**exported.json(), **envelope},
+                                  headers=response.headers, request=response.request)
+    return response
+
+
+def drain_controls(bridge, *, execute=False, monkeypatch=None, now=None):
+    """Run real durable scanners. Physical tools run only when a test opts in."""
+    from sop_manager.routers.delivery_execution_control_operation_service import control_once
+    from sop_manager.routers import delivery_execution_schedule
+
+    app = bridge[0].app
+    if execute:
+        assert monkeypatch is not None
+        def inline(application, request, workspace, arguments):
+            from hermes_core.models import Principal
+
+            principal = Principal(request["actor"], tenant=request["tenant"], business=request["business"],
+                                  permissions=frozenset({"read"}), workspace_ids=frozenset({workspace}))
+            return application.state.hermes_execution.execute(principal, workspace, arguments["run_id"],
+                expected_attempt=arguments["expected_attempt"], resume=arguments.get("resume"), launch_id=arguments["launch_id"])
+        with monkeypatch.context() as scoped:
+            scoped.setattr(delivery_execution_schedule, "submit_control_launch", inline)
+            count = control_once(app, bridge[1], now=now)
+            from datetime import datetime, timedelta, timezone
+
+            observed = now or datetime.now(timezone.utc).replace(tzinfo=None)
+            control_once(app, bridge[1], now=observed + timedelta(seconds=6))
+    else:
+        assert monkeypatch is not None
+        with monkeypatch.context() as scoped:
+            scoped.setattr(delivery_execution_schedule, "submit_control_launch", lambda *_args: False)
+            count = control_once(app, bridge[1], now=now)
+    return count
 
 
 def finish(bridge, execution, success=True):

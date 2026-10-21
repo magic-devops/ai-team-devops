@@ -207,6 +207,25 @@ def task(task_id: Annotated[str, typer.Option("--id")]):
     _query_output("delivery_task", task_id)
 
 
+@app.command("execution-controls")
+def execution_controls(
+    execution_id: Annotated[str, typer.Option("--id")],
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+):
+    """分页读取执行操作的受理和处理状态，不自动翻页或启动执行。"""
+    _query_output("delivery_execution_controls", execution_id, limit=limit, cursor=cursor)
+
+
+@app.command("execution-control")
+def execution_control(
+    execution_id: Annotated[str, typer.Option("--id")],
+    operation_id: Annotated[str, typer.Option("--operation")],
+):
+    """读取当前执行下的精确控制原件；受理不代表进程已经启动。"""
+    _query_output("delivery_execution_control", execution_id, operation_id)
+
+
 @app.command("issues")
 def issues(
     requirement_id: Annotated[str, typer.Option("--requirement")] = "",

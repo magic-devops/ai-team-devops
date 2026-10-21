@@ -694,6 +694,11 @@ from .delivery_execution_handoff_model import register_handoff_model  # noqa: E4
 
 DeliveryExecutionHandoff = register_handoff_model(Base)
 
+# T-durable-execution-controls: private immutable admission and technical facts.
+from .delivery_execution_control_operation_model import register_control_operation_model  # noqa: E402
+
+DeliveryExecutionControlOperation = register_control_operation_model(Base)
+
 
 def create_all():
     from sop_manager.schema_upgrade import require_current_schema

@@ -22,10 +22,11 @@ def sync_once(app, sessions=SessionLocal):
     if store is None:
         return 0
     from .delivery_execution_handoff import handoff_once
+    from .delivery_execution_control_operation_service import control_once
 
     # Accepted originals must get their bounded scan even if an unrelated legacy
     # observation/deployment later fails in this shared lifecycle iteration.
-    applied = handoff_once(app, sessions)
+    applied = control_once(app, sessions) + handoff_once(app, sessions)
     with sessions() as db:
         rows = db.query(DeliveryWorkspace.project_id).all()
     for (project_id,) in rows:

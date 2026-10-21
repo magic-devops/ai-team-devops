@@ -14,6 +14,7 @@ import { request } from "./http";
 import type { ExecutionRuntime } from "./executionRuntime";
 import type { DeliveryContext, DeliveryExecution } from "./delivery";
 import type { ExecutionObservations } from "./deliveryExecution";
+import type { ExecutionControlOperationsRead } from "./executionControlOperations";
 
 const h = vi.hoisted(() => ({
   frames: {} as Record<string, any[]>, frame: "", next: 0,
@@ -51,7 +52,9 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock("./http", () => ({ request: vi.fn() }));
 vi.mock("@tanstack/react-query", async () => ({
   ...(await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query")),
-  useQuery: () => ({ data: h.detailReady ? { execution: execution } : undefined, isPending: !h.detailReady, error: null, refetch: vi.fn() }),
+  useQuery: (options: any) => options.queryKey[0] === "delivery-control-operations" ? { data: { project_id: "P", execution_id: "E", task_id: "T", version: h.version,
+    items: [], total: 0, limit: 20, next_cursor: null, as_of: "2026-10-21T00:00:00Z" }, isPending: false, error: null, refetch: vi.fn() } :
+    ({ data: h.detailReady ? { execution: execution } : undefined, isPending: !h.detailReady, error: null, refetch: vi.fn() }),
 }));
 
 const runtime: ExecutionRuntime = {
@@ -69,11 +72,9 @@ const observation: ExecutionObservations = { project_id: "P", execution_id: "E",
   events: [], next_cursor: null, more: false, nodes: [], tests: { total: 0, passed: 0, failed: 0, pending: 0, status: "not_configured" },
   permissions: { can_start: false, can_cancel: true, can_review: true, can_sync: true }, log_streaming: false };
 function ack(body: any) {
-  const launches = ["execution.start", "execution.retry"].includes(body.action) || body.action === "execution.approval" && body.payload.decision === "approve";
   return { project_id: "P", action: body.action, resource: { kind: "execution", id: "E" }, applied_version: body.expected_version + 1, version: body.expected_version + 1,
     query_generation: 2, replayed: false, affected_refs: [{ kind: "execution", id: "E" }],
-    result: body.action === "execution.sync" ? null : { run_id: "R", run_version: 10, replayed_runtime: false,
-      ...(launches ? { start_run: { workspace_id: "W", run_id: "R", attempt: body.payload.attempt + (body.action === "execution.retry" ? 1 : 0), resume: null } } : {}) } };
+    result: body.action === "execution.sync" ? null : { control_operation_id: "C", request_digest: "b".repeat(64) } };
 }
 function frame<T>(name: string, callback: () => T): T { h.frame = name; h.next = 0; h.effects[name] = []; return callback(); }
 function nodes(node: ReactNode): any[] {
@@ -90,6 +91,7 @@ function reason(tree: ReactNode): any { return find(tree, Input.TextArea, (props
 const saved = vi.fn(), observed = vi.fn(), unresolved = vi.fn();
 function control(patch: Partial<ExecutionRuntimeControlProps> = {}) {
   return frame("control", () => ExecutionRuntimeControl({ projectId: "P", executionId: "E", sessionId: "selected-session", workspaceId: "W", runtime,
+    controlRead: { isReadable: () => true, hasPending: () => false, accept: vi.fn(), readable: true, items: [], operation: null } as unknown as ExecutionControlOperationsRead,
     onSaved: saved, onObserved: observed, onUnresolvedChange: unresolved, ...patch }));
 }
 function inspector(executionId = "E") {

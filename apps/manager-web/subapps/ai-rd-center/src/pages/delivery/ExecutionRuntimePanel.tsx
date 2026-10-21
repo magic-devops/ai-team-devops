@@ -11,6 +11,7 @@ import {
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { ExecutionNodeOutput } from "./ExecutionNodeOutput";
 import { ExecutionRuntimeControl } from "./ExecutionRuntimeControl";
+import type { ExecutionControlOperationsRead } from "@/lib/executionControlOperations";
 type Props = {
   projectId: string;
   executionId: string;
@@ -21,6 +22,7 @@ type Props = {
   disabled: boolean;
   isActive?: () => boolean;
   canSubmit?: () => boolean;
+  controlRead?: ExecutionControlOperationsRead;
   onSaved: (data: DeliveryCommandAck) => void;
   onUnresolvedChange: (value: boolean) => void;
   initialNodeId?: string;
@@ -37,6 +39,7 @@ export function ExecutionRuntimePanel({
   disabled,
   isActive,
   canSubmit,
+  controlRead,
   onSaved,
   onUnresolvedChange,
   initialNodeId,
@@ -127,7 +130,8 @@ export function ExecutionRuntimePanel({
         canSubmit={canSubmit}
         sessionId={sessionId}
         runtime={error ? undefined : runtime}
-        disabled={disabled || Boolean(error) || !runtime}
+        controlRead={controlRead}
+        disabled={disabled}
         onSaved={onSaved}
         onObserved={setRuntime}
         onUnresolvedChange={unresolved}

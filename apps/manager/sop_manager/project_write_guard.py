@@ -191,6 +191,40 @@ def in_execution_handoff_projection_scope(db, tenant_id, project_id):
     return _handoff_permission(db, (str(tenant_id), str(project_id))) is not None
 
 
+def execution_control_write_scope(db, tenant_id, project_id, control_id):
+    return _scope(db, tenant_id, project_id, "execution_control_write:" + control_id)
+
+
+def execution_control_projection_scope(db, tenant_id, project_id, control_id):
+    return _scope(db, tenant_id, project_id, "execution_control_projection:" + control_id)
+
+
+def _control_permission(db, scope):
+    current = db.get_nested_transaction() or db.get_transaction()
+    return next((token for token in reversed(db.info.get(_TOKENS, []))
+                 if token.transaction is current and (token.tenant_id, token.project_id) == scope
+                 and token.purpose.startswith("execution_control_projection:")), None)
+
+
+def in_execution_control_projection_scope(db, tenant_id, project_id):
+    return _control_permission(db, (str(tenant_id), str(project_id))) is not None
+
+
+def _check_control_write(db, table, scope, operation, old, values):
+    from .routers.delivery_execution_control_operation_model import valid_mutation, valid_projection
+
+    projection = _control_permission(db, scope)
+    if projection and table.name not in {"delivery_execution_control_operations", "delivery_workspaces"}:
+        _deny("control_technical_scope_only", "Control recovery cannot change business entities")
+    if table.name == "delivery_execution_control_operations":
+        control_id = values.get("id") if operation == "insert" else old["id"]
+        if not _permission(db, scope, "execution_control_write:" + str(control_id)) or not valid_mutation(operation, old, values):
+            _deny("control_service_required", "The fixed control original and technical state are service-owned")
+    if projection and table.name == "delivery_workspaces":
+        if operation != "update" or not valid_projection(db, scope, projection.purpose.split(":", 1)[1], old, values):
+            _deny("control_projection_invalid", "Only proven technical facts of this control may be projected")
+
+
 def _check_handoff_write(db, table, scope, operation, old, values):
     from .routers.delivery_execution_handoff_model import valid_mutation, valid_projection
 
@@ -485,6 +519,10 @@ def _flow_invalidation(original, changed):
 
 
 def _restricted_write(db, table, scope, operation, old, values):
+    if table.name == "delivery_execution_control_operations" and operation == "update":
+        return _permission(db, scope, "execution_control_write:" + old["id"]) is not None
+    if table.name == "delivery_workspaces" and _control_permission(db, scope):
+        return operation == "update"  # exact one-E fields were proved above
     if table.name == "delivery_execution_handoffs" and operation == "update":
         return _permission(db, scope, "execution_handoff_write:" + old["id"]) is not None
     if table.name == "delivery_workspaces" and _handoff_permission(db, scope):
@@ -601,6 +639,7 @@ def _check_write(db, table, operation, old, values, *, user_cascade=False):
     scope = _scope_for_row(db, table, values if operation == "insert" else old)
     if scope is None:
         return
+    _check_control_write(db, table, scope, operation, old, values)
     _check_handoff_write(db, table, scope, operation, old, values)
     _check_discussion_write(db, table, scope, operation, old, values)
     _check_event_write(db, table, scope, operation, old, values)

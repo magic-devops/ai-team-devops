@@ -2,7 +2,7 @@
 """Approval gates must be reachable through a normal, public dispatch plan."""
 
 import pytest
-from test_delivery_execution import bridge, queue_payload, sync  # noqa: F401
+from test_delivery_execution import bridge, drain_controls, queue_payload, sync  # noqa: F401
 from test_delivery_workbench import command, env  # noqa: F401
 
 
@@ -39,6 +39,7 @@ def test_public_plan_reaches_real_checkpoint_and_exact_approval_controls(bridge,
     assert started.status_code == 200 and started.json()["allowed"], started.text
     response = command(client, "execution.start", started.json()["payload"], version=started.json()["version"])
     assert response.status_code == 200, response.text
+    drain_controls(bridge, execute=True, monkeypatch=monkeypatch)
     facts = client.get(f"/api/v1/delivery/executions/{entry['id']}/runtime").json()
     assert facts["runtime_status"] == "interrupted" and facts["active_node_id"] == "human_gate"
     assert calls == ["prepare"]
@@ -53,6 +54,7 @@ def test_public_plan_reaches_real_checkpoint_and_exact_approval_controls(bridge,
             "expected_version": fixed.json()["version"], "idempotency_key": f"gate-{decision}"}
     decided = client.post("/api/v1/delivery/commands", json=body)
     assert decided.status_code == 200, decided.text
+    drain_controls(bridge, execute=True, monkeypatch=monkeypatch)
     run = store.get(principal, workspace["id"], "runs", entry["run_id"])
     assert run["status"] == ("completed" if decision == "approve" else "failed")
     assert calls == (["prepare", "verify"] if decision == "approve" else ["prepare"])
@@ -120,6 +122,7 @@ def pending_public_gate(bridge, monkeypatch):
     assert preview.status_code == 200 and preview.json()["allowed"], preview.text
     response = command(client, "execution.start", preview.json()["payload"], version=preview.json()["version"])
     assert response.status_code == 200, response.text
+    drain_controls(bridge, execute=True, monkeypatch=monkeypatch)
     assert client.get(f"/api/v1/delivery/executions/{entry['id']}/runtime").json()["runtime_status"] == "interrupted"
     return entry
 

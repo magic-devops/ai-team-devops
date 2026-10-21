@@ -216,7 +216,7 @@ def _require_managed_source(store, principal, entry, run):
         raise HTTPException(409, _reason("execution_source_changed", "The runtime envelope no longer identifies this delivery intent."))
 
 
-def _controls(db, project, user, state, entry, store, execution, principal, workspace, run, permissions):
+def _controls(db, project, user, state, entry, store, execution, principal, workspace, run, permissions, *, ignore_control_ids=()):
     from .delivery_verification import VerificationContext
 
     current = VerificationContext(db, project, state).execution_snapshot_current(entry)
@@ -232,6 +232,16 @@ def _controls(db, project, user, state, entry, store, execution, principal, work
         except (HTTPException, CoreError) as exc:
             fresh.append(_configuration_reason(exc))
     start, retry, cancel, approval = list(fresh), list(fresh), list(common), list(fresh)
+    from .delivery_execution_control_operation_service import active_controls
+
+    pending = active_controls(db, project, entry["id"], ignore=ignore_control_ids)
+    if pending:
+        reason = _reason("execution_control_pending", "An accepted control is still being processed. Read its status before another action.")
+        start.append(reason)
+        retry.append(reason)
+        approval.append(reason)
+        if any(item.action in {"execution.cancel", "execution.control.close"} for item in pending):
+            cancel.append(reason)
     if not run or run["status"] not in {"planned", "queued"}:
         start.append(_reason("start_not_planned", "Only a planned or previously queued run can start."))
     if not run or run["status"] != "failed":

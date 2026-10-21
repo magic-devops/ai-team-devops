@@ -29,7 +29,9 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => k
 vi.mock("./projectPortfolio", () => ({ projectSessionKey: () => h.scope }));
 vi.mock("./http", () => ({ request: vi.fn() }));
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: any) => { h.queries.push(options); return options.queryKey[0] === "delivery-execution-handoff" ? h.handoff : options.queryKey[0] === "delivery-execution-exact" ? h.exact : { data: { can_execute: true, runtime_configured: true, workspaces: [] }, error: null, isError: false }; },
+  useQuery: (options: any) => { h.queries.push(options); return options.queryKey[0] === "delivery-execution-handoff" ? h.handoff : options.queryKey[0] === "delivery-execution-exact" ? h.exact :
+    options.queryKey[0] === "delivery-control-operations" ? { data: { project_id: "P", execution_id: "E", task_id: "T", version: 7, items: [], total: 0, limit: 20, next_cursor: null, as_of: "2026-10-21T00:00:00Z" }, error: null, isPending: false } :
+    { data: { can_execute: true, runtime_configured: true, workspaces: [] }, error: null, isError: false }; },
   useInfiniteQuery: () => ({ data: { pages: [{ items: [] }] }, error: null }), useQueryClient: () => ({ invalidateQueries: h.invalidation }),
 }));
 vi.mock("./executionDispatchCommand", async () => ({ ...await vi.importActual<typeof import("./executionDispatchCommand")>("./executionDispatchCommand"),

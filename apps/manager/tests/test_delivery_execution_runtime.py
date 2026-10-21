@@ -12,7 +12,7 @@ from sop_manager.routers.delivery_execution_runtime_contract import (
     ExecutionRuntimeControl,
 )
 from sop_manager.routers.sql_models import DeliveryWorkspace, Project, User
-from test_delivery_execution import bridge, finish, queue, sync  # noqa: F401
+from test_delivery_execution import bridge, drain_controls, finish, queue, sync  # noqa: F401
 from test_delivery_workbench import command, env  # noqa: F401
 
 
@@ -88,29 +88,21 @@ def test_output_is_exact_attempt_and_inactive_workspace_history_is_readable(brid
         db.close()
 
 
-def test_fixed_start_ignores_heartbeat_version_and_recovers_core_receipt(bridge):
+def test_fixed_start_refuses_changed_runtime_version_before_durable_acceptance(bridge):
     entry = sync(bridge, queue(bridge))
     proposal = preview(bridge)
-    assert proposal["allowed"] is True
-    payload = ExecutionRuntimeControl.model_validate(proposal["payload"])
     store, principal, ws = bridge[2:5]
     run = store.get(principal, ws["id"], "runs", entry["run_id"])
     store.mutate(principal, ws["id"], "runs", run["id"], operation="test.heartbeat", key="heartbeat",
                  request={}, trace="test", expected=run["version"],
                  transform=lambda row: {"data": {**row["data"], "lease_expires_at": 12345}})
-    bridge[1].configure(autoflush=False)
-    for _ in range(2):
-        db, project, user, state, _entry = scope(bridge)
-        try:
-            applied = runtime().apply_runtime_control(db, project, user, state, "execution.start", payload,
-                store, bridge[0].app.state.hermes_execution, command_key="fixed-start")
-            assert applied[2]["start_run"]["run_id"] == entry["run_id"]
-            assert state["executions"][-1]["status"] == "queued"
-            db.rollback()  # Model the Manager transaction failing after the Core commit.
-        finally:
-            db.close()
-    rows = store.stream(principal, ws["id"], entity_id=run["id"])
-    assert sum(row["action"] == "run.start" for row in rows) == 1
+    result = bridge[0].post("/api/v1/delivery/commands", json={"action": "execution.start", "payload": proposal["payload"],
+        "expected_version": proposal["version"], "idempotency_key": "fixed-start"})
+    assert result.status_code == 409
+    assert store.get(principal, ws["id"], "runs", run["id"])["status"] == "planned"
+    from sop_manager.routers.delivery_execution_control_operation_model import DeliveryExecutionControlOperation
+    with bridge[1]() as db:
+        assert db.query(DeliveryExecutionControlOperation).count() == 0
 
 
 def test_control_basis_change_and_scope_never_execute(bridge):
@@ -180,7 +172,7 @@ def test_exact_output_cursor_cannot_cross_stream_or_attempt_and_chunks_do_not_ch
         db.close()
 
 
-def test_cancel_is_fixed_cas_and_never_claims_stop_before_ack(bridge):
+def test_cancel_is_fixed_cas_and_never_claims_stop_before_ack(bridge, monkeypatch):
     from hermes_core.run_controls import acknowledge_stop
 
     entry = sync(bridge, queue(bridge))
@@ -198,7 +190,8 @@ def test_cancel_is_fixed_cas_and_never_claims_stop_before_ack(bridge):
     assert store.get(principal, ws["id"], "runs", run["id"])["status"] == "running"
     cancelled = command(client, "execution.cancel", fixed["payload"], key="fixed-cancel", version=version)
     assert cancelled.status_code == 200, cancelled.text
-    current = cancelled.json()["executions"][-1]
+    drain_controls(bridge, monkeypatch=monkeypatch)
+    current = client.get("/api/v1/delivery/workspace").json()["executions"][-1]
     assert current["stop_pending"] and current["stop_snapshot"]["state"] == "requested"
     replay = command(client, "execution.cancel", fixed["payload"], key="fixed-cancel", version=version)
     assert replay.status_code == 200 and replay.json()["replayed"]
@@ -220,7 +213,7 @@ def test_cancel_is_fixed_cas_and_never_claims_stop_before_ack(bridge):
     assert response.json()["tasks"][0]["status"] != "completed"
 
 
-def test_paused_project_blocks_start_but_allows_cancellation(bridge):
+def test_paused_project_blocks_start_but_allows_cancellation(bridge, monkeypatch):
     sync(bridge, queue(bridge))
     client = bridge[0]
     lifecycle = client.post("/api/v1/delivery/project-lifecycle-preview", json={"target_status": "paused", "reason": "Paused by lead"})
@@ -232,7 +225,8 @@ def test_paused_project_blocks_start_but_allows_cancellation(bridge):
     assert cancel["allowed"]
     response = command(client, "execution.cancel", cancel["payload"])
     assert response.status_code == 200, response.text
-    assert response.json()["executions"][-1]["stop_snapshot"]["state"] == "not_started"
+    drain_controls(bridge, monkeypatch=monkeypatch)
+    assert client.get("/api/v1/delivery/workspace").json()["executions"][-1]["stop_snapshot"]["state"] == "not_started"
 
 
 def test_cancelled_legacy_unrecorded_stop_blocks_project_archive_and_redispatch(bridge):
@@ -266,7 +260,7 @@ def gate(bridge, entry):
         status="pending", entity_id="approval-one")
 
 
-def test_rejecting_gate_is_stale_scope_cleanup_and_does_not_require_project_active(bridge):
+def test_rejecting_gate_is_stale_scope_cleanup_and_does_not_require_project_active(bridge, monkeypatch):
     entry = sync(bridge, queue(bridge))
     approval = gate(bridge, entry)
     client = bridge[0]
@@ -274,70 +268,52 @@ def test_rejecting_gate_is_stale_scope_cleanup_and_does_not_require_project_acti
     lifecycle = client.post("/api/v1/delivery/project-lifecycle-preview", json={"target_status": "paused", "reason": "Paused by lead"}).json()
     assert command(client, "project.lifecycle", {"target_status": "paused", "reason": "Paused by lead",
         "preview_basis": lifecycle["preview_basis"]}).status_code == 200
-    db, project, user, state, _ = scope(bridge)
-    try:
-        reject = runtime().control_preview(db, project, user, state, ExecutionControlPreviewInput(
-            id=entry["id"], action="execution.approval", reason="Reject obsolete gate", approval_id=approval["id"], decision="reject"),
-            bridge[2], client.app.state.hermes_execution, {"write": True, "approve": True}, version=0)
-        assert reject["allowed"] is True
-        runtime().apply_runtime_control(db, project, user, state, "execution.approval",
-            ExecutionRuntimeControl.model_validate(reject["payload"]), bridge[2], client.app.state.hermes_execution,
-            command_key="reject-stale-gate")
-        assert bridge[2].get(bridge[3], bridge[4]["id"], "approvals", approval["id"])["status"] == "rejected"
-        assert bridge[2].get(bridge[3], bridge[4]["id"], "runs", entry["run_id"])["status"] == "failed"
-    finally:
-        db.close()
+    reject = client.post("/api/v1/delivery/execution-control-preview", json={"id": entry["id"], "action": "execution.approval",
+        "reason": "Reject obsolete gate", "approval_id": approval["id"], "decision": "reject"}).json()
+    assert reject["allowed"] is True
+    response = client.post("/api/v1/delivery/commands", json={"action": "execution.approval", "payload": reject["payload"],
+        "expected_version": reject["version"], "idempotency_key": "reject-stale-gate"})
+    assert response.status_code == 200, response.text
+    assert bridge[2].get(bridge[3], bridge[4]["id"], "approvals", approval["id"])["status"] == "pending"
+    drain_controls(bridge, monkeypatch=monkeypatch)
+    assert bridge[2].get(bridge[3], bridge[4]["id"], "approvals", approval["id"])["status"] == "rejected"
+    assert bridge[2].get(bridge[3], bridge[4]["id"], "runs", entry["run_id"])["status"] == "failed"
 
 
-def test_new_queued_start_confirmation_keeps_one_run_and_attempt(bridge):
+def test_pending_queued_start_blocks_duplicate_and_keeps_explicit_cancel_available(bridge, monkeypatch):
     entry = sync(bridge, queue(bridge))
     first = preview(bridge)
-    db, project, user, state, _ = scope(bridge)
-    try:
-        runtime().apply_runtime_control(db, project, user, state, "execution.start",
-            ExecutionRuntimeControl.model_validate(first["payload"]), bridge[2], bridge[0].app.state.hermes_execution,
-            command_key="first-queue-start")
-    finally:
-        db.close()
+    response = bridge[0].post("/api/v1/delivery/commands", json={"action": "execution.start", "payload": first["payload"],
+        "expected_version": first["version"], "idempotency_key": "first-queue-start"})
+    assert response.status_code == 200, response.text
+    drain_controls(bridge, monkeypatch=monkeypatch)
     recovered = preview(bridge)
-    assert recovered["allowed"] is True
-    db, project, user, state, _ = scope(bridge)
-    try:
-        applied = runtime().apply_runtime_control(db, project, user, state, "execution.start",
-            ExecutionRuntimeControl.model_validate(recovered["payload"]), bridge[2], bridge[0].app.state.hermes_execution,
-            command_key="explicit-queued-recovery")
-        assert applied[2]["start_run"]["attempt"] == 1
-        assert applied[2]["start_run"]["run_id"] == entry["run_id"]
-        assert len(bridge[2].list(bridge[3], bridge[4]["id"], "runs")) == 1
-    finally:
-        db.close()
+    assert recovered["allowed"] is False
+    assert any(reason["code"] == "execution_control_pending" for reason in recovered["reasons"])
+    assert preview(bridge, "execution.cancel")["allowed"] is True
+    assert len(bridge[2].list(bridge[3], bridge[4]["id"], "runs")) == 1
+    run = bridge[2].get(bridge[3], bridge[4]["id"], "runs", entry["run_id"])
+    assert run["status"] == "queued" and run["data"].get("attempt", 1) == 1
 
 
-def test_old_start_receipt_carries_original_attempt_and_current_authority_is_required(bridge):
+def test_original_acceptance_receipt_never_launches_a_later_attempt(bridge, monkeypatch):
     entry = sync(bridge, queue(bridge))
-    fixed = ExecutionRuntimeControl.model_validate(preview(bridge)["payload"])
-    db, project, user, state, _ = scope(bridge)
-    try:
-        runtime().apply_runtime_control(db, project, user, state, "execution.start", fixed,
-            bridge[2], bridge[0].app.state.hermes_execution, command_key="old-start")
-        run = bridge[2].get(bridge[3], bridge[4]["id"], "runs", entry["run_id"])
-        bridge[2].mutate(bridge[3], bridge[4]["id"], "runs", run["id"], operation="test.later_attempt", key="attempt2",
-            request={}, trace="test", expected=run["version"], transform=lambda row: {
-                "status": "retrying", "data": {**row["data"], "attempt": 2}})
-        applied = runtime().apply_runtime_control(db, project, user, state, "execution.start", fixed,
-            bridge[2], bridge[0].app.state.hermes_execution, command_key="old-start")
-        assert applied[2]["start_run"]["attempt"] == 1
-        user.role = "developer"
-        with pytest.raises(HTTPException) as failure:
-            runtime().apply_runtime_control(db, project, user, state, "execution.start", fixed,
-                bridge[2], bridge[0].app.state.hermes_execution, command_key="old-start")
-        assert failure.value.status_code == 403
-    finally:
-        db.rollback()
-        db.close()
+    fixed = preview(bridge)
+    body = {"action": "execution.start", "payload": fixed["payload"], "expected_version": fixed["version"], "idempotency_key": "old-start"}
+    first = bridge[0].post("/api/v1/delivery/commands", json=body)
+    assert first.status_code == 200, first.text
+    drain_controls(bridge, monkeypatch=monkeypatch)
+    store, principal, ws = bridge[2:5]
+    run = store.get(principal, ws["id"], "runs", entry["run_id"])
+    store.mutate(principal, ws["id"], "runs", run["id"], operation="test.later_attempt", key="attempt2",
+        request={}, trace="test", expected=run["version"], transform=lambda row: {"status": "retrying", "data": {**row["data"], "attempt": 2}})
+    replay = bridge[0].post("/api/v1/delivery/commands", json=body)
+    assert replay.status_code == 200 and replay.json()["replayed"], replay.text
+    assert replay.json()["result"] == first.json()["result"] and replay.json()["applied_version"] == first.json()["applied_version"]
+    assert store.get(principal, ws["id"], "runs", run["id"])["data"]["attempt"] == 2
 
 
-def test_terminal_cancel_retains_missing_physical_proof_as_explicit_unknown(bridge):
+def test_terminal_cancel_retains_real_terminal_state_and_requires_review(bridge, monkeypatch):
     entry = sync(bridge, queue(bridge))
     store, principal, ws = bridge[2:5]
     run = store.get(principal, ws["id"], "runs", entry["run_id"])
@@ -347,11 +323,13 @@ def test_terminal_cancel_retains_missing_physical_proof_as_explicit_unknown(brid
     fixed = preview(bridge, "execution.cancel")
     response = command(bridge[0], "execution.cancel", fixed["payload"])
     assert response.status_code == 200, response.text
-    result = response.json()["executions"][-1]
-    assert result["stop_pending"] is True
-    assert result["stop_snapshot"]["state"] == "unknown"
-    assert bridge[0].get(f"/api/v1/delivery/executions/{entry['id']}/runtime").json()["stop"]["state"] == "unknown"
-    assert bridge[0].get(f"/api/v1/delivery/executions/{entry['id']}/observations").json()["permissions"]["can_sync"]
+    drain_controls(bridge, monkeypatch=monkeypatch)
+    identity = response.json()["result"]["control_operation_id"]
+    detail = bridge[0].get(f"/api/v1/delivery/executions/{entry['id']}/control-operations/{identity}")
+    assert detail.status_code == 200 and detail.json()["operation"]["outcome"] == "needs_review", detail.text
+    facts = bridge[0].get(f"/api/v1/delivery/executions/{entry['id']}/runtime").json()
+    assert facts["runtime_status"] == "failed" and facts["stop"] is None
+    assert store.get(principal, ws["id"], "runs", run["id"])["status"] == "failed"
 
 
 def test_controls_refuse_a_run_whose_runtime_envelope_points_at_another_intent(bridge):
@@ -367,19 +345,20 @@ def test_controls_refuse_a_run_whose_runtime_envelope_points_at_another_intent(b
     assert preview(bridge, "execution.cancel")["allowed"] is False
 
 
-def test_control_sql_projection_is_committed_with_production_autoflush_disabled(bridge):
+def test_control_sql_projection_is_committed_with_production_autoflush_disabled(bridge, monkeypatch):
     bridge[1].configure(autoflush=False)
     entry = sync(bridge, queue(bridge))
     fixed = preview(bridge, "execution.cancel")
     result = command(bridge[0], "execution.cancel", fixed["payload"])
     assert result.status_code == 200, result.text
+    drain_controls(bridge, monkeypatch=monkeypatch)
     with bridge[1]() as db:
         from sop_manager.routers.sql_models import Task
 
         persisted = db.get(DeliveryWorkspace, "project").data["executions"][-1]
         assert persisted["status"] == "cancelled" and persisted["stop_pending"] is False
         assert persisted["stop_snapshot"]["state"] == "not_started"
-        assert db.get(Task, entry["task_id"]).status == "blocked"
+        assert db.get(Task, entry["task_id"]).status == "in_progress"
 
 
 def test_observations_preserve_whitespace_of_sanitized_output(bridge):

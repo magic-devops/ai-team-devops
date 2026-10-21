@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-20T15:23:19.772015+00:00",
+  "updated_at": "2026-10-21T00:00:53.682518+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-20T15:23:19.772015+00:00",
-    "status": "durable_execution_handoff_source_stage_runtime_pending",
+    "updated_at": "2026-10-21T00:00:53.682518+00:00",
+    "status": "durable_execution_controls_source_stage_runtime_pending",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/durable-execution-handoff/",
+    "evidence": ".sop-runtime/delivery-evidence/durable-execution-controls/",
     "verification_status": "current_source_runtime_types_build_and_browser_unverified",
-    "next_step": "runtime_validation_when_window_recovers_then_durable_control_ack_reconciliation_and_full_lifecycle_gaps",
+    "next_step": "run_source_pinned_runtime_types_build_browser_checks_when_shared_window_recovers_then_continue_full_lifecycle_gaps",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -195,7 +195,8 @@
     "project_editor_design": "docs/PROJECT_EDITOR_USABILITY.md",
     "canonical_agent_entry_design": "docs/CANONICAL_AGENT_ENTRY_DESIGN.md",
     "execution_dispatch_recovery_design": "docs/EXECUTION_DISPATCH_RECOVERY_DESIGN.md",
-    "durable_execution_handoff_design": "docs/DURABLE_EXECUTION_HANDOFF_DESIGN.md"
+    "durable_execution_handoff_design": "docs/DURABLE_EXECUTION_HANDOFF_DESIGN.md",
+    "durable_execution_controls_design": "docs/DURABLE_EXECUTION_CONTROLS_DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -650,7 +651,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-durable-execution-handoff源码阶段：耐久后台交接、Core原子计划与单向关闭、同步只读已有运行、授权任务定位及唯一恢复宿主。源码已冻结并独立审查，运行测试/类型/构建/视觉按用户要求后置；原取消ACK对账及完整全流程目标继续。",
+  "current": "T-durable-execution-controls源码阶段：四类执行控制、耐久启动、本地/远端领取、受阻原件结束和分页恢复交互已实现并交叉源码审查。当前实际测试、类型、构建和浏览器按用户要求后置；阶段相关源码commit，完整生命周期验收仍未完成。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -722,6 +723,25 @@
     "next_step": "runtime_validation_when_window_recovers_then_durable_control_ack_reconciliation_and_full_lifecycle_gaps",
     "new_dispatch_handoff_source_implemented": true,
     "cancel_command_ack_reconciliation_complete": false,
+    "core_global_runtime_lock_graph_verified": false
+  },
+  "durable_execution_controls": {
+    "task_id": "T-durable-execution-controls",
+    "updated_at": "2026-10-21T00:00:53.682518+00:00",
+    "status": "source_stage_frozen_reviewed_runtime_validation_deferred_by_user",
+    "design": "docs/DURABLE_EXECUTION_CONTROLS_DESIGN.md",
+    "record": "memory/durable-execution-controls-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/durable-execution-controls/",
+    "base_commit": "87b7ab47ef51a70690166e8174c03895db628bf8",
+    "runtime_tests_executed_this_stage": false,
+    "typecheck_build_browser_executed_this_stage": false,
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "full_lifecycle_complete": false,
+    "next_step": "run_source_pinned_runtime_types_build_browser_checks_when_shared_window_recovers_then_continue_full_lifecycle_gaps",
+    "source_review": ".sop-runtime/delivery-evidence/durable-execution-controls/review/FINAL_REVIEW.md",
+    "new_control_protocol_source_implemented": true,
+    "durable_launch_local_and_remote_source_implemented": true,
+    "old_protocol_unknown_ack_reconciliation_complete": false,
     "core_global_runtime_lock_graph_verified": false
   }
 }

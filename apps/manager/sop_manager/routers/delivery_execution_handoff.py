@@ -268,6 +268,10 @@ def process_claim(app, sessions, claim, *, now=None):
             service = ManagedHandoff(store, execution)
             fact = service.probe(_principal(row), row.workspace_id, **request)
             if fact is None:
+                from .delivery_execution_control_operation_service import pending_cancel
+
+                if pending_cancel(db, project, row.execution_id):
+                    raise HTTPException(409, {"code": "execution_cancel_accepted", "message": "An accepted cancellation prevents a new runtime plan."})
                 if claim.recover_only:
                     _change(db, row, state="blocked", lease_owner="", lease_expires_at=None,
                             next_attempt_at=_now(now) + timedelta(seconds=60), updated_at=_now(now))
@@ -322,32 +326,3 @@ def handoff_once(app, sessions=SessionLocal, *, limit=20, now=None):
             # from being scanned. The committed lease is recoverable on expiry.
             logger.warning("Handoff scan deferred for %s", handoff_id)
     return applied
-
-
-def close_pending_handoff(db, project, entry, store, execution):
-    """Caller has checked the actual cancel authority and fixed preview under Project lock."""
-    row = db.get(DeliveryExecutionHandoff, entry.get("handoff_id"))
-    if row is None or row.project_id != project.id or row.tenant_id != project.tenant_id or row.execution_id != entry["id"]:
-        raise HTTPException(409, "The canonical handoff original is unavailable")
-    if store is None:
-        raise HTTPException(503, "Core closure is unavailable; cancellation is not confirmed")
-    request = _validate_original(row)
-    fence = row.fence + 1
-    try:
-        fact = ManagedHandoff(store, execution).close(_principal(row), row.workspace_id, fence=fence, **request)
-    except CoreError as exc:
-        raise HTTPException(exc.status, {"code": exc.code, "message": _text(exc.message, 1000)}) from exc
-    except Exception as exc:
-        raise HTTPException(503, "Core closure is unavailable; cancellation is not confirmed") from exc
-    # Closed gates replay their original terminal fence; a higher caller fence
-    # cannot invalidate a durable negative conclusion after a Manager rollback.
-    if (not isinstance(fact, dict) or fact.get("operation_id") != row.id or fact.get("project_id") != project.id or fact.get("execution_id") != row.execution_id
-            or fact.get("request_hash") != row.request_digest or fact.get("closed") is not True
-            or type(fact.get("fence")) is not int or not 1 <= fact["fence"] <= fence):
-        raise HTTPException(503, "Core closure could not be verified; cancellation is not confirmed")
-    if fact.get("state") == "planned" and fact.get("run_id") and fact.get("runtime_task_id"):
-        raise HTTPException(409, {"code": "handoff_already_planned", "message": "A real runtime plan exists. Read and confirm its actual run before cancellation."})
-    if fact.get("state") != "closed" or fact.get("run_id") is not None or fact.get("runtime_task_id") is not None:
-        raise HTTPException(503, "Core closure could not be verified; cancellation is not confirmed")
-    _change(db, row, state="cancelled", fence=fence, lease_owner="", lease_expires_at=None, next_attempt_at=None,
-            error=None, run_id="", runtime_task_id="", updated_at=_now())

@@ -181,6 +181,32 @@ class ManagedHandoff:
         conn.execute(insert(self.store.receipts).values(id=receipt_id, request_hash=digest(request), result=result, created_at=now()))
         return receipt_id
 
+    def close_in_transaction(self, conn, principal, workspace, *, request, body):
+        """Seal the exact H inside a durable control's existing transaction.
+
+        The caller supplies the complete request reconstructed by _request. This
+        takes the same H/E locks as dispatch, so a delayed dispatch cannot cross
+        an accepted close. An existing planned result remains an actual plan.
+        """
+        validated, _ = _request(principal, workspace, operation_id=request["operation_id"],
+            project_id=request["project_id"], execution_id=request["execution_id"], envelope=request["envelope"],
+            body=body, plan_basis=request["plan_basis"])
+        if validated != request:
+            raise CoreError("handoff_conflict", "Handoff binding changed", 409)
+        row = self._gate(conn, principal, workspace, request, 1)
+        if row["closed"]:
+            return self._view(row, replayed=True)
+        # Closed is already terminal at every future fence; do not overflow the
+        # signed technical counter while sealing its final representable value.
+        row["fence"] = min(row["fence"] + 1, 2**63 - 1)
+        row["closed"] = True
+        operation = "manager.handoff.close:" + row["id"]
+        row["close_receipt_id"] = _receipt_id(principal, workspace, operation, request["execution_id"])
+        result = self._view(row, replayed=False)
+        self._save_receipt(conn, principal, workspace, operation, request, result)
+        self._save_gate(conn, row)
+        return result
+
     def _apply(self, principal, workspace, request, body, fence, *, closing):
         # SQLite's BEGIN IMMEDIATE and PostgreSQL's shared identity locks serialize
         # creators. Other dialects use the unique constraint and retry the entire

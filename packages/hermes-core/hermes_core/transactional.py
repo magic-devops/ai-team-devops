@@ -73,6 +73,17 @@ class Store:
             Column("result", JSON), Column("close_receipt_id", String(64)),
             Column("created_at", String(40), nullable=False), Column("updated_at", String(40), nullable=False),
             UniqueConstraint("tenant", "business", "workspace", "execution_id", name="uq_hermes_handoff_execution"))
+        self.managed_launches = Table("hermes_managed_launches", meta,
+            Column("id", String(64), primary_key=True), Column("control_id", String(64), nullable=False, unique=True),
+            Column("tenant", String(128), nullable=False), Column("business", String(128), nullable=False),
+            Column("workspace", String(64), nullable=False), Column("actor", String(128), nullable=False),
+            Column("project_id", String(64), nullable=False), Column("execution_id", String(64), nullable=False),
+            Column("runtime_task_id", String(64), nullable=False), Column("run_id", String(64), nullable=False, index=True),
+            Column("attempt", Integer, nullable=False), Column("definition_hash", String(64), nullable=False),
+            Column("request_hash", String(64), nullable=False), Column("request", JSON, nullable=False),
+            Column("resume", JSON), Column("state", String(16), nullable=False), Column("claims", JSON, nullable=False),
+            Column("claimed_at", String(40)), Column("created_at", String(40), nullable=False),
+            Column("updated_at", String(40), nullable=False))
         meta.create_all(self.engine)
 
     @contextmanager
@@ -158,23 +169,31 @@ class Store:
                request: dict, trace: str, expected: int | None, transform: Callable[[dict], dict],
                precondition: Callable | None = None, audit_data: dict | None = None):
         with self.transaction() as conn:
-            receipt_id, cached = self._receipt(conn, principal, workspace, operation + ":" + entity_id, key, request)
-            if cached is not None:
-                return cached
-            if precondition is not None:
-                precondition(conn)
-            item = self._get(conn, principal, workspace, kind, entity_id)
-            if expected is not None and item["version"] != expected:
-                raise CoreError("version_conflict", "Resource changed; reload before applying this action", 409)
-            changes = transform(json.loads(json.dumps(item)))
-            changes = {name: value for name, value in changes.items() if name in {"data", "status"}}
-            changed = {**item, **changes, "version": item["version"] + 1, "updated_at": now()}
-            result = conn.execute(update(self.entities).where(self.entities.c.id == entity_id, self.entities.c.version == item["version"]).values(**changes, version=changed["version"], updated_at=changed["updated_at"]))
-            if result.rowcount != 1:
-                raise CoreError("version_conflict", "Concurrent modification", 409)
-            self._record(conn, principal, workspace, changed, operation, trace, {"status": changed["status"], **(audit_data or {})})
-            conn.execute(insert(self.receipts).values(id=receipt_id, request_hash=digest(request), result=changed, created_at=now()))
-            return changed
+            return self._mutate(conn, principal, workspace, kind, entity_id, operation=operation, key=key,
+                                request=request, trace=trace, expected=expected, transform=transform,
+                                precondition=precondition, audit_data=audit_data)
+
+    def _mutate(self, conn, principal: Principal, workspace: str, kind: str, entity_id: str, *, operation: str, key: str,
+                request: dict, trace: str, expected: int | None, transform: Callable[[dict], dict],
+                precondition: Callable | None = None, audit_data: dict | None = None):
+        """Mutate in the caller's transaction; never commits or opens a nested transaction."""
+        receipt_id, cached = self._receipt(conn, principal, workspace, operation + ":" + entity_id, key, request)
+        if cached is not None:
+            return cached
+        if precondition is not None:
+            precondition(conn)
+        item = self._get(conn, principal, workspace, kind, entity_id)
+        if expected is not None and item["version"] != expected:
+            raise CoreError("version_conflict", "Resource changed; reload before applying this action", 409)
+        changes = transform(json.loads(json.dumps(item)))
+        changes = {name: value for name, value in changes.items() if name in {"data", "status"}}
+        changed = {**item, **changes, "version": item["version"] + 1, "updated_at": now()}
+        result = conn.execute(update(self.entities).where(self.entities.c.id == entity_id, self.entities.c.version == item["version"]).values(**changes, version=changed["version"], updated_at=changed["updated_at"]))
+        if result.rowcount != 1:
+            raise CoreError("version_conflict", "Concurrent modification", 409)
+        self._record(conn, principal, workspace, changed, operation, trace, {"status": changed["status"], **(audit_data or {})})
+        conn.execute(insert(self.receipts).values(id=receipt_id, request_hash=digest(request), result=changed, created_at=now()))
+        return changed
 
     def stream(self, principal: Principal, workspace: str, *, after=0, entity_id="", limit=200):
         query = select(self.events).where(self._scope(self.events, principal, workspace), self.events.c.seq > after)

@@ -104,6 +104,7 @@ export type ExecutionControlPayload = {
   approval_version?: number;
   decision?: "approve" | "reject";
 };
+export type ExecutionControlClosePayload = { id: string; control_operation_id: string; request_digest: string; reason: string };
 export type ExecutionControlPreview = {
   project_id: string;
   execution_id: string;
@@ -233,7 +234,7 @@ export function prepareExecutionControl(
   };
 }
 export async function submitExecutionControl(
-  intent: ExecutionControlIntent,
+  intent: Omit<ExecutionControlIntent, "action" | "payload"> & { action: ExecutionControlAction | "execution.control.close"; payload: ExecutionControlPayload | ExecutionControlClosePayload },
 ): Promise<DeliveryCommandAck> {
   assertExecutionSession(intent.scope);
   const data = await request<DeliveryCommandAck>("/api/v1/delivery/commands", {

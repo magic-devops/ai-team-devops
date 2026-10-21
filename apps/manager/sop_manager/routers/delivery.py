@@ -42,6 +42,7 @@ from .delivery_execution_contract import (
     ExecutionTargetsResponse,
 )
 from .delivery_execution_handoff_contract import ExecutionHandoffDetail, TaskHandoffPage
+from .delivery_execution_control_operation_contract import ControlOperationDetail, ControlOperationPage, command_openapi_contracts
 from .delivery_execution_runtime_contract import (
     ExecutionControlPreviewInput,
     ExecutionControlPreviewResponse,
@@ -1434,6 +1435,39 @@ def task_execution_handoffs(
     return task_handoffs(db, project, user, task_id, getattr(request.app.state, "hermes_store", None), limit=limit, cursor=cursor)
 
 
+@router.get("/executions/{execution_id}/control-operations", response_model=ControlOperationPage)
+def execution_control_operations(
+    execution_id: Annotated[str, Path(min_length=1, max_length=64)],
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str, Query(max_length=4000)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_execution_control_operation_query import control_operations
+
+    project = _progress_project(db, user, project_id)
+    return control_operations(db, project, user, execution_id, getattr(request.app.state, "hermes_store", None),
+        limit=limit, cursor=cursor)
+
+
+@router.get("/executions/{execution_id}/control-operations/{operation_id}", response_model=ControlOperationDetail)
+def execution_control_operation(
+    execution_id: Annotated[str, Path(min_length=1, max_length=64)],
+    operation_id: Annotated[str, Path(min_length=1, max_length=64)],
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_execution_control_operation_query import control_operation_detail
+
+    project = _progress_project(db, user, project_id)
+    return control_operation_detail(db, project, user, execution_id, operation_id,
+        getattr(request.app.state, "hermes_store", None))
+
+
 def _runtime_entry(db, project, execution_id):
     row = db.get(DeliveryWorkspace, project.id)
     state = reconcile(db, project, row.data) if row else initial_state()
@@ -1731,7 +1765,7 @@ def project_lifecycle_preview(
     )
 
 
-@router.post("/commands", response_model=CommandAck)
+@router.post("/commands", response_model=CommandAck, openapi_extra=command_openapi_contracts())
 def execute(
     body: Command,
     user: Annotated[User, Depends(current_user)],
@@ -1811,13 +1845,7 @@ def execute(
 
 
 def _schedule_committed_run(db, project, user, body, request, background_tasks, applied_version):
-    """Resume only an already committed start; never create or restart a run."""
-    if body.action in {"execution.start", "execution.retry", "execution.approval"}:
-        from .delivery_execution_schedule import schedule_committed_execution
-
-        return schedule_committed_execution(
-            db, project, user, body, request, background_tasks, applied_version
-        )
+    """Deployment callbacks only; execution controls use durable SQL delivery."""
     if body.action != "deployment.start" or request is None or background_tasks is None:
         return
     from hermes_core.models import CoreError
@@ -2038,7 +2066,7 @@ def _apply(db, project, user, data, action, payload, request, *, command_key="")
         from .event_business import apply_canonical
 
         return apply_canonical(db, project, user, data, action, payload, command_key)
-    if action in {"execution.start", "execution.retry", "execution.cancel", "execution.approval"}:
+    if action in {"execution.start", "execution.retry", "execution.cancel", "execution.approval", "execution.control.close"}:
         from .delivery_execution_runtime import apply_runtime_control
 
         return apply_runtime_control(

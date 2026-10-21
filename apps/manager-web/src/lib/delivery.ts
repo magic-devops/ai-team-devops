@@ -374,6 +374,7 @@ export type DeliveryAction =
   | "execution.start"
   | "execution.retry"
   | "execution.approval"
+  | "execution.control.close"
   | "execution.cancel"
   | "execution.review";
 export type DeliveryIntent = {
