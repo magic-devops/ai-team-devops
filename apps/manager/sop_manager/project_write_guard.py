@@ -199,6 +199,35 @@ def design_write_scope(db, tenant_id, project_id):
     return _scope(db, tenant_id, project_id, "design_write")
 
 
+def work_order_write_scope(db, tenant_id, project_id):
+    return _scope(db, tenant_id, project_id, "work_order_write")
+
+
+def work_order_invalidation_scope(db, tenant_id, project_id):
+    return _scope(db, tenant_id, project_id, "work_order_invalidation")
+
+
+def _check_work_order_write(db, table, scope, operation, old, values):
+    from .routers.delivery_external_work_order_model import DeliveryExternalWorkOrder, valid_mutation
+
+    if table.name == "tasks" and operation in {"insert", "update"} and values.get("status") == "completed":
+        # Serialize this legacy SQL path with canonical work-order acceptance
+        # before reading the slot, rather than locking after a stale check.
+        lock_project_scopes(db, [scope])
+        active = db.connection().scalar(select(DeliveryExternalWorkOrder.id).where(
+            DeliveryExternalWorkOrder.tenant_id == scope[0], DeliveryExternalWorkOrder.project_id == scope[1],
+            DeliveryExternalWorkOrder.active_task_id == (values.get("id") if operation == "insert" else old["id"])).limit(1))
+        if active:
+            _deny("external_work_order_active", "Close or report the active external work order before recording completion")
+    if table.name != "delivery_external_work_orders":
+        return
+    ordinary = _permission(db, scope, "work_order_write")
+    invalidation = (_permission(db, scope, "work_order_invalidation") and operation == "update"
+        and set(values) <= {"invalidated", "invalidated_reason", "revision", "updated_at"} and values.get("invalidated") is True)
+    if not (ordinary or invalidation) or not valid_mutation(operation, old, values):
+        _deny("work_order_service_required", "External work originals are immutable and current ownership is command-owned")
+
+
 def design_generation_write_scope(db, tenant_id, project_id, generation_id):
     return _scope(db, tenant_id, project_id, "design_generation:" + generation_id)
 
@@ -576,6 +605,8 @@ def _flow_invalidation(original, changed):
 
 
 def _restricted_write(db, table, scope, operation, old, values):
+    if table.name == "delivery_external_work_orders" and operation == "update":
+        return _permission(db, scope, "work_order_invalidation") is not None
     if table.name == "project_design_generations" and operation == "update":
         return _permission(db, scope, "design_generation:" + old["id"]) is not None
     if table.name == "delivery_task_submissions" and operation == "update":
@@ -700,6 +731,7 @@ def _check_write(db, table, operation, old, values, *, user_cascade=False):
     scope = _scope_for_row(db, table, values if operation == "insert" else old)
     if scope is None:
         return
+    _check_work_order_write(db, table, scope, operation, old, values)
     _check_design_write(db, table, scope, operation, old, values)
     _check_submission_write(db, table, scope, operation, old, values)
     _check_control_write(db, table, scope, operation, old, values)
@@ -800,9 +832,14 @@ def _update_values(statement, parameters, table, orm_bulk):
     return {key: value for key, value in values.items() if key in (names or table.c)}
 
 
+def _guard_columns(table):
+    # Immutable external packets are never needed to prove a metadata update.
+    return [column for column in table.c if table.name != "delivery_external_work_orders" or column.key != "original"]
+
+
 def _bounded_rows(state, table, parameters, orm_bulk):
     statement = state.statement
-    query = select(table)
+    query = select(*_guard_columns(table))
     if statement.whereclause is not None:
         query = query.where(statement.whereclause)
     if orm_bulk:
@@ -931,7 +968,7 @@ def _orm_plan(db, obj, deleted, cascade_members):
     old = (
         db.connection()
         .execute(
-            select(table).where(
+            select(*_guard_columns(table)).where(
                 *(column == value for column, value in zip(primary, state.identity, strict=True))
             )
         )

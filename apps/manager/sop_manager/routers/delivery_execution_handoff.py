@@ -206,9 +206,11 @@ def _authorize_new(db, project, row, state, store, execution):
     from .delivery_team_runtime import resolve_executor_binding
     from .delivery_verification import VerificationContext
     from .project_lifecycle import require_active
+    from .delivery_external_work_order_service import require_no_active_work_order
     from hermes_core.execution_targets import validate_execution_target_snapshot
 
     require_active(project)
+    require_no_active_work_order(db, project, row.task_id, action="execution.handoff")
     user = db.get(User, row.requested_by, populate_existing=True)
     if not user or user.status != "active" or user.tenant_id != row.tenant_id:
         raise HTTPException(403, "The original dispatcher is no longer active")

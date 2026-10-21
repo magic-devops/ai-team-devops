@@ -140,7 +140,8 @@ def native_boundary(db, project, user, data, task_id, store=None, execution=None
             if run["status"] not in {"completed", "failed", "cancelled"}:
                 _fail("submission_native_run_open", "Native execution is still active.")
             stop = stop_view(run)
-            if not stop or stop.get("state") not in {"not_started", "confirmed"}:
+            if (not stop or stop.get("state") not in {"not_started", "confirmed"}
+                    or run["data"].get("stop_request") and stop.get("attempt", 1) != run["data"].get("attempt", 1)):
                 _fail("submission_native_stop_unverified", "Positive process-stop evidence is required before external takeover.")
             facts.append({"execution_id": entry["id"], "handoff_id": entry.get("handoff_id") or "", "run_id": run["id"],
                           "runtime_task_id": entry["runtime_task_id"], "attempt": run["data"].get("attempt", 1),
@@ -248,6 +249,9 @@ def _submit(db, project, user, data, body, store, execution, command_key):
     reasons = submission_reasons(context, body.task_id, project_status=project.status)
     boundary = native_boundary(db, project, user, data, body.task_id, store, execution)
     reasons.extend(boundary["reasons"])
+    from .delivery_external_work_order_service import submission_intake_reasons
+
+    reasons.extend(submission_intake_reasons(db, project, user, body.task_id, fixed["definition_digest"], boundary["digest"], task_basis=fixed["task_basis"]))
     if reasons:
         _fail(reasons[0]["code"], reasons[0]["message"])
     if body.task_basis != fixed["task_basis"] or body.definition_digest != fixed["definition_digest"] or body.native_boundary_digest != boundary["digest"]:
@@ -285,6 +289,9 @@ def _submit(db, project, user, data, body, store, execution, command_key):
 def _review(db, project, user, data, body, store, execution):
     from .delivery_service import identifier
     from .delivery_verification import VerificationContext
+    from .delivery_external_work_order_service import require_no_active_work_order
+
+    require_no_active_work_order(db, project, body.task_id, action="submission_review")
 
     row = db.scalar(select(Submission).where(*_scope(project, Submission), Submission.task_id == body.task_id, Submission.id == body.submission_id))
     if row is None:

@@ -505,8 +505,10 @@ def _node(kind: str, row: dict[str, Any]) -> dict[str, Any]:
             "title": f"Agent {row.get('agent_id') or '-'} / {row.get('task_id') or '-'}",
             "timestamp": row.get("finished_at") or row.get("started_at") or "",
             "risk_level": "high" if row.get("status") == "failed" else "medium" if row.get("status") in {"cancelled", "retrying"} else "low",
-            "detail": row.get("error_msg") or row.get("cancel_reason") or "",
-            "link": "#/platforms/agent-runs",
+            "detail": "Historical external report (unverified; not acceptance evidence). " + str(row.get("error_msg") or row.get("cancel_reason") or ""),
+            "evidence_source": "legacy_reported",
+            "legacy_unverified": True,
+            "link": "#/settings/observability",
         }
     if kind == "llm_call":
         latency = int(row.get("latency_ms") or 0)

@@ -36,7 +36,7 @@ export function preserveProjectContext(target: string, source: string) {
 }
 export function projectWorkspaceHash(projectId: string, target = "#/dev-flow?view=overview", background = "") {
   const [path, query] = target.split("?");
-  if (path !== "#/dev-flow" && path !== "#/tasks/execution") throw new Error("invalidProjectTarget");
+  if (path !== "#/dev-flow" && path !== "#/tasks/execution" && path !== "#/ecosystem/a2a/dispatch") throw new Error("invalidProjectTarget");
   const params = new URLSearchParams(query);
   params.set("project_id", projectId);
   const safe = safePortfolioReturn(background);

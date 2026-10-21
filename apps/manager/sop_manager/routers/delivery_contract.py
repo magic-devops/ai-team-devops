@@ -83,6 +83,7 @@ class TaskAcceptance(BaseModel):
 
 class Command(Input):
     action: Literal[
+        "work_order.create", "work_order.claim", "work_order.progress", "work_order.cancel", "work_order.release", "work_order.report",
         "design.document.create", "design.revision.save", "design.revision.restore", "design.document.archive",
         "requirement.design.adopt", "requirement.design.clear", "task.design.adopt", "task.design.clear",
         "project.update",
@@ -878,3 +879,7 @@ def stage_gates(requirement, flow, tasks, issues, *, deployment_verified=False, 
 from .design_contract import COMMANDS as DESIGN_COMMANDS  # noqa: E402
 
 PAYLOADS.update(DESIGN_COMMANDS)
+
+from .delivery_external_work_order_contract import COMMANDS as WORK_ORDER_COMMANDS  # noqa: E402
+
+PAYLOADS.update(WORK_ORDER_COMMANDS)

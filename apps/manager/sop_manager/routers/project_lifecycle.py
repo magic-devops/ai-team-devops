@@ -28,6 +28,7 @@ def _facts(value):
 
 def preview(db, project, user, data, body, *, version):
     from .delivery_deployment import active_deployment_ids
+    from .delivery_external_work_order_service import project_has_active_work_orders
     from .delivery_execution import CLOSED
     from .delivery_execution_runtime import unresolved_stop_targets
 
@@ -42,6 +43,7 @@ def preview(db, project, user, data, body, *, version):
     roster = TeamContext(db, project, data).roster
     intents = data.get("executions", [])
     unresolved_stops = unresolved_stop_targets(db, project, data)
+    has_external_work = project_has_active_work_orders(db, project)
     basis = fact_basis(
         {
             "project": serialize(project),
@@ -51,6 +53,7 @@ def preview(db, project, user, data, body, *, version):
             "facts_basis": facts["basis"],
             "intents": intents,
             "unresolved_stops": unresolved_stops,
+            "external_work_order_active": has_external_work,
             "deployments": data.get("deployments", []),
             "target_status": body.target_status,
             "reason": body.reason,
@@ -60,6 +63,14 @@ def preview(db, project, user, data, body, *, version):
     if body.target_status == "archived":
         from .delivery_issue_diagnosis import active_diagnosis_ids
         from .sql_models import IssueDiagnosis
+
+        if has_external_work:
+            blockers.append({
+                "code": "external_work_order_active",
+                "message": "Cancel unclaimed work or have the claimant release active external work before archiving.",
+                "target": {"project_id": project.id, "kind": "project", "view": "external-work-orders", "detail": "details"},
+                "status": "unclosed", "run_id": None,
+            })
 
         for diagnosis_id in active_diagnosis_ids(db, project):
             diagnosis = db.get(IssueDiagnosis, diagnosis_id)

@@ -17,8 +17,6 @@ from test_delivery_workbench import env as delivery_env
 
 env = delivery_env
 MODULES = (
-    "agent_runs",
-    "a2a_gateway",
     "data_ingest",
     "data_quality",
     "metrics_service",
@@ -81,7 +79,6 @@ def operation(name, files):
         return lambda: module.update_state({"phase": "implementation"})
     return {
         "_save": lambda: module._save("fixtures", {"id": "fixture", "title": "Stored project item"}),
-        "_save_run": lambda: module._save_run({"id": "fixture", "status": "running"}),
         "_save_notify": lambda: module._save({"channels": {}, "rules": []}),
         "_save_subscriptions": lambda: module._save_subscriptions([]),
         "_append_event": lambda: module._append_event({"text": "Recorded event"}),
@@ -113,8 +110,6 @@ def operation(name, files):
 @pytest.mark.parametrize(
     "name",
     [
-        "agent_runs:_save_run",
-        "a2a_gateway:_save",
         "data_ingest:_save",
         "data_quality:_save",
         "metrics_service:_save",
@@ -157,8 +152,6 @@ def test_late_write_rechecks_archive_and_preserves_every_existing_file(files, na
 @pytest.mark.parametrize(
     "module_name",
     [
-        "agent_runs",
-        "a2a_gateway",
         "data_ingest",
         "data_quality",
         "metrics_service",
@@ -170,9 +163,7 @@ def test_late_write_rechecks_archive_and_preserves_every_existing_file(files, na
 def test_empty_project_catalog_reads_do_not_create_directories(files, module_name):
     _, root, _, modules = files
     module = modules[module_name]
-    if module_name == "agent_runs":
-        assert module._all_runs() == []
-    elif module_name == "skills":
+    if module_name == "skills":
         module.list_skills()
     else:
         assert module._load_all("fixtures") == []
@@ -247,12 +238,12 @@ def test_file_sqlite_scope_serializes_archive_and_reentrant_save_uses_the_existi
                     connection.execute(
                         update(Project).where(Project.id == "project").values(status="archived")
                     )
-            modules["agent_runs"]._save_run({"id": "locked", "status": "running"})
+            modules["data_quality"]._save("fixtures", {"id": "locked", "status": "running"})
         before = inventory(root)
         with engine.begin() as connection:
             connection.execute(update(Project).where(Project.id == "project").values(status="archived"))
         with pytest.raises(HTTPException) as denied:
-            modules["agent_runs"]._save_run({"id": "locked", "status": "failed"})
+            modules["data_quality"]._save("fixtures", {"id": "locked", "status": "failed"})
         assert denied.value.status_code == 409
         assert inventory(root) == before
     finally:

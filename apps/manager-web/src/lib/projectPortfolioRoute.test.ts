@@ -14,6 +14,16 @@ describe("portfolio inspection is a route, not the active workspace", () => {
     expect(href.startsWith("#/dev-flow?")).toBe(true);
     expect(new URLSearchParams(href.split("?")[1]).get("execution_id")).toBe("E-orphan");
   });
+  it("opens active external work from the archive blocker in the same project", () => {
+    const background = "#/projects/portfolio?project_id=P&status=active";
+    const href = portfolioTargetHash({ ...portfolioDetail.primary_target, project_id: "P", kind: "project", view: "external-work-orders", task_id: null, requirement_id: null }, background);
+    expect(href.split("?")[0]).toBe("#/ecosystem/a2a/dispatch");
+    const params = new URLSearchParams(href.split("?")[1]);
+    expect(params.get("project_id")).toBe("P");
+    expect(params.get("return_to")).toBe(safePortfolioReturn(background));
+    expect(() => projectWorkspaceHash("P", "https://outside.test/work-orders")).toThrow("invalidProjectTarget");
+    expect(() => projectWorkspaceHash("P", "#/ecosystem/a2a/dispatch-other")).toThrow("invalidProjectTarget");
+  });
   it("normalizes only the portfolio return surface and preserves exact filter context", () => {
     const background = "#/projects/portfolio?project_id=P&q=release&status=archived&risk=blocked&return_to=https%3A%2F%2Fevil.test";
     expect(safePortfolioReturn(background)).toBe("#/projects/portfolio?q=release&status=archived&risk=blocked&project_id=P");

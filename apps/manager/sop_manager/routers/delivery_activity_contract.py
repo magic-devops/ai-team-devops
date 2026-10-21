@@ -30,7 +30,7 @@ class FieldChange(CollaborationContract):
 
 
 class ActivityTarget(CollaborationContract):
-    kind: Literal["project", "requirement", "task", "execution", "issue", "release_candidate", "deployment"]
+    kind: Literal["project", "requirement", "task", "execution", "issue", "release_candidate", "deployment", "work_order"]
     id: str | None
     label: str | None
     available: bool

@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-21T02:51:51.421976+00:00",
+  "updated_at": "2026-10-21T03:43:27.937102+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-21T02:51:51.421976+00:00",
-    "status": "design_adoption_source_stage_runtime_pending",
+    "updated_at": "2026-10-21T03:43:27.937102+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/design-adoption/",
+    "evidence": ".sop-runtime/delivery-evidence/canonical-tool-dispatch/",
     "verification_status": "current_source_runtime_types_build_and_browser_unverified",
-    "next_step": "run_source_pinned_design_and_previous_source_stage_validation_when_user_window_recovers_then_continue_full_lifecycle_gaps",
+    "next_step": "run_pinned_runtime_types_build_browser_validation_when_user_window_recovers_then_continue_full_lifecycle_gaps",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -652,7 +652,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-design-adoption源码阶段：正式设计原件、需求和独立任务固定采用、AI建议恢复及真实执行输入已接通，独立源码审查已完成，进入阶段提交。测试、类型、构建、服务与浏览器按用户要求等待验证窗口；完整生命周期目标继续active，源码提交不代表运行验收通过。",
+  "current": "外部协作工单源码阶段：真实任务、固定工作包、授权接单、交付验收与双向执行互斥；运行验证按用户安排后置。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -783,7 +783,7 @@
     "task_id": "T-design-adoption",
     "base_commit": "df23cc6f33589a637452fb3f47610cc427ef7d82",
     "updated_at": "2026-10-21T02:51:51.421976+00:00",
-    "status": "source_stage_frozen_reviewed_runtime_validation_deferred_by_user",
+    "status": "source_phase_committed_runtime_validation_deferred_by_user",
     "design": "docs/DESIGN_ADOPTION_INTERACTION.md",
     "guide": "docs/DESIGN_DELIVERY_GUIDE.md",
     "record": "memory/design-adoption-progress.md",
@@ -795,6 +795,26 @@
     "production_integration_complete": false,
     "full_lifecycle_complete": false,
     "commit_receipt": ".sop-runtime/delivery-evidence/design-adoption/staging-reviewed/commit-receipt.json",
-    "next_step": "run_source_pinned_design_and_previous_source_stage_validation_when_user_window_recovers_then_continue_full_lifecycle_gaps"
+    "next_step": "run_source_pinned_runtime_types_build_browser_checks_when_user_window_recovers",
+    "source_commit": "38f8b00d72a22d3f677b6fc0d77bb4e8b870416f"
+  },
+  "canonical_tool_dispatch": {
+    "task_id": "T-canonical-tool-dispatch",
+    "base_commit": "38f8b00d72a22d3f677b6fc0d77bb4e8b870416f",
+    "updated_at": "2026-10-21T03:43:27.937102+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/CANONICAL_TOOL_DISPATCH_DESIGN.md",
+    "guide": "docs/EXTERNAL_WORK_ORDER_GUIDE.md",
+    "record": "memory/canonical-tool-dispatch-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/canonical-tool-dispatch/",
+    "commit_receipt": ".sop-runtime/delivery-evidence/canonical-tool-dispatch/staging-reviewed/commit-receipt.json",
+    "runtime_tests_executed": false,
+    "typescript_checked": false,
+    "build_executed": false,
+    "browser_verified": false,
+    "external_adapter_handshake_verified": false,
+    "production_integration_complete": false,
+    "full_lifecycle_complete": false,
+    "next_step": "source_phase_commit_then_run_pinned_validation_when_window_recovers_and_continue_code_inclusion_ci_operations_provenance"
   }
 }

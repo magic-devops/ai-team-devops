@@ -79,6 +79,9 @@ def submission_current(db, project, user, task_id, *, store=None, execution=None
         fixed = submission_definition(context, task_id)
         boundary = native_boundary(db, project, current, context.data, task_id, store, execution)
         reasons = submission_reasons(context, task_id, can_write=permissions["write"], project_status=project.status) + boundary["reasons"]
+        from .delivery_external_work_order_service import submission_intake_reasons
+
+        reasons.extend(submission_intake_reasons(db, project, current, task_id, fixed["definition_digest"], boundary["digest"], task_basis=fixed["task_basis"]))
         latest = db.scalar(select(Submission.id).where(*scope(project, Submission), Submission.task_id == task_id).order_by(Submission.seq.desc()).limit(1))
         _unchanged(db, project, generation)
         return {**metadata(db, project, generation), "task_id": task_id, "as_of": _now(), **fixed,
@@ -149,6 +152,10 @@ def submission_detail(db, project, user, task_id, submission_id, *, store=None, 
         reasons.append(reason("submission_invalidated", "The fixed original was invalidated or superseded."))
     if decision:
         reasons.append(reason("submission_already_reviewed", "The fixed original already has a human decision."))
+    from .delivery_external_work_order_service import active_task_ids, ACTIVE_ORDER_REASON
+
+    if active_task_ids(db, project, [task_id]):
+        reasons.append(ACTIVE_ORDER_REASON)
     if not permissions["approve"]:
         reasons.append(reason("submission_approval_required", "Project approval permission is required to review delivery."))
     can_review = not reasons

@@ -32,6 +32,9 @@ def current_review(context, task_id, *, can_approve):
         return None
     codes = []
     from .delivery_task_submission_service import current_submission
+    from .delivery_external_work_order_service import ACTIVE_ORDER_REASON
+
+    active_order = task_id in context.work_order_active_task_ids
 
     if current_submission(context, task_id):
         codes.append("manual_review_external_submission")
@@ -43,7 +46,7 @@ def current_review(context, task_id, *, can_approve):
         codes.append("task_owner_unavailable")
     if snapshot["task"]["req_id"] and snapshot["requirement"] is None:
         codes.append("manual_review_requirement_missing")
-    eligible = not codes
+    eligible = not codes and not active_order
     if not can_approve:
         codes.append("manual_review_permission_required")
     can_review = eligible and can_approve
@@ -60,8 +63,9 @@ def current_review(context, task_id, *, can_approve):
         "basis": context.basis(task_id),
         "eligible": eligible,
         "can_review": can_review,
-        "can_accept": not codes and not definition_reasons,
-        "reasons": [{"code": code, "message": REASONS[code]} for code in codes] + definition_reasons,
+        "can_accept": not codes and not definition_reasons and not active_order,
+        "reasons": ([dict(ACTIVE_ORDER_REASON)] if active_order else [])
+        + [{"code": code, "message": REASONS[code]} for code in codes] + definition_reasons,
         "dependency_blocked": blocked,
         "verified": context.verified(task_id),
     }

@@ -87,8 +87,12 @@ def catalog(store, user, execution=None, *, project_id="", project_write=True, p
 
 def prepare_plan(db, project, user, state, body, store, execution=None):
     from .project_lifecycle import require_active
+    from .delivery_external_work_order_service import require_no_active_work_order
+    from .delivery_execution_runtime import require_previous_stops
 
     require_active(project)
+    require_no_active_work_order(db, project, body.task_id, action="execution.queue")
+    require_previous_stops(db, project, user, state, body.task_id, store)
     if body.target_kind == "device" and any(node.kind == "approval" for node in body.nodes):
         raise HTTPException(422, {"code": "target_approval_unsupported",
                                   "message": "Approval gates require the local server checkpoint executor."})
@@ -182,9 +186,6 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
 
 
 def _queue(db, project, user, state, body, store, execution=None):
-    from .delivery_execution_runtime import require_previous_stops
-
-    require_previous_stops(db, project, user, state, body.task_id, store)
     plan = prepare_plan(db, project, user, state, body, store, execution)
     task = get_record(db, Task, project, body.task_id)
     entry = {
@@ -309,6 +310,7 @@ def _observe(db, project, state, entry, store, principal):
     from .delivery_task_submission_service import native_takeover
 
     taken_over = bool(native_takeover(verification, entry))
+    active_external = entry["task_id"] in verification.work_order_active_task_ids
     task = verification.tasks.get(entry["task_id"])
     requirement = verification.requirements.get(task.req_id) if task else None
     flow = state["flows"].setdefault(requirement.id, default_flow()) if requirement else None
@@ -330,11 +332,11 @@ def _observe(db, project, state, entry, store, principal):
     )
     if entry["status"] not in CLOSED:
         entry["status"] = "awaiting_review" if run["status"] == "completed" else run["status"]
-        if not entry["stale"] and not taken_over:
+        if not entry["stale"] and not taken_over and not active_external:
             task.status = (
                 "blocked" if run["status"] in {"failed", "cancelled", "interrupted"} else "in_progress"
             )
-    if not taken_over and entry["status"] not in CLOSED and not entry["stale"] and run["status"] == "failed" and not entry.get("issue_id"):
+    if not taken_over and not active_external and entry["status"] not in CLOSED and not entry["stale"] and run["status"] == "failed" and not entry.get("issue_id"):
         issue = Issue(
             id=identifier("ISS"),
             tenant_id=project.tenant_id,
@@ -421,6 +423,10 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
         entry = next((e for e in state.get("executions", []) if e["id"] == body.id), None)
         if not entry:
             raise HTTPException(404, "Execution not found in project")
+        if action == "execution.review":
+            from .delivery_external_work_order_service import require_no_active_work_order
+
+            require_no_active_work_order(db, project, entry["task_id"], action=action)
         before = deepcopy(entry)
         # Reader must independently have workspace access; replay uses the original
         # actor so a second operator cannot create a second external receipt/run.

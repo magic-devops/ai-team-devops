@@ -1,45 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-
+import { externalWorkOrderCopy, externalWorkOrderNavigation } from "./i18n/external-work-orders";
+import { parseExternalWorkOrderRoute } from "./lib/externalWorkOrderRoute";
 const root = resolve(__dirname, "..");
 const source = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench.tsx"), "utf8");
-const navigationSource = readFileSync(resolve(root, "src/navigation.tsx"), "utf8");
-const systemPagesSource = readFileSync(resolve(root, "../manager/sop_manager/routers/system_pages.py"), "utf8");
-
-describe("A2A workbench UX contract", () => {
-  it("routes protocol modules into focused subpages", () => {
-    expect(navigationSource).toContain('subnav("ecosystem/a2a", "registry", "negotiate", "sla", "windows", "dispatch", "evidence")');
-    expect(navigationSource).toContain('key: "a2aRegistry"');
-    expect(navigationSource).toContain('key: "a2aNegotiate"');
-    expect(navigationSource).toContain('key: "a2aSla"');
-    expect(navigationSource).toContain('key: "a2aWindows"');
-    expect(navigationSource).toContain('key: "a2aDispatch"');
-    expect(navigationSource).toContain('key: "a2aEvidence"');
-    expect(navigationSource).toContain('pageElement(A2aWorkbenchPage, { focused: true, initialTab: "registry" })');
-    expect(navigationSource).toContain('hidden: true, parentKey: "a2aGateway"');
+const apiSource = readFileSync(resolve(root, "src/lib/api.ts"), "utf8");
+describe("canonical external work-order entry", () => {
+  it("routes former protocol entries into the same project-bound work-order experience", () => {
+    for (const path of ["registry", "negotiate", "dispatch", "evidence", "sla", "windows"]) {
+      const route = parseExternalWorkOrderRoute(`#/ecosystem/a2a/${path}?project_id=P&task_id=T`);
+      expect(route.invalid).toBe(false); expect(route.projectId).toBe("P"); expect(route.taskId).toBe("T");
+    }
   });
-
-  it("uses the focused route state to remove repeated gateway chrome", () => {
-    expect(source).toContain("A2A_TAB_META");
-    expect(source).toContain("const TAB_KEYS: Tab[]");
-    expect(source).toContain("activeMeta");
-    expect(source).toContain("showGlobalMetrics");
-    expect(source).toContain('title={focused ? activeMeta.title : t("page.a2aGateway.workbenchTitle")}');
-    expect(source).toContain('t("page.a2aGateway.focusedHint")');
-    expect(source).toContain('t("page.a2aGateway.backToHub")');
-    expect(source).toContain("page.a2aGateway.tabLabels.");
-    expect(source).toContain("page.a2aGateway.tabs.");
-    expect(source).not.toContain('{ label: "协议健康", value: "health" }');
-    expect(source).not.toContain("focused: _focused");
+  it("has no legacy API write consumer, fabricated Task, preset progress or confidence result", () => {
+    expect(source).not.toContain("manual-${Date.now()}");
+    expect(source).not.toContain("api.a2a");
+    expect(apiSource).not.toContain("/api/v1/a2a/");
+    expect(source).not.toContain("confidence: 0.95");
+    expect(source).toContain("ExternalWorkOrderPanel");
+    expect(source).toContain("ProjectContextGate requireSelection");
   });
-
-  it("keeps System Pages governance aware of A2A submodules", () => {
-    expect(systemPagesSource).toContain('"a2aGateway": [');
-    expect(systemPagesSource).toContain('("registry", "Agent 注册")');
-    expect(systemPagesSource).toContain('("negotiate", "能力协商")');
-    expect(systemPagesSource).toContain('("dispatch", "任务分发")');
-    expect(systemPagesSource).toContain('("evidence", "执行证据")');
-    expect(systemPagesSource).toContain('("a2aGateway", "registry"): "#/ecosystem/a2a/registry"');
+  it("uses one independent three-language dictionary including queued, stop attestation and human review", () => {
+    for (const language of ["zh-CN", "en-US", "ja-JP"] as const) {
+      const copy = externalWorkOrderCopy(language);
+      expect(externalWorkOrderNavigation[language].a2aGateway).toBe(copy.title);
+      expect(copy.queuedHint).toBeTruthy(); expect(copy.reportStopConfirm).toBeTruthy(); expect(copy.deliveryStates.accepted).toBeTruthy();
+    }
   });
 });

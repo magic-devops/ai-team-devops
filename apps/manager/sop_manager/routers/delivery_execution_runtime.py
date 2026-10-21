@@ -98,12 +98,16 @@ def require_previous_stops(db, project, user, state, task_id, store, *, exclude=
     from .delivery_task_submission_service import native_takeover, native_takeover_closed
     from .delivery_execution_control_operation_service import active_controls
 
+    if store is None:
+        raise HTTPException(503, "Execution runtime is not configured")
     verification = VerificationContext(db, project, state)
     for previous in state.get("executions", []):
         if previous.get("task_id") != task_id or previous["id"] == exclude:
             continue
+        if active_controls(db, project, previous["id"]):
+            raise HTTPException(409, {"code": "execution_control_pending", "message": "An earlier accepted execution control has an unresolved effect or launch; recover that original before dispatching."})
         takeover = native_takeover(verification, previous)
-        if takeover and (not native_takeover_closed(verification, previous) or active_controls(db, project, previous["id"])):
+        if takeover and not native_takeover_closed(verification, previous):
             raise HTTPException(409, {"code": "execution_external_takeover_unresolved", "message": "The original external takeover closure or an old accepted control is unresolved."})
         unresolved = previous.get("stop_pending") or (
             previous.get("status") == "cancelled" and previous.get("run_id") and not previous.get("stop_snapshot")
@@ -115,8 +119,10 @@ def require_previous_stops(db, project, user, state, task_id, store, *, exclude=
             try:
                 _, _, _, run = _read(db, project, user, state, previous, store)
                 stop = stop_view(run)
-                if takeover and (run["status"] not in {"completed", "failed", "cancelled"} or not stop or stop.get("state") not in {"confirmed", "not_started"}):
-                    raise HTTPException(409, {"code": "execution_stop_unresolved", "message": "The retired native execution still requires positive terminal and physical stop evidence."})
+                if (run["status"] not in {"completed", "failed", "cancelled"} or not stop
+                        or stop.get("state") not in {"confirmed", "not_started"}
+                        or run["data"].get("stop_request") and stop.get("attempt", 1) != run["data"].get("attempt", 1)):
+                    raise HTTPException(409, {"code": "execution_stop_unresolved", "message": "The previous native execution requires positive terminal and process-stop evidence for its exact attempt."})
                 if pending_stop(run):
                     raise HTTPException(409, {"code": "execution_stop_unresolved",
                                               "message": "The previous execution has no confirmed stop."})
@@ -240,6 +246,10 @@ def _controls(db, project, user, state, entry, store, execution, principal, work
     except (HTTPException, CoreError):
         common.append(_reason("execution_source_changed", "The runtime envelope no longer identifies this delivery intent."))
     fresh = _fresh_control_reasons(project, current, workspace, run, common)
+    if entry["task_id"] in verification.work_order_active_task_ids:
+        from .delivery_external_work_order_service import ACTIVE_ORDER_REASON
+
+        fresh.append(dict(ACTIVE_ORDER_REASON))
     takeover_reason = _reason("execution_external_takeover", "This original execution is retained as history after external takeover; prepare a new plan to execute again.") if takeover else None
     if takeover_reason:
         fresh.append(takeover_reason)

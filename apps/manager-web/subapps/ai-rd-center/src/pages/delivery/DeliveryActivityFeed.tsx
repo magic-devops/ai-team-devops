@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Drawer, Empty, Select, Skeleton, Tag } from "antd";
 import { useTranslation } from "react-i18next";
 import { useEffect, useRef } from "react";
+import { externalWorkOrderActionLabel, externalWorkOrderCopy } from "@/i18n/external-work-orders";
 import {
   fetchDeliveryActivity,
   fetchDeliveryActivityItem,
@@ -19,10 +20,10 @@ type Props = {
   onNavigate: (href: string) => void;
 };
 function CollaborationActivityAction({ action }: { action: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (
     <strong>
-      {t(`deliveryCollaboration.actions.${action}`, {
+      {externalWorkOrderActionLabel(i18n.language, action) || t(`deliveryCollaboration.actions.${action}`, {
         defaultValue: t(`delivery.actions.${action}`, {
           defaultValue: t(`deliveryProject.actions.${action}`, {
             defaultValue: action,
@@ -83,16 +84,16 @@ export function ActivitySourceLinks({
   background: string;
   onNavigate: Props["onNavigate"];
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tr = (key: string) => t(`deliveryCollaboration.${key}`);
   return (
     <ul className="delivery-collaboration-sources">
       {targets.map((target, i) => {
-        const href = collaborationSourceHref(target, projectId, background);
+        const href = collaborationSourceHref(target, projectId, background, targets);
         return (
           <li key={`${target.kind}:${target.id || i}`}>
             <div>
-              <small>{tr(`kinds.${target.kind}`)}</small>
+              <small>{target.kind === "work_order" ? externalWorkOrderCopy(i18n.language).order : tr(`kinds.${target.kind}`)}</small>
               <span>{target.label || target.id || tr("restrictedSource")}</span>
               {target.id && <code>{target.id}</code>}
             </div>
@@ -194,7 +195,7 @@ export function DeliveryActivityFeed({
             { value: "", label: tr("allActions") },
             ...actions.map((action) => ({
               value: action,
-              label: t(`deliveryCollaboration.actions.${action}`, {
+              label: externalWorkOrderActionLabel(i18n.language, action) || t(`deliveryCollaboration.actions.${action}`, {
                 defaultValue: t(`delivery.actions.${action}`, {
                   defaultValue: t(`deliveryProject.actions.${action}`, {
                     defaultValue: action,

@@ -110,6 +110,9 @@ def record_observation(
             if applied.rowcount != 1:
                 raise HTTPException(409, "Concurrent delivery definition change; reload and retry")
             db.expire(workspace)
+    from .delivery_external_work_order_service import invalidate_work_orders
+
+    invalidate_work_orders(db, project, verification)
     invalidate_reviews(db, project, verification=verification)
     evaluation = evaluate_project(db, project, state=effective, verification=verification)
     # Query freshness includes priority and metadata edits which need no new

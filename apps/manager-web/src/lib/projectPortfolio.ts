@@ -48,6 +48,9 @@ export function submitProjectCommand(projectId: string, action: "project.lifecyc
   return request("/api/v1/delivery/commands", { method: "POST", headers: projectHeaders(projectId), body: JSON.stringify({ action, payload, expected_version: intent.version, idempotency_key: intent.key }) });
 }
 export function portfolioTargetHash(target: PortfolioTarget, background: string) {
+  if (target.kind === "project" && target.view === "external-work-orders") {
+    return projectWorkspaceHash(target.project_id, "#/ecosystem/a2a/dispatch", background);
+  }
   const params = new URLSearchParams({ view: target.view });
   if (target.requirement_id) { params.set("requirement", target.requirement_id); params.set("detail", target.detail); }
   if (target.task_id) params.set("task", target.task_id);

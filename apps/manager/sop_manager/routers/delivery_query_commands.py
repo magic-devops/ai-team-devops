@@ -8,6 +8,8 @@ from .sql_models import DeliveryEvent, DeliveryQueryState, DeliveryWorkspace, Pr
 
 
 def resource_kind(action):
+    if action.startswith("work_order."):
+        return "work_order"
     precise = {
         "task.delivery.submit": "task_submission",
         "task.delivery.review": "task_review",
@@ -47,6 +49,8 @@ def recorded_ack(project, action, resource_id, result, applied_version):
     resource = {"kind": kind, "id": resource_id}
     refs = [resource]
     if isinstance(result, dict):
+        if action.startswith("work_order.") and result.get("submission_id"):
+            refs.append({"kind": "task_submission", "id": result["submission_id"]})
         if action.startswith("design."):
             refs.append({"kind": "design_revision", "id": result["revision_id"]})
         if action in {"requirement.design.adopt", "requirement.design.clear", "task.design.adopt", "task.design.clear"}:

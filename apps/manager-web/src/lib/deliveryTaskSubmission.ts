@@ -63,9 +63,10 @@ const validReasons = (value: unknown) => Array.isArray(value) && value.every((it
 const validDefinition = (value: unknown, taskId: string): value is SubmissionDefinition => record(value) && value.task_id === taskId && typeof value.title === "string" && typeof value.description === "string" &&
   typeof value.assigned_to === "string" && Array.isArray(value.task_acceptance_criteria) && value.task_acceptance_criteria.every((item: unknown) => text(item, 2000)) &&
   Array.isArray(value.acceptance_criteria) && value.acceptance_criteria.every((item: unknown) => text(item, 2000)) && record(value.dependency_basis) && validDesignReferences(value.designs) && digest(value.design_basis) &&
-  (value.owner === null || record(value.owner) && submissionIdentity(value.owner.id) && typeof value.owner.active === "boolean") &&
+  (value.owner === null || record(value.owner) && text(value.owner.id, 100) && value.owner.id === value.owner.id.trim() && !/[\r\n\t]/.test(value.owner.id) && typeof value.owner.active === "boolean") &&
   (value.requirement === null || record(value.requirement) && submissionIdentity(value.requirement.id) && integer(value.requirement.revision, 1) &&
     Array.isArray(value.requirement.acceptance_criteria) && value.requirement.acceptance_criteria.every((item: unknown) => text(item, 2000)) && Array.isArray(value.requirement.criteria_indices));
+export const validSubmissionDefinition = validDefinition;
 
 export function validSubmissionPayload(value: unknown, taskId: string): value is TaskSubmissionPayload {
   if (!record(value) || !exact(value, ["task_id", "task_basis", "definition_digest", "native_boundary_digest", "source", "summary", "artifacts", "criteria", "tests"]) || value.task_id !== taskId ||

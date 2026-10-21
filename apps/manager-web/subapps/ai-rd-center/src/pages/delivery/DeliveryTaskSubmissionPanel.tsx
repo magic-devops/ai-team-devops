@@ -13,7 +13,7 @@ import { parseSubmissionSelection, readSubmissionCurrent, readSubmissionDetail, 
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 
 type Draft = { kind: "submit"; current: SubmissionCurrent; payload: TaskSubmissionPayload } | { kind: "review"; detail: SubmissionDetail; decision: "accept" | "request_changes"; comment: string };
-type Props = { projectId: string; taskId: string; sessionId: string; disabled?: boolean; isActive?: () => boolean; canSubmit?: () => boolean;
+type Props = { projectId: string; taskId: string; sessionId: string; disabled?: boolean; isActive?: () => boolean; canSubmit?: () => boolean; requestCreate?: number;
   onSaved: (ack: DeliveryCommandAck) => void; onEditingChange?: (value: boolean) => void; onUnresolvedChange?: (value: boolean) => void };
 export function submissionDraft(current: SubmissionCurrent): TaskSubmissionPayload {
   return { task_id: current.task_id, task_basis: current.task_basis, definition_digest: current.definition_digest, native_boundary_digest: current.native_boundary_digest,
@@ -27,7 +27,7 @@ export function adoptSubmissionDraft(payload: TaskSubmissionPayload, current: Su
 }
 const sameBasis = (a: SubmissionCurrent, b: SubmissionCurrent) => a.task_basis === b.task_basis && a.definition_digest === b.definition_digest && a.native_boundary_digest === b.native_boundary_digest;
 
-export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disabled = false, isActive, canSubmit, onSaved, onEditingChange, onUnresolvedChange }: Props) {
+export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disabled = false, isActive, canSubmit, requestCreate = 0, onSaved, onEditingChange, onUnresolvedChange }: Props) {
   const { i18n } = useTranslation(), copy = taskSubmissionCopy(i18n?.language);
   const origin = useRef(projectSessionKey()), mounted = useRef(true), pending = useRef(false);
   const identity = JSON.stringify([projectId, taskId, sessionId]), activeIdentity = useRef(identity); activeIdentity.current = identity;
@@ -77,6 +77,12 @@ export function DeliveryTaskSubmissionPanel({ projectId, taskId, sessionId, disa
       changePrepared(null); setChanged(false); setLatest(null); setError(""); setFeedback(""); setBlocked([]);
     } catch (cause) { reportError(cause); }
   };
+  const handledCreateRequest = useRef(0);
+  useEffect(() => {
+    if (!requestCreate || requestCreate <= handledCreateRequest.current || !proof || disabled || locked || busy) return;
+    handledCreateRequest.current = requestCreate;
+    begin();
+  }, [requestCreate, proof, disabled, locked, busy]);
   const patch = (change: Partial<TaskSubmissionPayload>) => {
     const value = draftRef.current; if (!value || value.kind !== "submit" || pending.current || locked || preparedRef.current || !canWrite()) return;
     changeDraft({ ...value, payload: { ...value.payload, ...change } }); setError("");

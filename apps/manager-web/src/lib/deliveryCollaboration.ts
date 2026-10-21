@@ -7,6 +7,7 @@ import {
 } from "./delivery";
 import { getToken, getWorkspaceScope } from "./authStorage";
 import { useEffect, useState } from "react";
+import { externalWorkOrderHref } from "./externalWorkOrderRoute";
 
 export type ActivityTarget = {
   kind:
@@ -14,6 +15,7 @@ export type ActivityTarget = {
     | "requirement"
     | "task"
     | "execution"
+    | "work_order"
     | "issue"
     | "release_candidate"
     | "deployment";
@@ -228,6 +230,7 @@ export function collaborationSourceHref(
   target: ActivityTarget,
   projectId: string,
   background: string,
+  relatedTargets: ActivityTarget[] = [],
 ): string | null {
   if (
     !target.available ||
@@ -238,6 +241,11 @@ export function collaborationSourceHref(
     return null;
   const params = new URLSearchParams({ project_id: projectId });
   switch (target.kind) {
+    case "work_order": {
+      const tasks = [...new Set(relatedTargets.filter((item) => item.kind === "task" && item.available && item.id).map((item) => item.id!))];
+      if (tasks.length !== 1) return null;
+      try { return externalWorkOrderHref({ projectId, view: "orders", taskId: tasks[0], workOrderId: target.id }); } catch { return null; }
+    }
     case "project":
       if (target.id !== projectId) return null;
       params.set("view", "overview");

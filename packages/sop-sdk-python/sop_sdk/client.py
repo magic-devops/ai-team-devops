@@ -37,6 +37,7 @@ from .errors import (
 )
 from .task_submission import submission_command_body
 from .design_original import design_command_body, design_preview_body
+from .work_order_original import WORK_ORDER_STATES, verified_work_order_packet, work_order_command_body, work_order_preview_body
 from .security import Auth, BearerAuth, HmacAuth, NoAuth, auth_from_env
 
 _log = logging.getLogger("sop_sdk")
@@ -503,6 +504,35 @@ class ManagerClient:
 
     def delivery_task(self, task_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/delivery/tasks/{_resource_segment(task_id)}")
+
+    def delivery_work_order_current(self, task_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/work-orders/current")
+
+    def delivery_work_order_preview(self, task_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Read admission for one exact work package; does not dispatch or execute."""
+        return self._request("POST", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/work-order-preview",
+                             json_body=work_order_preview_body(body))
+
+    def delivery_work_orders(self, *, task_id: str = "", state: str = "", limit: int = 20, cursor: str = "") -> dict[str, Any]:
+        if not isinstance(state, str) or state and state not in WORK_ORDER_STATES:
+            raise ValueError("invalid external work-order state")
+        params = _requirement_page(limit=limit, cursor=cursor)
+        if task_id:
+            _requirement_segment(task_id)
+            params["task_id"] = task_id
+        if state: params["state"] = state
+        return self._request("GET", "/api/v1/delivery/work-orders", params=params)
+
+    def delivery_work_order(self, work_order_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/work-orders/{_requirement_segment(work_order_id)}")
+
+    def delivery_work_order_packet(self, work_order_id: str) -> dict[str, Any]:
+        value = self._request("GET", f"/api/v1/delivery/work-orders/{_requirement_segment(work_order_id)}/packet")
+        return verified_work_order_packet(value, project_id=self.project_id, work_order_id=work_order_id)
+
+    def delivery_work_order_command(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Replay the exact original. A reported state is not human acceptance."""
+        return self.delivery_command(work_order_command_body(body))
 
     def delivery_task_submission_current(self, task_id: str) -> dict[str, Any]:
         """Read the exact current definition and native boundary before reporting."""

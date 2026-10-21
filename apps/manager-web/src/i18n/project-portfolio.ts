@@ -264,6 +264,11 @@ const messages = {
     "Review or close this execution intent before archiving the project.",
     "プロジェクトをアーカイブする前に、この実行意図を確認して終了してください。",
   ],
+  "reasons.external_work_order_active": [
+    "请先取消未接单工单，或由持有人确认停止并释放已接单工单，再归档项目。",
+    "Cancel unclaimed orders or have the claimant confirm the stop and release claimed work before archiving.",
+    "未受領の依頼を取り消すか、受領者が停止を確認して解放してから、プロジェクトをアーカイブしてください。",
+  ],
   "reasons.project_execution_stop_unresolved": [
     "请先核实并同步执行的实际停止结果，再归档项目。",
     "Confirm and synchronize the actual execution stop before archiving the project.",

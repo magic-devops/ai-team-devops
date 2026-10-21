@@ -26,7 +26,7 @@ class VerificationContext:
 
     def __init__(
         self, db, project, data, *, tasks=None, requirements=None, issues=None, reviews=None, team=None,
-        external_proofs=None, latest_submissions=None, design_selections=None,
+        external_proofs=None, latest_submissions=None, design_selections=None, work_order_activity=None,
     ):
         self.project, self.data = project, data
 
@@ -61,6 +61,11 @@ class VerificationContext:
         self.external_proofs = external_proofs if external_proofs is not None else load_external_proofs(
             db, project, self.tasks, reviews=self.reviews.values())
         self.latest_submissions = latest_submissions if latest_submissions is not None else load_latest_submissions(db, project, self.tasks)
+        from .delivery_external_work_order_progress import active_activity
+
+        self.work_order_activity = (active_activity(db, project, self.tasks)
+            if work_order_activity is None else work_order_activity)
+        self.work_order_active_task_ids = set(self.work_order_activity)
         from .design_service import load_design_selections
 
         self.design_selections = design_selections if design_selections is not None else load_design_selections(db, project, self.requirements, self.tasks)
@@ -179,6 +184,10 @@ class VerificationContext:
                 "reasons": [{"code": "task_missing", "message": "Task is no longer in this project."}],
             }
         reasons = definition["execution_gate"]["reasons"]
+        if task_id in self.work_order_active_task_ids:
+            from .delivery_external_work_order_service import ACTIVE_ORDER_REASON
+
+            reasons.append(dict(ACTIVE_ORDER_REASON))
         task = self.tasks[task_id]
         owner = self.owner(task)
         if owner is None:
@@ -278,7 +287,7 @@ class VerificationContext:
         )["current"]
 
     def native_accepted(self, task_id):
-        if not self.execution_valid(task_id):
+        if task_id in self.work_order_active_task_ids or not self.execution_valid(task_id):
             return False
         entry = self.executions[task_id]
         review = entry.get("review") or {}
@@ -292,6 +301,8 @@ class VerificationContext:
     def external_accepted(self, task_id):
         from .delivery_task_submission_service import external_review_valid
 
+        if task_id in self.work_order_active_task_ids:
+            return False
         review = self.reviews.get(task_id)
         proof = self.external_proofs.get(review.id) if review else None
         return bool(external_review_valid(self, task_id, review, proof)
@@ -300,6 +311,8 @@ class VerificationContext:
     def delivery_accepted(self, task_id):
         from .delivery_task_submission_service import current_submission, external_is_latest_delivery
 
+        if task_id in self.work_order_active_task_ids:
+            return False
         review = self.reviews.get(task_id)
         proof = self.external_proofs.get(review.id) if review else None
         submitted = current_submission(self, task_id)
@@ -314,6 +327,16 @@ class VerificationContext:
         task = self.tasks[task_id]
         planned = self.data.get("task_details", {}).get(task_id, {})
         flow = self.data.get("flows", {}).get(task.req_id, {})
+        activity = self.work_order_activity.get(task_id)
+        if activity is not None:
+            # Activity is a read projection, never a Task edit or an acceptance
+            # fact. Keep explicit scope/dependency blockers ahead of self-report,
+            # without feeding that report back into submission eligibility.
+            if task.status == "blocked" or planned.get("blocked_reason") or flow.get("blocked_reason") or self.blocked(task_id):
+                return "blocked"
+            if activity["state"] == "queued":
+                return "pending"
+            return "blocked" if activity["reported_status"] == "blocked" else "in_progress"
         from .delivery_task_submission_service import current_submission
 
         submitted = current_submission(self, task_id)
@@ -356,7 +379,7 @@ class VerificationContext:
             status = task.status
             if self.data.get("task_details", {}).get(task.id, {}).get("blocked_reason"):
                 status = "blocked"
-            elif ((task.id in self.executions or task.id in self.latest_submissions or self.reviews.get(task.id) and self.reviews[task.id].id in self.external_proofs)
+            elif ((task.id in self.work_order_active_task_ids or task.id in self.executions or task.id in self.latest_submissions or self.reviews.get(task.id) and self.reviews[task.id].id in self.external_proofs)
                   and not self.delivery_accepted(task.id) and status == "completed"):
                 status = "in_progress"
             tasks.append(
@@ -383,7 +406,7 @@ class VerificationContext:
         return accepted
 
     def verified(self, task_id, trail=frozenset()):
-        if task_id in trail:
+        if task_id in trail or task_id in self.work_order_active_task_ids:
             return False
         if task_id in self._verified:
             return self._verified[task_id]

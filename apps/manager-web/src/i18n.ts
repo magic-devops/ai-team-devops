@@ -1,4 +1,5 @@
 import { eventReceiptTranslations } from "./i18n/event-receipts";
+import { externalWorkOrderNavigation, externalWorkOrderPages } from "./i18n/external-work-orders";
 import { assetSyncTranslations } from "./i18n/asset-sync";
 import { deliveryDiscussionTranslations } from "./i18n/delivery-discussion";
 import i18n from "i18next";
@@ -61,8 +62,10 @@ i18n
       "zh-CN": {
         translation: {
           ...zhCN,
+          nav: { ...zhCN.nav, ...externalWorkOrderNavigation["zh-CN"] },
           page: {
             ...zhCN.page,
+            ...externalWorkOrderPages["zh-CN"],
             settings: {
               ...zhCN.page.settings,
               ...legacyDeploymentRetirementZh.page.settings,
@@ -101,8 +104,10 @@ i18n
       "en-US": {
         translation: {
           ...enUS,
+          nav: { ...enUS.nav, ...externalWorkOrderNavigation["en-US"] },
           page: {
             ...enUS.page,
+            ...externalWorkOrderPages["en-US"],
             settings: {
               ...enUS.page.settings,
               ...legacyDeploymentRetirementEn.page.settings,
@@ -141,8 +146,10 @@ i18n
       "ja-JP": {
         translation: {
           ...jaJP,
+          nav: { ...jaJP.nav, ...externalWorkOrderNavigation["ja-JP"] },
           page: {
             ...jaJP.page,
+            ...externalWorkOrderPages["ja-JP"],
             settings: {
               ...jaJP.page.settings,
               ...legacyDeploymentRetirementJa.page.settings,

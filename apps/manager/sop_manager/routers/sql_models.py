@@ -713,6 +713,10 @@ from .design_generation_model import register_design_generation_model  # noqa: E
 
 ProjectDesignGeneration = register_design_generation_model(Base)
 
+from .delivery_external_work_order_model import register_work_order_model  # noqa: E402
+
+DeliveryExternalWorkOrder = register_work_order_model(Base)
+
 
 def create_all():
     from sop_manager.schema_upgrade import require_current_schema

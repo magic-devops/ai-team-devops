@@ -1,74 +1,51 @@
+"""Legacy Run files are read-only diagnostics, never formal execution state."""
 from contextlib import contextmanager
+import json
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from sop_manager.path_config import reset_request_scope, set_request_scope
 from sop_manager.routers import agent_runs as runs
-from sop_manager.routers.agent_runs import EvidenceIn, RunCreate, StatusUpdate
+from sop_manager.routers.scope_guard import attach_scope
 
 
 @contextmanager
-def scoped_project(root, *, tenant="tenant-a", business="biz-a", project="project-a"):
-    tokens = set_request_scope(
-        tenant_id=tenant,
-        project_id=project,
-        project_path=root,
-        tenant_code=tenant,
-        business_code=business,
-        project_code=project,
-    )
+def scoped_project(root, project="project-a"):
+    tokens = set_request_scope(tenant_id="tenant-a", project_id=project, project_path=root,
+        tenant_code="tenant-a", business_code="biz-a", project_code=project)
     try:
         yield
     finally:
         reset_request_scope(tokens)
 
 
-def test_retry_failed_agent_run_creates_recoverable_retry_run(tmp_path):
-    with scoped_project(tmp_path, business="biz-a", project="project-a"):
-        original = runs.create_run(RunCreate(agent_id="coder", task_id="T-retry", meta={"lease_owner": "agent-a"}))
-        runs.update_status(original["id"], StatusUpdate(status="failed", error_msg="unit tests failed"))
-        runs.write_evidence(
-            original["id"],
-            EvidenceIn(
-                artifact={"path": "artifacts/T-retry.log"},
-                gate_results={"unit": "failed"},
-                confidence=0.42,
-            ),
-        )
-
-        retried = runs.retry_run(original["id"])
-        listed = runs.list_runs(agent_id="coder", status="", limit=10)
-
-    assert retried["retry_of"] == original["id"]
-    assert retried["status"] == "pending"
-    assert retried["retry_count"] == 1
-    assert retried["artifact"] == {"path": "artifacts/T-retry.log"}
-    assert retried["gate_results"] == {"unit": "failed"}
-    assert {item["id"] for item in listed["items"]} == {original["id"], retried["id"]}
+@pytest.mark.parametrize("method", ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
+@pytest.mark.parametrize("path", ["", "/unique/status", "/unique/heartbeat", "/unique/evidence", "/unique/retry", "/unique/cancel", "/summary"])
+def test_retired_agent_run_methods_preserve_legacy_source_and_never_claim_stopped(monkeypatch, tmp_path, method, path):
+    monkeypatch.setattr(runs, "resolved_ai_memory_root", lambda: tmp_path)
+    source = tmp_path / "agent_runs" / "run_unique.json"
+    source.parent.mkdir()
+    with scoped_project(tmp_path):
+        source.write_text(json.dumps(attach_scope({"id": "unique", "status": "running"})), encoding="utf-8")
+        before = {p.relative_to(tmp_path).as_posix(): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+        app = FastAPI(); app.include_router(runs.router)
+        response = TestClient(app).request(method, "/api/v1/agent-runs" + path,
+            json={"task_id": "made-up", "status": "success", "stopped": True})
+        assert response.status_code == 410
+        if method != "HEAD":
+            assert response.json()["detail"]["code"] == "legacy_agent_execution_retired"
+        row = runs._all_runs()[0]
+        assert row["status"] == "running" and row["legacy_unverified"] is True and row["evidence_source"] == "legacy_reported"
+        assert {p.relative_to(tmp_path).as_posix(): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
+    with scoped_project(tmp_path, project="another-project"):
+        assert runs._all_runs() == []
 
 
-def test_retry_rejects_cross_project_run(tmp_path):
-    with scoped_project(tmp_path, business="biz-a", project="project-a"):
-        original = runs.create_run(RunCreate(agent_id="coder", task_id="T-retry"))
-        runs.update_status(original["id"], StatusUpdate(status="failed", error_msg="x"))
-
-    with scoped_project(tmp_path, business="biz-a", project="project-b"):
-        with pytest.raises(HTTPException) as exc:
-            runs.retry_run(original["id"])
-
-    assert exc.value.status_code == 404
-
-
-def test_cancel_running_agent_run_records_reason(tmp_path):
-    with scoped_project(tmp_path, business="biz-a", project="project-a"):
-        run = runs.create_run(RunCreate(agent_id="coder", task_id="T-cancel"))
-        runs.update_status(run["id"], StatusUpdate(status="running"))
-
-        cancelled = runs.cancel_run(run["id"], runs.CancelIn(reason="manual stop"))
-        summary = runs.runs_summary()["summary"]
-
-    assert cancelled["status"] == "cancelled"
-    assert cancelled["cancel_reason"] == "manual stop"
-    assert cancelled["finished_at"]
-    assert summary["cancelled"] == 1
+def test_empty_private_legacy_trace_read_does_not_create_a_store(monkeypatch, tmp_path):
+    source = tmp_path / "not-created"
+    monkeypatch.setattr(runs, "resolved_ai_memory_root", lambda: source)
+    with scoped_project(tmp_path):
+        assert runs._all_runs() == []
+    assert not source.exists()

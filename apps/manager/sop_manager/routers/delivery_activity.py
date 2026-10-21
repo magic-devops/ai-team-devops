@@ -71,6 +71,8 @@ class _RecordedTargets:
             self.add("requirement", rid)
         elif action.startswith("execution."):
             self.execution(rid)
+        elif action.startswith("work_order."):
+            self.add("work_order", rid)
         elif action == "task.manual_review":
             self.add("task", payload.get("task_id"))
         elif action.startswith("task.") or action == "tasks.plan":
@@ -190,6 +192,7 @@ def target_view(db, project, state, user, ref, store=None):
         "issue",
         "release_candidate",
         "deployment",
+        "work_order",
     } or not isinstance(id, str):
         return None
     label, exists, restricted = None, False, False
@@ -199,6 +202,21 @@ def target_view(db, project, state, user, ref, store=None):
         model = {"requirement": Requirement, "task": Task, "issue": Issue}[kind]
         row = records(db, model, project).filter_by(id=id).first()
         exists, label = row is not None, row.title if row else None
+    elif kind == "work_order":
+        from types import SimpleNamespace
+        from sqlalchemy import select
+        from .delivery_external_work_order_model import DeliveryExternalWorkOrder as Order
+        from .delivery_external_work_order_service import assert_order_access
+        from .delivery_query_index import scope
+
+        row = db.execute(select(Order.id, Order.task_title, Order.runtime_scopes).where(*scope(project, Order), Order.id == id)).mappings().first()
+        exists = row is not None
+        if row:
+            try:
+                assert_order_access(db, project, user, SimpleNamespace(**dict(row)), store=store)
+                label = row["task_title"]
+            except HTTPException:
+                restricted = True
     else:
         collection = {
             "execution": "executions",

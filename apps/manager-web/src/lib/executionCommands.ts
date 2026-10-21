@@ -71,7 +71,7 @@ export function commandNodes(
 export function safeExecutionReturn(value: string, depth = 0): string | null {
   const unsafeCharacters = (target: string) => /[\u0000-\u001f\u007f]/.test(target) || /%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(target) || target.indexOf("#", 1) >= 0;
   if (
-    !/^#\/(dev-flow|tasks\/(?:execution|board)|ai\/agent-ops\/(?:runs|heartbeat|profiles|retry))(?:\?|$)/.test(value) ||
+    !/^#\/(dev-flow|tasks\/(?:execution|board)|ai\/agent-ops\/(?:runs|heartbeat|profiles|retry)|ecosystem\/a2a\/(?:dispatch|negotiate|evidence))(?:\?|$)/.test(value) ||
     unsafeCharacters(value) ||
     value.length > 4000 ||
     depth > 2

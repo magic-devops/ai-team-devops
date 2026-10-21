@@ -11,6 +11,7 @@ from .._util import console, get_client, warn
 from . import delivery_discussion
 from sop_sdk.task_submission import load_submission_command
 from sop_sdk.design_original import load_design_original, load_design_selection
+from sop_sdk.work_order_original import load_work_order_original
 
 app = typer.Typer(
     help="项目交付：context / requirements / requirement / requirement-definition / requirement-records / requirement-record / requirement-impact / requirement-impact-items / requirement-impact-item / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / progress-freeze-proof / baselines / baseline / baseline-items / baseline-item / baseline-comparison / baseline-comparison-items / baseline-comparison-item / observation / observation-items / observation-item / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
@@ -1108,6 +1109,54 @@ def command(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=F
         with get_client() as client:
             console.print_json(data=client.delivery_command(body))
     except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("work-orders")
+def work_orders(task_id: Annotated[str, typer.Option("--task")] = "",
+                state: Annotated[str, typer.Option("--state")] = "",
+                limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+                cursor: Annotated[str, typer.Option("--cursor")] = ""):
+    """读取一页正式工单；已派发、接单、回报和人工验收分别记录。"""
+    _query_output("delivery_work_orders", task_id=task_id, state=state, limit=limit, cursor=cursor)
+
+
+@app.command("work-order-current")
+def work_order_current(task_id: Annotated[str, typer.Option("--task")]):
+    """读取真实任务和项目资源的派发准入，不创建任务或执行记录。"""
+    _query_output("delivery_work_order_current", task_id)
+
+
+@app.command("work-order")
+def work_order(work_order_id: Annotated[str, typer.Option("--id")]):
+    """查看明确工单原件与当前操作权限。"""
+    _query_output("delivery_work_order", work_order_id)
+
+
+@app.command("work-order-packet")
+def work_order_packet(work_order_id: Annotated[str, typer.Option("--id")]):
+    """核验并输出完整固定工作包；导出不表示工具已开始执行。"""
+    _query_output("delivery_work_order_packet", work_order_id)
+
+
+@app.command("work-order-preview")
+def work_order_preview(task_id: Annotated[str, typer.Option("--task")],
+                       file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """使用明确任务基准、执行资源和说明预览工作包，不派发。"""
+    try:
+        _query_output("delivery_work_order_preview", task_id, load_work_order_original(file, preview=True))
+    except ValueError as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("work-order-command")
+def work_order_command(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """提交完整原工单命令；响应未知时保持原文件、版本和请求键再恢复。"""
+    try:
+        _query_output("delivery_work_order_command", load_work_order_original(file))
+    except ValueError as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc
 

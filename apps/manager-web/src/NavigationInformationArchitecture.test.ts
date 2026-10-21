@@ -126,18 +126,15 @@ describe("navigation information architecture", () => {
     expect(llmGatewaySource).not.toContain('title="模型网关"');
   });
 
-  it("keeps A2A protocol routes focused on professional modules instead of one generic switchboard", () => {
+  it("uses one formal external work-order flow while retaining reachable former paths", () => {
     const a2aSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench.tsx"), "utf8");
     expect(navigationSource).toContain('key: "a2aGateway", path: "#/ecosystem/a2a"');
-    expect(navigationSource).toContain('subnav("ecosystem/a2a", "registry", "negotiate", "sla", "windows", "dispatch", "evidence")');
-    expect(navigationSource).toContain('key: "a2aRegistry", path: "#/ecosystem/a2a/registry", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "registry" })');
-    expect(navigationSource).toContain('key: "a2aDispatch", path: "#/ecosystem/a2a/dispatch", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "dispatches" })');
-    expect(a2aSource).toContain("const TAB_KEYS: Tab[]");
-    expect(a2aSource).toContain("page.a2aGateway.tabs.");
-    expect(a2aSource).toContain('t("page.a2aGateway.focusedHint")');
-    expect(a2aSource).toContain('focused ? (');
-    expect(a2aSource).not.toContain('title={focused ? activeMeta.title : "A2A 网关"}');
-    expect(a2aSource).not.toContain('{ label: "协议健康", value: "health" }');
+    expect(navigationSource).toContain('subnav("ecosystem/a2a", "dispatch", "negotiate", "evidence")');
+    expect(navigationSource).toContain('key: "a2aRegistry", path: "#/ecosystem/a2a/registry"');
+    expect(a2aSource).toContain("ProjectContextGate requireSelection");
+    expect(a2aSource).toContain("ExternalWorkOrderPanel");
+    expect(a2aSource).not.toContain("manual-${Date.now()}");
+    expect(a2aSource).not.toContain("a2aReceiveEvidence");
   });
 
   it("keeps knowledge graph routes focused on build query lineage and profile modules", () => {

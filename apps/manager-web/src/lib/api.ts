@@ -1922,26 +1922,6 @@ export const api = {
       `/api/v1/webhooks/${encodeURIComponent(hookId)}/deliveries?limit=${limit}`,
     ),
 
-  // ── Agent Runs ──────────────────────────────────────────────────────────
-  agentRunsList: (agentId = "", status = "", limit = 100) =>
-    request<any>(`/api/v1/agent-runs?agent_id=${agentId}&status=${status}&limit=${limit}`),
-  agentRunCreate: (body: { agent_id: string; task_id?: string; meta?: Record<string, unknown> }) =>
-    request<any>("/api/v1/agent-runs", { method: "POST", body: JSON.stringify(body) }),
-  agentRunHeartbeat: (runId: string) =>
-    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/heartbeat`, { method: "PUT" }),
-  agentRunStatus: (runId: string, body: { status: string; error_msg?: string; retry_count?: number }) =>
-    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/status`, { method: "PUT", body: JSON.stringify(body) }),
-  agentRunRetry: (runId: string) =>
-    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/retry`, { method: "POST" }),
-  agentRunCancel: (runId: string, body: { reason?: string } = {}) =>
-    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/cancel`, { method: "POST", body: JSON.stringify(body) }),
-  agentRunEvidence: (runId: string, body: { artifact?: Record<string, unknown>; gate_results?: Record<string, unknown>; confidence?: number }) =>
-    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/evidence`, { method: "POST", body: JSON.stringify(body) }),
-  agentRunDelete: (runId: string) =>
-    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}`, { method: "DELETE" }),
-  agentRunProfiles: () => request<any>("/api/v1/agent-runs/profiles"),
-  agentRunsSummaryV2: () => request<any>("/api/v1/agent-runs/summary"),
-
   // ── Data Quality ────────────────────────────────────────────────────────
   dataQualityRules: (domain = "", status = "") =>
     request<any>(`/api/v1/data-quality/rules?domain=${domain}&status=${status}`),
@@ -2103,74 +2083,6 @@ export const api = {
   dataIngestCdcCursors: (jobId = "") =>
     request<any>(`/api/v1/data-ingest/cdc-cursors?job_id=${encodeURIComponent(jobId)}`),
   dataIngestSummary: () => request<any>("/api/v1/data-ingest/summary"),
-
-  // ── A2A Gateway ─────────────────────────────────────────────────────────
-  a2aRegistry: (agentType = "") => request<any>(`/api/v1/a2a/registry?agent_type=${agentType}`),
-  a2aRegister: (body: { name: string; agent_type?: string; endpoint?: string; organization_code?: string; trust_domain?: string; capabilities?: string[] }) =>
-    request<any>("/api/v1/a2a/registry", { method: "POST", body: JSON.stringify(body) }),
-  a2aDeregister: (id: string) =>
-    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  a2aAgentStatus: (id: string, status: string) =>
-    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
-  a2aRotateCredential: (id: string) =>
-    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/credentials/rotate`, { method: "POST" }),
-  a2aHeartbeat: (id: string, body: { credential_token: string; status?: string; load?: number; success_rate?: number; capabilities?: string[]; telemetry?: Record<string, unknown> }) =>
-    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/heartbeat`, { method: "POST", body: JSON.stringify(body) }),
-  a2aPullTasks: (id: string, body: { credential_token: string; limit?: number; capabilities?: string[]; lease_seconds?: number; wait_seconds?: number }) =>
-    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/tasks/pull`, { method: "POST", body: JSON.stringify(body) }),
-  a2aAckTask: (id: string, body: { credential_token: string; dispatch_id: string; lease_id: string; ack?: string; message?: string }) =>
-    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/tasks/ack`, { method: "POST", body: JSON.stringify(body) }),
-  a2aRenewLease: (id: string, body: { credential_token: string; dispatch_id: string; lease_id: string; extend_seconds?: number }) =>
-    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/tasks/renew`, { method: "POST", body: JSON.stringify(body) }),
-  a2aExpireLeases: () =>
-    request<any>("/api/v1/a2a/leases/expire", { method: "POST" }),
-  a2aProgress: (id: string, body: { credential_token: string; dispatch_id: string; status?: string; progress?: number; message?: string; artifact?: Record<string, unknown> }) =>
-    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/progress`, { method: "POST", body: JSON.stringify(body) }),
-  a2aTrust: () => request<any>("/api/v1/a2a/trust"),
-  a2aTrustPolicy: () => request<any>("/api/v1/a2a/trust/policy"),
-  a2aTrustPolicyUpdate: (body: { stale_after_minutes?: number; min_success_rate?: number; max_load?: number; require_endpoint?: boolean; allowed_agent_types?: string[]; allowed_organization_codes?: string[]; required_capabilities?: string[]; enforce_on_negotiate?: boolean; enforce_on_dispatch?: boolean; enforce_on_pull?: boolean }) =>
-    request<any>("/api/v1/a2a/trust/policy", { method: "PUT", body: JSON.stringify(body) }),
-  a2aTrustTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
-    request<any>("/api/v1/a2a/trust/tasks", { method: "POST", body: JSON.stringify(body) }),
-  a2aNegotiate: (body: { task_type: string; task_description?: string; required_capabilities?: string[]; priority?: string }) =>
-    request<any>("/api/v1/a2a/negotiate", { method: "POST", body: JSON.stringify(body) }),
-  a2aDispatch: (body: { agent_id: string; task_id: string; session_id?: string; payload?: Record<string, unknown> }) =>
-    request<any>("/api/v1/a2a/dispatch", { method: "POST", body: JSON.stringify(body) }),
-  a2aDispatchPacket: (dispatchId: string) =>
-    request<any>(`/api/v1/a2a/dispatch/${encodeURIComponent(dispatchId)}/packet`),
-  a2aRetryDispatch: (dispatchId: string) =>
-    request<any>(`/api/v1/a2a/dispatch/${encodeURIComponent(dispatchId)}/retry`, { method: "POST" }),
-  a2aReassignDispatch: (dispatchId: string, body: { agent_id: string; reason?: string }) =>
-    request<any>(`/api/v1/a2a/dispatch/${encodeURIComponent(dispatchId)}/reassign`, { method: "POST", body: JSON.stringify(body) }),
-  a2aDispatches: (agentId = "", status = "") => request<any>(`/api/v1/a2a/dispatch?agent_id=${agentId}&status=${status}`),
-  a2aEvidence: (agentId = "") => request<any>(`/api/v1/a2a/evidence?agent_id=${agentId}`),
-  a2aReceiveEvidence: (body: { dispatch_id: string; status: string; artifact?: Record<string, unknown>; confidence?: number; quality_gate_results?: Array<Record<string, unknown>> }) =>
-    request<any>("/api/v1/a2a/evidence", { method: "POST", body: JSON.stringify(body) }),
-  a2aSessions: () => request<any>("/api/v1/a2a/sessions"),
-  a2aSession: (sessionId: string) =>
-    request<any>(`/api/v1/a2a/sessions/${encodeURIComponent(sessionId)}`),
-  a2aSummary: () => request<any>("/api/v1/a2a/summary"),
-  a2aHealth: () => request<any>("/api/v1/a2a/health"),
-  a2aSla: () => request<any>("/api/v1/a2a/sla"),
-  a2aSlaPolicy: () => request<any>("/api/v1/a2a/sla/policy"),
-  a2aSlaPolicyUpdate: (body: { default_sla_minutes?: number; due_soon_ratio?: number; priority_sla_minutes?: Record<string, number>; auto_retry_enabled?: boolean; max_auto_retries?: number; im_alert_enabled?: boolean }) =>
-    request<any>("/api/v1/a2a/sla/policy", { method: "PUT", body: JSON.stringify(body) }),
-  a2aSlaTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
-    request<any>("/api/v1/a2a/sla/tasks", { method: "POST", body: JSON.stringify(body) }),
-  a2aSlaEscalations: (body: { dry_run?: boolean; channels?: string[] }) =>
-    request<any>("/api/v1/a2a/sla/escalations", { method: "POST", body: JSON.stringify(body) }),
-  a2aExecutionWindows: () => request<any>("/api/v1/a2a/execution-windows"),
-  a2aExecutionWindowPolicy: () => request<any>("/api/v1/a2a/execution-windows/policy"),
-  a2aExecutionWindowPolicyUpdate: (body: { stale_after_minutes?: number; due_soon_seconds?: number; max_auto_reassign?: number; action_mode?: string; require_preview_for_high_risk?: boolean; auto_renew_enabled?: boolean; auto_reassign_enabled?: boolean; auto_expire_enabled?: boolean }) =>
-    request<any>("/api/v1/a2a/execution-windows/policy", { method: "PUT", body: JSON.stringify(body) }),
-  a2aExecutionWindowTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
-    request<any>("/api/v1/a2a/execution-windows/tasks", { method: "POST", body: JSON.stringify(body) }),
-  a2aExecutionWindowActions: (body: { dry_run?: boolean; renew_seconds?: number; max_actions?: number }) =>
-    request<any>("/api/v1/a2a/execution-windows/actions", { method: "POST", body: JSON.stringify(body) }),
-  a2aGovernanceTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
-    request<any>("/api/v1/a2a/governance-tasks", { method: "POST", body: JSON.stringify(body) }),
-  a2aImBriefing: (body: { channels?: string[]; dry_run?: boolean }) =>
-    request<any>("/api/v1/a2a/im-briefing", { method: "POST", body: JSON.stringify(body) }),
 
   // ── LLM Gateway v2 ──────────────────────────────────────────────────────
   llmRoutes: () => request<any>("/api/v1/llm-gateway/routes"),

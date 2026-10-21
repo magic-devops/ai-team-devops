@@ -2,7 +2,6 @@ from contextlib import contextmanager
 
 from sop_manager.path_config import reset_request_scope, set_request_scope
 from sop_manager.routers import agent_runs, data_ingest, llm_gateway_v2
-from sop_manager.routers.agent_runs import RunCreate, StatusUpdate
 from sop_manager.routers.data_ingest import ConnectorCreate, JobCreate, JobStatusUpdate
 from sop_manager.routers.events_ingest import IngestIn, ingest
 from sop_manager.routers.llm_gateway_v2 import UsageRecord
@@ -65,9 +64,19 @@ def test_trace_context_attaches_to_agent_llm_data_event_and_audit(monkeypatch, t
     monkeypatch.setattr(audit_chain, "_CHAIN_DIR", tmp_path / ".sop-runtime" / "audit-chain")
 
     with scoped_project(tmp_path):
-        with agent_runs.trace_context(trace_id=trace_id, correlation_id=correlation_id):
-            run = agent_runs.create_run(RunCreate(agent_id="coder", task_id="TASK-OBS"))
-            agent_runs.update_status(run["id"], StatusUpdate(status="failed", error_msg="llm timeout"))
+        from sop_manager.routers.scope_guard import attach_scope
+
+        # Explicit historical fixture only. The retired public execution API
+        # cannot create a Task, launch, progress or delivery proof for this row.
+        run = attach_scope({"id": "legacy-trace-run", "agent_id": "coder", "task_id": "LEGACY-TASK-OBS",
+            "status": "failed", "error_msg": "llm timeout", "trace_id": trace_id, "correlation_id": correlation_id,
+            "started_at": "2026-10-18T00:00:00Z", "finished_at": "2026-10-18T00:01:00Z"})
+        directory = agent_runs._runs_dir(); directory.mkdir(parents=True)
+        legacy_file = directory / "run_legacy-trace-run.json"
+        legacy_file.write_text(json.dumps(run), encoding="utf-8")
+        original = legacy_file.read_bytes()
+        legacy = agent_runs._all_runs()[0]
+        assert legacy["legacy_unverified"] is True and legacy["evidence_source"] == "legacy_reported"
 
         llm = llm_gateway_v2.record_usage(
             UsageRecord(
@@ -145,6 +154,7 @@ def test_trace_context_attaches_to_agent_llm_data_event_and_audit(monkeypatch, t
         )
 
         summary = observability_trace_summary(run_id=run["id"], trace_id="", limit=50)
+        assert legacy_file.read_bytes() == original
 
     engine.dispose()
     assert llm["trace_id"] == trace_id
@@ -159,6 +169,10 @@ def test_trace_context_attaches_to_agent_llm_data_event_and_audit(monkeypatch, t
     node_types = {node["type"] for node in summary["root_cause_navigation"]}
     assert {"agent_run", "llm_call", "data_job", "event", "audit"} <= node_types
     assert summary["root_cause"]["risk_level"] == "high"
+    legacy_node = next(node for node in summary["root_cause_navigation"] if node["type"] == "agent_run")
+    assert legacy_node["legacy_unverified"] is True and legacy_node["evidence_source"] == "legacy_reported"
+    assert "unverified" in legacy_node["detail"] and "not acceptance evidence" in legacy_node["detail"]
+    assert legacy_node["link"] == "#/settings/observability"
     assert "/api/v1/system/ops/observability/traces" == summary["agent_consumption"]["api"]
 
 

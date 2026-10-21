@@ -505,6 +505,10 @@ def _edit_task_planning(db, project, data, body, roster):
 
 
 def _require_task_transition(db, project, data, row, body):
+    if body.status == "completed":
+        from .delivery_external_work_order_service import require_no_active_work_order
+
+        require_no_active_work_order(db, project, row.id, action="task.complete")
     if body.status in {"in_progress", "completed"}:
         from .delivery_plan import require_dependencies
 

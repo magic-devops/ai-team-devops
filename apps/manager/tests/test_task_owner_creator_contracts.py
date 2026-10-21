@@ -9,7 +9,6 @@ from pydantic import ValidationError
 from starlette.routing import Match
 
 _INPUTS = {
-    "a2a_gateway": "GovernanceTasksIn TrustTasksIn SlaTasksIn ExecutionWindowTasksIn",
     "agents": "AgentRebalanceTasksIn",
     "audit": "AuditTaskIn",
     "copilot": "PlanTasksIn",

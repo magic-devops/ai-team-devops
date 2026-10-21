@@ -1,3 +1,4 @@
+import { externalWorkOrderCopy, externalWorkOrderNavigation } from "./i18n/external-work-orders";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -305,19 +306,17 @@ describe("navigation i18n coverage", () => {
     expect(llmGatewaySource).toContain("page.llmGateway.tabs.");
   });
 
-  it("localizes A2A protocol focused route chrome", () => {
-    for (const locale of ["zh-CN", "en-US", "ja-JP"] as const) {
-      const messages = JSON.parse(readFileSync(resolve(root, `src/i18n/${locale}.json`), "utf8"));
-      expect(messages.page.a2aGateway.workbenchTitle).toBeTruthy();
-      expect(messages.page.a2aGateway.focusedHint).toBeTruthy();
-      expect(messages.page.a2aGateway.metricHealth).toBeTruthy();
-      expect(messages.page.a2aGateway.tabLabels.registry).toBeTruthy();
-      expect(messages.page.a2aGateway.tabs.registry.title).toBeTruthy();
-      expect(messages.page.a2aGateway.tabs.dispatches.focus).toBeTruthy();
+  it("uses the isolated three-language formal work-order dictionary", () => {
+    expect(a2aSource).toContain("externalWorkOrderCopy(i18n.language)");
+    for (const language of ["zh-CN", "en-US", "ja-JP"] as const) {
+      const words = externalWorkOrderCopy(language);
+      expect(words.title).toBeTruthy();
+      expect(words.stopConfirm).toBeTruthy();
+      expect(words.reportStopConfirm).toBeTruthy();
+      expect(words.states.cancel_requested).toBeTruthy();
+      expect(words.deliveryStates.accepted).toBeTruthy();
+      expect(externalWorkOrderNavigation[language].a2aGateway).toBe(words.title);
     }
-    expect(a2aSource).toContain('t("page.a2aGateway.workbenchTitle")');
-    expect(a2aSource).toContain("page.a2aGateway.tabLabels.");
-    expect(a2aSource).toContain("page.a2aGateway.tabs.");
   });
 
   it("localizes knowledge graph focused route chrome", () => {

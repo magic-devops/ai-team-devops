@@ -2082,6 +2082,13 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
 
             event_data["command_ack_access"] = sorted(set(event_data["command_ack_access"] +
                 submission_runtime_scopes(db, project, event_data["result"]["submission_id"])))
+        if body.action.startswith("work_order."):
+            from .delivery_external_work_order_model import DeliveryExternalWorkOrder
+
+            runtime_scopes = db.scalar(select(DeliveryExternalWorkOrder.runtime_scopes).where(
+                DeliveryExternalWorkOrder.tenant_id == project.tenant_id, DeliveryExternalWorkOrder.project_id == project.id,
+                DeliveryExternalWorkOrder.id == resource_id)) or []
+            event_data["command_ack_access"] = sorted(set(event_data["command_ack_access"] + runtime_scopes))
         db.flush()
         if body.action not in {"project.lifecycle", "baseline.create"} and not body.action.startswith(
             ("release.", "deployment.")
@@ -2154,6 +2161,12 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
 
 
 def _apply(db, project, user, data, action, payload, request, *, command_key="", design_prepared=None):
+    if action.startswith("work_order."):
+        from .delivery_external_work_order_service import apply_work_order
+
+        return apply_work_order(db, project, user, data, action, payload, command_key=command_key,
+            store=getattr(request.app.state, "hermes_store", None) if request else None,
+            execution=getattr(request.app.state, "hermes_execution", None) if request else None)
     if action.startswith("design."):
         from .design_service import apply_document
 
@@ -2281,3 +2294,52 @@ def task_design_preview(task_id: str, body: AdoptionPreviewInput, request: Reque
     with db.no_autoflush:
         return preview(db, _project(db, user, project_id), user, "task", task_id, body,
             store=getattr(request.app.state, "hermes_store", None))
+
+
+from .delivery_external_work_order_contract import Current as WorkOrderCurrent, Preview as WorkOrderPreview, PreviewInput as WorkOrderPreviewInput, Page as WorkOrderPage, Detail as WorkOrderDetail, PacketView as WorkOrderPacketView  # noqa: E402
+
+
+@router.get("/tasks/{task_id}/work-orders/current", response_model=WorkOrderCurrent)
+def external_work_order_current(task_id: str, request: Request, user: Annotated[User, Depends(current_user)],
+        db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id")):
+    from .delivery_external_work_order_query import current
+
+    with db.no_autoflush:
+        return current(db, _project(db, user, project_id), user, task_id, store=getattr(request.app.state, "hermes_store", None), execution=getattr(request.app.state, "hermes_execution", None))
+
+
+@router.post("/tasks/{task_id}/work-order-preview", response_model=WorkOrderPreview)
+def external_work_order_preview(task_id: str, body: WorkOrderPreviewInput, request: Request, user: Annotated[User, Depends(current_user)],
+        db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id")):
+    from .delivery_external_work_order_query import preview
+
+    with db.no_autoflush:
+        return preview(db, _project(db, user, project_id), user, task_id, body, store=getattr(request.app.state, "hermes_store", None), execution=getattr(request.app.state, "hermes_execution", None))
+
+
+@router.get("/work-orders", response_model=WorkOrderPage)
+def external_work_orders(request: Request, user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+        task_id: str = Query("", max_length=64), state: Literal["", "queued", "claimed", "cancel_requested", "reported", "closed"] = "",
+        limit: int = Query(20, ge=1, le=100), cursor: str = Query("", max_length=4000), project_id: str = Header(default="", alias="X-Project-Id")):
+    from .delivery_external_work_order_query import catalogue
+
+    with db.no_autoflush:
+        return catalogue(db, _project(db, user, project_id), user, task_id=task_id, state=state, limit=limit, cursor=cursor, store=getattr(request.app.state, "hermes_store", None))
+
+
+@router.get("/work-orders/{work_order_id}", response_model=WorkOrderDetail)
+def external_work_order_detail(work_order_id: str, request: Request, user: Annotated[User, Depends(current_user)],
+        db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id")):
+    from .delivery_external_work_order_query import detail
+
+    with db.no_autoflush:
+        return detail(db, _project(db, user, project_id), user, work_order_id, store=getattr(request.app.state, "hermes_store", None), execution=getattr(request.app.state, "hermes_execution", None))
+
+
+@router.get("/work-orders/{work_order_id}/packet", response_model=WorkOrderPacketView)
+def external_work_order_packet(work_order_id: str, request: Request, user: Annotated[User, Depends(current_user)],
+        db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id")):
+    from .delivery_external_work_order_query import packet
+
+    with db.no_autoflush:
+        return packet(db, _project(db, user, project_id), user, work_order_id, store=getattr(request.app.state, "hermes_store", None))

@@ -267,7 +267,9 @@ def _fresh_authority(db, project, row, state, store, execution, *, launch=False,
     if launch:
         from hermes_core.run_controls import pending_stop
         from .delivery_task_submission_service import require_native_not_taken_over
+        from .delivery_external_work_order_service import require_no_active_work_order
 
+        require_no_active_work_order(db, project, row.task_id, action="execution.launch")
         require_native_not_taken_over(VerificationContext(db, project, state), entry)
         if project.status != "active" or not run or not VerificationContext(db, project, state).execution_snapshot_current(entry):
             raise HTTPException(409, "The accepted launch context changed")
