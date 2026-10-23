@@ -1638,6 +1638,39 @@
   overflow-y: auto;
   padding-right: 6px;
 }
+.delivery-plan-recovery-index {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  background: var(--panel-2, #f6f8fa);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.delivery-plan-recovery-index small { color: var(--muted, #64748b); }
+.delivery-plan-recovery-index .ant-btn {
+  height: auto;
+  min-height: 32px;
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+}
+.delivery-task-plan-recovery .ant-modal-body {
+  display: grid;
+  gap: 12px;
+  max-height: 72dvh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.delivery-task-plan-recovery :is(p, h3) { margin: 0; }
+.delivery-task-plan-recovery summary { cursor: pointer; }
+.delivery-task-plan-recovery .delivery-actions { flex-wrap: wrap; }
+.delivery-task-plan-recovery code { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .delivery-task-plan-recovery .delivery-actions > .ant-btn,
+  .delivery-plan-recovery-index .ant-btn { width: 100%; }
+}
 .delivery-plan-context,
 .delivery-plan-provenance,
 .delivery-plan-conflict {

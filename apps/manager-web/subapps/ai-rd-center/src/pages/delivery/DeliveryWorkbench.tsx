@@ -5,7 +5,6 @@ import {
   fetchDeliveryContext,
   fetchDeliveryReferences,
   fetchRequirementDetail,
-  fetchEditableRequirement,
   type RequirementDetail,
   invalidateDeliveryQueries,
   rebuildDeliveryQuery,
@@ -69,7 +68,8 @@ import {
 } from "./DeliveryEditor";
 import "./delivery-workbench.css";
 import { DeliveryIssueWorkbench } from "./DeliveryIssueWorkbench";
-import { DeliveryTaskPlanEditor } from "./DeliveryTaskPlanEditor";
+import { TaskPlanRecoveryGateway } from "./TaskPlanRecoveryGateway";
+import { taskPlanEditorHash } from "@/lib/taskPlanRoute";
 import { DeliveryDesignContextPanel } from "./DeliveryDesignContextPanel";
 import { planError } from "@/lib/deliveryTaskPlan";
 import {
@@ -116,7 +116,6 @@ import {
 } from "./DeliveryRequirementReads";
 import type {
   RequirementHead,
-  RequirementEditable,
 } from "@/lib/deliveryRequirementReads";
 import { beginProgressExactRead } from "@/lib/deliveryProgress";
 import { DeliveryRequirementHistory } from "./DeliveryRequirementHistory";
@@ -306,8 +305,6 @@ function ProjectDelivery() {
     refetchInterval: 5000,
   });
   const [editor, setEditor] = useState<EditorSpec | null>(null);
-  const [planRequirement, setPlanRequirement] =
-    useState<RequirementEditable | null>(null);
   const [actionError, setActionError] = useState("");
   const lastRequest = useRef<{ signature: string; key: string }>();
   const editorIntent = useRef<DeliveryIntent>();
@@ -898,21 +895,8 @@ function ProjectDelivery() {
       },
       "toolsHint",
     );
-  const planVersion = useRef(0);
-  const planEditor = async (r: RequirementHead) => {
-    const ticket = beginProgressExactRead();
-    setActionError("");
-    try {
-      const fresh = await fetchEditableRequirement(projectId, r.id);
-      if (ticket.current()) {
-        planVersion.current = fresh.version;
-        setPlanRequirement(fresh.requirement);
-      }
-    } catch (error) {
-      if (ticket.current()) setActionError((error as Error).message);
-    } finally {
-      ticket.finish();
-    }
+  const planEditor = (r: RequirementHead) => {
+    if (canNavigate()) location.hash = taskPlanEditorHash(projectId, r.id);
   };
   const evidenceEditor = (r: RequirementHead) =>
     edit(
@@ -1045,6 +1029,20 @@ function ProjectDelivery() {
         knownTaskRecovery.current = { taskId: selectedTaskId, executionId }; locatedRecoveryLive.current = recoveryKey(next); setLocatedRecovery(next);
         executionPending("task-locator-recovery", true);
       }} /> : null;
+  const taskPlanRecovery = projectId && getToken() ? <TaskPlanRecoveryGateway key={`${projectId}:${sessionId}:task-plan`}
+    projectId={projectId} sessionId={sessionId} canNavigate={canNavigate}
+    liveRead={{ data: query.data, pending: query.isPending, failed: Boolean(query.error || !query.data || query.data.query_state.status !== "ready"),
+      refresh: async () => {
+        const current = await query.refetch();
+        if (current.isError || !current.data || current.data.query_state.status !== "ready") throw current.error || new Error(t("deliveryQuery.readFailed"));
+        return current.data;
+      } }}
+    onPending={(value) => executionPending("task-plan", value)}
+    onSaved={(ack, requirementId) => {
+      if (originScope.current !== sessionSnapshot()) return;
+      saveWorkspace(ack); navigate("list", requirementId, "tasks");
+    }} /> : null;
+  const renderContent = () => {
   if (!projectId || !getToken())
     return (
       <Empty description={tr("noProject")}>
@@ -1893,24 +1891,9 @@ function ProjectDelivery() {
       {editor && (
         <DeliveryEditor spec={editor} onClose={() => setEditor(null)} />
       )}
-      {planRequirement && data && (
-        <DeliveryTaskPlanEditor
-          key={planRequirement.id}
-          data={data}
-          requirement={planRequirement}
-          requirementVersion={planVersion.current}
-          onUnresolvedChange={(value) => executionPending(`plan:${planRequirement.id}`, value)}
-          onClose={() => {
-            if (canNavigate()) setPlanRequirement(null);
-          }}
-          onSaved={(updated) => {
-            if (originScope.current !== sessionSnapshot()) return;
-            saveWorkspace(updated);
-            setPlanRequirement(null);
-            navigate("list", planRequirement.id, "tasks");
-          }}
-        />
-      )}
+
     </section>
   );
+  };
+  return <><div className="delivery-plan-recovery-host">{taskPlanRecovery}</div>{renderContent()}</>;
 }

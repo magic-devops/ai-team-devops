@@ -1,438 +1,157 @@
-/** Authored against real editor callbacks; runtime verification is deferred and has not run. */
+/** Real editor/recovery callbacks with retained state. UNRUN: validation deferred by user. */
 import { isValidElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DeliveryTaskPlanEditor } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanEditor";
-import { fetchEditableRequirement, type DeliveryCommandAck, type DeliveryContext } from "./deliveryQuery";
+import { DeliveryTaskPlanEditor, DeliveryTaskPlanForm } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanEditor";
+import { TaskPlanRecoveryModal } from "../../subapps/ai-rd-center/src/pages/delivery/TaskPlanRecoveryModal";
+import { fetchDeliveryContext, fetchDeliveryReferences, fetchEditableRequirement, type DeliveryContext } from "./deliveryQuery";
 import type { RequirementEditable } from "./deliveryRequirementReads";
-import type { DiscussionAdoption } from "./deliveryDiscussions";
-import type { TaskPlanPreview } from "./deliveryTaskPlan";
 import { request } from "./http";
-
-const h = vi.hoisted(() => ({ hooks: [] as any[], next: 0, session: "original-session", revision: "login-1" }));
-vi.mock("react", async () => ({
-  ...(await vi.importActual<typeof import("react")>("react")),
-  useState: (initial: any) => {
-    const index = h.next++;
-    if (!(index in h.hooks)) h.hooks[index] = typeof initial === "function" ? initial() : initial;
-    return [h.hooks[index], (next: any) => {
-      h.hooks[index] = typeof next === "function" ? next(h.hooks[index]) : next;
-    }];
-  },
-  useRef: (initial: any) => {
-    const index = h.next++;
-    if (!(index in h.hooks)) h.hooks[index] = { current: initial };
-    return h.hooks[index];
-  },
-  useEffect: () => {},
+import { createTaskPlanRetention, type TaskPlanRetention } from "./taskPlanRetention";
+import { planAck, planDraft, planOriginal, planPrincipal, planStorage } from "./taskPlanRetentionFixtures";
+const h = vi.hoisted(() => ({ hooks: [] as any[], next: 0, effects: [] as (() => void)[], session: "login-1", writable: true, retention: null as any }));
+vi.mock("react", async () => ({ ...(await vi.importActual<typeof import("react")>("react")),
+  useState: (initial: any) => { const i = h.next++; if (!(i in h.hooks)) h.hooks[i] = typeof initial === "function" ? initial() : initial;
+    return [h.hooks[i], (value: any) => { h.hooks[i] = typeof value === "function" ? value(h.hooks[i]) : value; }]; },
+  useRef: (initial: any) => { const i = h.next++; if (!(i in h.hooks)) h.hooks[i] = { current: initial }; return h.hooks[i]; },
+  useEffect: (effect: () => void, deps: any[]) => { const i = h.next++, before = h.hooks[i];
+    if (!before || !deps || deps.some((value, j) => value !== before[j])) h.effects.push(effect); h.hooks[i] = deps; },
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("./authStorage", async () => ({
-  ...(await vi.importActual<typeof import("./authStorage")>("./authStorage")),
-  getToken: () => h.session,
-  getSessionRevision: () => h.revision,
-  getWorkspaceScope: () => ({ tenantCode: "tenant-A", businessCode: "business-A", projectId: "P", projectCode: "P" }),
-}));
+vi.mock("./projectPortfolio", () => ({ projectSessionKey: () => h.session }));
+vi.mock("./useTaskPlanRetention", () => ({ useTaskPlanRetention: () => h.retention }));
 vi.mock("./http", () => ({ request: vi.fn() }));
-vi.mock("./deliveryQuery", async () => ({
-  ...(await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery")),
-  fetchEditableRequirement: vi.fn(),
-}));
-
-const basis = "a".repeat(64);
-const data = {
-  project_id: "P", version: 7, query_generation: 3, project: { id: "P", name: "Original project" },
-  permissions: { write: true },
-} as unknown as DeliveryContext;
-const requirement = {
-  id: "R", title: "Original requirement", description: "Fixed original scope", priority: "P1", basis,
-  acceptance_criteria: ["Requirement criterion"], tasks_total: 0,
-  flow: { revision: 3, owner_id: "user:lead" },
-} as unknown as RequirementEditable;
-const preview: TaskPlanPreview = {
-  id: "preview-original", version: 7, requirement_revision: 3, requirement_basis: basis,
-  requirement_snapshot: { id: "R", title: requirement.title, description: requirement.description, acceptance_criteria: requirement.acceptance_criteria },
-  source: "template", model: "", provider: "", usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost_usd: 0 }, warnings: [],
-  items: [{ key: "generated-original", title: "Generated original task", description: "Original task body", owner_id: "user:lead", priority: "P1", estimate: "M", acceptance_criteria: ["Own task criterion"], requirement_criteria_indices: [0], depends_on: [], starts_on: null, ends_on: null, blocked_reason: "" }],
-};
-const ack: DeliveryCommandAck = {
-  project_id: "P", action: "tasks.plan", resource: { kind: "task", id: "T-created" }, result: { task_ids: ["T-created"] },
-  affected_refs: [{ kind: "task", id: "T-created" }], applied_version: 8, version: 8, query_generation: 4, replayed: true,
-};
-const source = {
-  reference: { thread_id: "D", expected_thread_version: 3, resolution_event_id: "E", message_id: "M", message_revision: 2 },
-  thread: { title: "Discussion original task" }, message: { body: "Original discussion criterion" }, field: "acceptance_criteria",
-} as DiscussionAdoption;
-
+vi.mock("./deliveryQuery", async () => ({ ...(await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery")),
+  fetchDeliveryContext: vi.fn(), fetchDeliveryReferences: vi.fn(), fetchEditableRequirement: vi.fn() }));
+const data = { project_id: "P", version: 7, query_generation: 3, project: { id: "P", name: "Project" }, permissions: { write: true } } as DeliveryContext;
+const requirement = { id: "R", title: "Requirement", description: "Pinned scope", priority: "P1", basis: "a".repeat(64),
+  acceptance_criteria: ["Criterion"], tasks_total: 0, flow: { revision: 3, owner_id: "user:lead" } } as RequirementEditable;
+const onClose = vi.fn(), onSaved = vi.fn(), onPending = vi.fn();
+let store: TaskPlanRetention, storage: ReturnType<typeof planStorage>;
+function start() {
+  const session = h.session;
+  store = createTaskPlanRetention({ identity: planPrincipal, storage, lock: async (_key, work) => work(true),
+    current: () => session === h.session, onPending, send: (original) => request("/api/v1/delivery/commands", { method: "POST",
+      body: JSON.stringify({ action: original.action, payload: original.payload, expected_version: original.intent.version,
+        idempotency_key: original.intent.key, ...(original.source_reference ? { source_reference: original.source_reference } : {}) }) }) });
+  store.open(); h.retention = { store, view: store.snapshot() };
+}
+const settle = async () => { for (let i = 0; i < 24; i++) await Promise.resolve(); };
 function nodes(node: ReactNode): any[] {
-  if (Array.isArray(node)) return node.flatMap(nodes);
-  if (!isValidElement<any>(node)) return [];
+  if (Array.isArray(node)) return node.flatMap(nodes); if (!isValidElement<any>(node)) return [];
   return [node, ...nodes(node.props.children), ...nodes(node.props.footer), ...nodes(node.props.action)];
 }
-function text(node: ReactNode): string {
-  if (Array.isArray(node)) return node.map(text).join("");
-  if (isValidElement<any>(node)) return text(node.props.children);
-  return node == null || typeof node === "boolean" ? "" : String(node);
-}
-function button(tree: ReactNode, label: string): any {
-  return nodes(tree).find((node) => typeof node.props.onClick === "function" && text(node.props.children).startsWith(label))?.props;
-}
-function field(tree: ReactNode, label: string): any {
-  return nodes(tree).find((node) => node.props["aria-label"]?.startsWith(label))?.props;
-}
-const onClose = vi.fn(), onSaved = vi.fn(), onUnresolvedChange = vi.fn();
-function renderEditor(initialSource?: DiscussionAdoption) {
-  h.next = 0;
-  return DeliveryTaskPlanEditor({ data, requirement, requirementVersion: 7, initialSource, onClose, onSaved, onUnresolvedChange });
+function text(node: ReactNode): string { if (Array.isArray(node)) return node.map(text).join("");
+  return isValidElement<any>(node) ? text(node.props.children) : node == null || typeof node === "boolean" ? "" : String(node); }
+const button = (tree: ReactNode, label: string) => nodes(tree).find((n) => typeof n.props.onClick === "function" && text(n.props.children).startsWith(label))?.props;
+const field = (tree: ReactNode, label: string) => nodes(tree).find((n) => n.props["aria-label"]?.startsWith(label))?.props;
+function render() {
+  h.next = 0; h.retention = { store, view: store.snapshot() };
+  let tree = DeliveryTaskPlanForm({ data, requirement, requirementVersion: 7, onClose, onSaved, onUnresolvedChange: onPending, retention: h.retention, canWriteCurrent: () => h.writable });
+  if (tree.type === TaskPlanRecoveryModal) tree = TaskPlanRecoveryModal(tree.props);
+  h.effects.splice(0).forEach((effect) => effect()); return tree;
 }
 function manual() {
-  const tree = renderEditor();
-  field(tree, "delivery.titleField").onChange({ target: { value: "Manual original task" } });
-  const criteria = nodes(tree).find((node) => Array.isArray(node.props.value) && typeof node.props.onChange === "function" && !node.props["aria-label"] && node.props.value.length === 0);
-  expect(criteria, "the actual task-criteria editor callback exists").toBeDefined();
-  criteria.props.onChange(["Own original criterion"]);
-  field(tree, "delivery.taskPlan.criteria").onChange([0]);
-  return renderEditor();
+  const tree = render(); field(tree, "delivery.titleField").onChange({ target: { value: "Newest title" } });
+  nodes(tree).find((n) => Array.isArray(n.props.value) && n.props.value.length === 0 && !n.props["aria-label"] && typeof n.props.onChange === "function").props.onChange(["Own criterion"]);
+  field(tree, "delivery.taskPlan.criteria").onChange([0]); return render();
 }
-async function settle() { for (let i = 0; i < 24; i++) await Promise.resolve(); }
-function commandCalls() {
-  return vi.mocked(request).mock.calls.filter(([path]) => path === "/api/v1/delivery/commands");
-}
-function originalBody(index = 0) { return String(commandCalls()[index][1]?.body); }
-function deferred<T>() {
-  let resolve!: (value: T) => void, reject!: (error: Error) => void;
-  const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail; });
-  return { promise, resolve, reject };
-}
-beforeEach(() => {
-  h.hooks = []; h.next = 0; h.session = "original-session"; h.revision = "login-1";
-  data.permissions.write = true;
-  vi.clearAllMocks();
-  vi.mocked(request).mockReset();
-  vi.mocked(fetchEditableRequirement).mockReset();
-});
-afterEach(() => { vi.restoreAllMocks(); });
-
-describe("actual task-plan editor unknown command recovery", () => {
-  it("applies a batch owner to the editable selection and sends that owner through the original task-plan command", async () => {
-    const tree = manual();
-    const batch = nodes(tree).find((node) => node.props.label === "delivery.taskPlan.batchOwner");
-    batch.props.onChange("agent:worker");
-    button(renderEditor(), "delivery.taskPlan.applyOwner").onClick();
-    const owners = () => nodes(renderEditor()).filter((node) => node.props.label?.startsWith("delivery.owner")).map((node) => node.props.value);
-    expect(owners()).toEqual(["user:lead"]);
-    button(renderEditor(), "delivery.taskPlan.clearSelectedOwners").onClick();
-    button(renderEditor(), "delivery.taskPlan.applyOwner").onClick();
-    expect(owners()).toEqual(["agent:worker"]);
-    vi.mocked(request).mockResolvedValueOnce(ack);
-    button(renderEditor(), "delivery.taskPlan.create").onClick(); await settle();
-    expect(JSON.parse(originalBody()).payload.items).toMatchObject([{ owner_id: "agent:worker", title: "Manual original task" }]);
-    expect(onSaved).toHaveBeenCalledWith(ack);
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(request).mockReset(); h.hooks = []; h.effects = []; h.next = 0; h.session = "login-1";
+  data.permissions.write = true; h.writable = true; storage = planStorage(); start(); });
+afterEach(() => { store.close(); vi.restoreAllMocks(); });
+describe("retained task-plan consumers", () => {
+  it("connects the public editor to the retained form", () => {
+    h.next = 0; const tree = DeliveryTaskPlanEditor({ data, requirement, onClose, onSaved });
+    expect(tree.type).toBe(DeliveryTaskPlanForm); expect(tree.props.retention).toBe(h.retention);
   });
-
-  it("refuses old edit and save callbacks when project write permission disappears", async () => {
-    const tree = manual(), save = button(tree, "delivery.taskPlan.create");
-    data.permissions.write = false;
-    const readonly = renderEditor();
-    expect(button(readonly, "delivery.taskPlan.create").disabled).toBe(true);
-    field(tree, "delivery.titleField").onChange({ target: { value: "Rejected edit" } });
-    button(tree, "delivery.taskPlan.clearSelectedOwners").onClick(); save.onClick(); await settle();
-    expect(field(renderEditor(), "delivery.titleField").value).toBe("Manual original task");
-    expect(commandCalls()).toHaveLength(0); expect(onSaved).not.toHaveBeenCalled();
+  it("saves each edit immediately and restores it in a fresh editor", async () => {
+    const tree = manual(); field(tree, "delivery.titleField").onChange({ target: { value: "Immediately retained" } });
+    expect(store.snapshot().draft?.rows[0].title).toBe("Immediately retained"); store.close(); await settle(); h.hooks = []; start();
+    expect(field(render(), "delivery.titleField").value).toBe("Immediately retained");
+    expect(store.snapshot().draft?.rows[0].acceptance_criteria).toEqual(["Own criterion"]); expect(request).not.toHaveBeenCalled();
   });
-
-  it.each([
-    ["missing response", null],
-    ["empty response", {}],
-    ["foreign project", { ...ack, project_id: "Q" }],
-    ["foreign action", { ...ack, action: "task.update" }],
-    ["wrong resource kind", { ...ack, resource: { kind: "requirement", id: "R" } }],
-    ["wrong applied version", { ...ack, applied_version: 9, version: 9 }],
-    ["backwards current version", { ...ack, version: 6 }],
-    ["invalid generation", { ...ack, query_generation: 0 }],
-    ["missing affected refs", { ...ack, affected_refs: [] }],
-    ["missing task result", { ...ack, result: null }],
-    ["wrong result cardinality", { ...ack, result: { task_ids: ["T-created", "T-other"] } }],
-    ["wrong final task identity", { ...ack, result: { task_ids: ["T-other"] } }],
-  ])("retains the manual original after an invalid fulfilled ACK: %s", async (_case, response) => {
-    const tree = manual();
-    vi.mocked(request).mockResolvedValueOnce(response).mockResolvedValueOnce(ack);
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    const original = originalBody();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(true);
-    tree.props.onCancel();
-    expect(onClose).not.toHaveBeenCalled();
-    const locked = renderEditor();
-    expect(locked.props.closable).toBe(false);
-    button(locked, "deliveryDiscussion.retryOriginal").onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(2);
-    expect(originalBody(1)).toBe(original);
-    expect(onSaved).toHaveBeenCalledWith(ack);
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
+  it("restores an interrupted preview request and retries the same key before saving its result", async () => {
+    field(manual(), "delivery.taskPlan.source").onChange("template"); vi.mocked(request).mockRejectedValueOnce(new Error("Preview response lost"));
+    button(render(), "delivery.taskPlan.generate").onClick(); await settle(); const original = vi.mocked(request).mock.calls[0][1]?.body;
+    expect(store.snapshot().draft?.preview_request?.idempotency_key).toBe(JSON.parse(String(original)).idempotency_key);
+    store.close(); await settle(); h.hooks = []; start();
+    const draft = planDraft(), { selected: _, ...item } = draft.rows[0];
+    vi.mocked(request).mockResolvedValueOnce({ id: "preview-retained", version: 7, requirement_revision: 3, requirement_basis: draft.basis,
+      requirement_snapshot: draft.requirement, items: [item], source: "template", model: "", provider: "",
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost_usd: 0 }, warnings: [] });
+    button(render(), "delivery.taskPlan.retryRequest").onClick(); await settle();
+    expect(vi.mocked(request).mock.calls[1][1]?.body).toBe(original); expect(store.snapshot().draft?.preview?.id).toBe("preview-retained");
+    expect(store.snapshot().draft?.preview_request).toBeNull(); expect(store.snapshot().draft?.rows[0].title).toBe("Implement");
   });
-
-  it("accepts the real task-plan ACK with a missing query index while requiring a later read", async () => {
-    const tree = manual();
-    const confirmed = { ...ack, replayed: false, query_generation: null };
-    vi.mocked(request).mockResolvedValueOnce(confirmed);
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    expect(onSaved).toHaveBeenCalledWith(confirmed);
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
-    expect(button(renderEditor(), "deliveryDiscussion.retryOriginal")).toBeUndefined();
+  it("rejects old edit, create and generator callbacks while the original result remains unknown", async () => {
+    const tree = manual(); vi.mocked(request).mockRejectedValueOnce(new Error("Network lost")); button(tree, "delivery.taskPlan.create").onClick(); await settle();
+    const original = store.snapshot().command.original; field(tree, "delivery.titleField").onChange({ target: { value: "Rejected replacement" } });
+    field(tree, "delivery.taskPlan.source").onChange("ai"); button(tree, "delivery.taskPlan.add").onClick(); button(tree, "delivery.taskPlan.create").onClick(); await settle();
+    expect(request).toHaveBeenCalledTimes(1); expect(store.snapshot().command.original).toEqual(original); expect(store.snapshot().draft?.rows).toHaveLength(1);
   });
-
-  it("locks manual submissions without initialSource and rejects pre-failure save and close callbacks before another render", async () => {
-    const tree = manual();
-    const oldSave = button(tree, "delivery.taskPlan.create"), oldCancel = button(tree, "delivery.cancel");
-    vi.mocked(request).mockRejectedValue(new Error("Network connection lost after submission"));
-    oldSave.onClick();
-    await settle();
-    oldSave.onClick(); oldCancel.onClick(); tree.props.onCancel();
-    await settle();
-    expect(commandCalls()).toHaveLength(1);
-    expect(onClose).not.toHaveBeenCalled();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(true);
-    const unknown = renderEditor();
-    expect(button(unknown, "deliveryDiscussion.retryOriginal")).toBeDefined();
-    expect(unknown.props.closable).toBe(false);
-    expect(unknown.props.keyboard).toBe(false);
+  it("persists selected owner assignment and submits that draft", async () => {
+    const tree = manual(); nodes(tree).find((n) => n.props.label === "delivery.taskPlan.batchOwner").props.onChange("agent:worker");
+    button(render(), "delivery.taskPlan.clearSelectedOwners").onClick(); button(render(), "delivery.taskPlan.applyOwner").onClick();
+    expect(store.snapshot().draft?.rows[0].owner_id).toBe("agent:worker"); vi.mocked(request).mockResolvedValueOnce(planAck);
+    button(render(), "delivery.taskPlan.create").onClick(); await settle();
+    expect(JSON.parse(String(vi.mocked(request).mock.calls[0][1]?.body)).payload.items).toMatchObject([{ title: "Newest title", owner_id: "agent:worker" }]);
+    expect(onSaved).toHaveBeenCalledWith(planAck);
   });
-
-  it("replays only the fixed manual request and rejects duplicate or resolved old retry callbacks", async () => {
-    const tree = manual(), save = button(tree, "delivery.taskPlan.create"), cancel = button(tree, "delivery.cancel");
-    const first = deferred<DeliveryCommandAck>(), replay = deferred<DeliveryCommandAck>();
-    vi.mocked(request).mockReturnValueOnce(first.promise).mockReturnValueOnce(replay.promise);
-    save.onClick();
-    save.onClick(); cancel.onClick(); tree.props.onCancel();
-    field(tree, "delivery.titleField").onChange({ target: { value: "Must not replace the pending original" } });
-    expect(commandCalls()).toHaveLength(1);
-    expect(onClose).not.toHaveBeenCalled();
-    const submitted = originalBody();
-    expect(JSON.parse(submitted)).toMatchObject({ action: "tasks.plan", expected_version: 7, payload: { requirement_id: "R", requirement_revision: 3, requirement_basis: basis, items: [{ title: "Manual original task", acceptance_criteria: ["Own original criterion"] }] } });
-    first.reject(new Error("HTTP 503: response unavailable"));
-    await settle();
-    const retry = button(renderEditor(), "deliveryDiscussion.retryOriginal");
-    retry.onClick(); retry.onClick(); save.onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(2);
-    expect(originalBody(1)).toBe(submitted);
-    expect(commandCalls()[1][1]?.headers).toEqual({ "X-Project-Id": "P" });
-    replay.resolve(ack);
-    await settle();
-    expect(onSaved).toHaveBeenCalledTimes(1);
-    expect(onSaved).toHaveBeenCalledWith(ack);
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
-    retry.onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(2);
-    expect(button(renderEditor(), "deliveryDiscussion.retryOriginal")).toBeUndefined();
-    cancel.onClick();
-    expect(onClose).toHaveBeenCalledTimes(1);
+  it.each([null, {}, { ...planAck, project_id: "Q" }, { ...planAck, applied_version: 9 }, { ...planAck, result: null }])
+  ("retains an invalid fulfilled acknowledgement as unknown", async (response) => {
+    const tree = manual(); vi.mocked(request).mockResolvedValueOnce(response); button(tree, "delivery.taskPlan.create").onClick(); await settle();
+    expect(onSaved).not.toHaveBeenCalled(); expect(store.snapshot().command.phase).toBe("unknown");
+    expect(button(render(), "deliveryDiscussion.retryOriginal")).toBeDefined(); expect(button(render(), "delivery.taskPlan.discardLocal")).toBeUndefined();
   });
-
-  it("blocks old generator, restore and editing callbacks while a template command has an unknown result", async () => {
-    const manualTree = manual();
-    field(manualTree, "delivery.taskPlan.source").onChange("template");
-    const generationTree = renderEditor();
-    const oldGenerate = button(generationTree, "delivery.taskPlan.generate");
-    vi.mocked(request).mockResolvedValueOnce(preview).mockRejectedValueOnce(new Error("HTTP 500: command response lost"));
-    oldGenerate.onClick();
-    await settle();
-    const generated = renderEditor();
-    const restore = button(generated, "delivery.taskPlan.restore");
-    const regenerate = button(generated, "delivery.taskPlan.regenerate");
-    const sourceSelect = field(generated, "delivery.taskPlan.source");
-    const title = field(generated, "delivery.titleField");
-    button(generated, "delivery.taskPlan.create").onClick();
-    await settle();
-    const submitted = originalBody();
-    oldGenerate.onClick(); regenerate.onClick(); restore.onClick(); sourceSelect.onChange("ai");
-    title.onChange({ target: { value: "Replacement task must not enter pending command" } });
-    button(generated, "delivery.taskPlan.add").onClick();
-    await settle();
-    expect(vi.mocked(request)).toHaveBeenCalledTimes(2);
-    expect(originalBody()).toBe(submitted);
-    expect(JSON.parse(submitted).payload).toMatchObject({ preview_id: "preview-original", items: [{ title: "Generated original task" }] });
-    const unknown = renderEditor();
-    expect(field(unknown, "delivery.titleField").value).toBe("Generated original task");
-    expect(field(unknown, "delivery.taskPlan.source").value).toBe("template");
-    expect(button(unknown, "deliveryDiscussion.retryOriginal")).toBeDefined();
+  it("replays the same original after restart and views saved success without creating again", async () => {
+    const tree = manual(); vi.mocked(request).mockRejectedValueOnce(new Error("Network lost"));
+    button(tree, "delivery.taskPlan.create").onClick(); await settle(); const original = vi.mocked(request).mock.calls[0][1]?.body;
+    store.close(); await settle(); h.hooks = []; start(); vi.mocked(request).mockResolvedValueOnce(planAck);
+    button(render(), "deliveryDiscussion.retryOriginal").onClick(); await settle();
+    expect(vi.mocked(request).mock.calls[1][1]?.body).toBe(original); expect(onSaved).not.toHaveBeenCalled();
+    const success = render(); expect(button(success, "deliveryDiscussion.retryOriginal")).toBeUndefined();
+    vi.mocked(fetchDeliveryContext).mockResolvedValue({ ...data, version: 8, query_generation: 4 });
+    vi.mocked(fetchDeliveryReferences).mockResolvedValue({ items: [{ id: "T-created", data: { id: "T-created", req_id: "R" } }] } as any);
+    button(success, "delivery.taskPlan.viewCreated").onClick(); await settle();
+    expect(request).toHaveBeenCalledTimes(2); expect(onSaved).toHaveBeenCalledWith(planAck); expect(store.snapshot().command.phase).toBe("succeeded");
   });
-
-  it("keeps a confirmed acknowledgement resolved if the parent saved callback throws", async () => {
-    const tree = manual();
-    vi.mocked(request).mockResolvedValueOnce(ack);
-    onSaved.mockImplementationOnce(() => { throw new Error("Parent refresh failed after confirmed save"); });
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
-    const resolved = renderEditor();
-    expect(button(resolved, "deliveryDiscussion.retryOriginal")).toBeUndefined();
-    resolved.props.onCancel();
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(commandCalls()).toHaveLength(1);
+  it("keeps success when task reads or parent navigation fail", async () => {
+    store.saveDraft(planDraft()); vi.mocked(request).mockResolvedValueOnce(planAck); await store.run(planOriginal());
+    vi.mocked(fetchDeliveryContext).mockRejectedValueOnce(new Error("HTTP 403")); button(render(), "delivery.taskPlan.viewCreated").onClick(); await settle();
+    expect(onSaved).not.toHaveBeenCalled(); expect(store.snapshot().command.phase).toBe("succeeded");
+    vi.mocked(fetchDeliveryContext).mockResolvedValue({ ...data, version: 8 });
+    vi.mocked(fetchDeliveryReferences).mockResolvedValue({ items: [{ id: "T-created", data: { id: "T-created", req_id: "R" } }] } as any);
+    onSaved.mockImplementationOnce(() => { throw new Error("Parent read failed"); }); button(render(), "delivery.taskPlan.viewCreated").onClick(); await settle();
+    expect(store.snapshot().command.phase).toBe("succeeded"); expect(request).toHaveBeenCalledTimes(1);
   });
-
-  it("blocks stale load-latest and adoption callbacks instead of replacing the original version or key", async () => {
-    const tree = manual();
-    vi.mocked(request).mockRejectedValueOnce(new Error('HTTP 409: {"detail":{"code":"plan_basis_changed","message":"Plan basis changed"}}'));
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    const loadLatest = button(renderEditor(), "delivery.taskPlan.loadLatest");
-    vi.mocked(fetchEditableRequirement).mockResolvedValue({ version: 8, query_generation: 4, requirement: { ...requirement, flow: { ...requirement.flow, revision: 4 } } } as any);
-    loadLatest.onClick();
-    await settle();
-    const adopt = button(renderEditor(), "delivery.taskPlan.adopt");
-    adopt.onClick();
-    const updated = renderEditor();
-    vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown"));
-    button(updated, "delivery.taskPlan.create").onClick();
-    await settle();
-    const submitted = originalBody(1);
-    expect(JSON.parse(submitted)).toMatchObject({ expected_version: 8, payload: { requirement_revision: 4 } });
-    loadLatest.onClick(); adopt.onClick();
-    await settle();
-    expect(fetchEditableRequirement).toHaveBeenCalledTimes(1);
-    vi.mocked(request).mockResolvedValueOnce({ ...ack, applied_version: 9, version: 9 });
-    button(renderEditor(), "deliveryDiscussion.retryOriginal").onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(3);
-    expect(originalBody(2)).toBe(submitted);
+  it("blocks stale callbacks after permissions or session change", async () => {
+    const tree = manual(); data.permissions.write = false; render(); field(tree, "delivery.titleField").onChange({ target: { value: "Rejected" } });
+    button(tree, "delivery.taskPlan.create").onClick(); await settle(); expect(request).not.toHaveBeenCalled(); expect(store.snapshot().draft?.rows[0].title).toBe("Newest title");
+    data.permissions.write = true; h.session = "login-2"; button(tree, "delivery.taskPlan.create").onClick(); await settle(); expect(request).not.toHaveBeenCalled();
   });
-
-  it.each([403, 409, 422])("retains the unknown original when a later replay receives HTTP %s", async (status) => {
-    const tree = manual();
-    vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown"));
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    const submitted = originalBody();
-    const retry = button(renderEditor(), "deliveryDiscussion.retryOriginal");
-    vi.mocked(request).mockRejectedValueOnce(new Error(`HTTP ${status}: replay rejected after the original reply was lost`));
-    retry.onClick();
-    await settle();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(true);
-    const unresolved = renderEditor();
-    expect(button(unresolved, "deliveryDiscussion.retryOriginal")).toBeDefined();
-    unresolved.props.onCancel();
-    button(tree, "delivery.taskPlan.create").onClick();
-    expect(onClose).not.toHaveBeenCalled();
-    expect(commandCalls()).toHaveLength(2);
-    expect(originalBody(1)).toBe(submitted);
-    vi.mocked(request).mockResolvedValueOnce(ack);
-    retry.onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(3);
-    expect(originalBody(2)).toBe(submitted);
-    expect(onSaved).toHaveBeenCalledWith(ack);
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
+  it("blocks old form edits and creation immediately when the live parent read gate closes", async () => {
+    const tree = manual(); h.writable = false;
+    field(tree, "delivery.titleField").onChange({ target: { value: "Rejected stale edit" } });
+    field(tree, "delivery.taskPlan.source").onChange("ai"); button(tree, "delivery.taskPlan.create").onClick(); await settle();
+    expect(request).not.toHaveBeenCalled(); expect(store.snapshot().draft?.rows[0].title).toBe("Newest title"); expect(store.snapshot().draft?.generator).toBe("manual");
   });
-
-  it.each([403, 409, 422])("unlocks a first submission explicitly refused with HTTP %s", async (status) => {
-    const tree = manual();
-    vi.mocked(request).mockRejectedValueOnce(new Error(`HTTP ${status}: first submission refused`));
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
-    const refused = renderEditor();
-    expect(button(refused, "deliveryDiscussion.retryOriginal")).toBeUndefined();
-    refused.props.onCancel();
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(commandCalls()).toHaveLength(1);
+  it("requires latest-baseline adoption before creating a stale draft", async () => {
+    const draft = planDraft(); draft.version = 6; store.saveDraft(draft); const stale = render(); expect(button(stale, "delivery.taskPlan.create").disabled).toBe(true);
+    vi.mocked(fetchEditableRequirement).mockResolvedValue({ project_id: "P", version: 7, query_generation: 3, requirement } as any);
+    button(stale, "delivery.taskPlan.loadLatest").onClick(); await settle(); button(render(), "delivery.taskPlan.adopt").onClick();
+    expect(store.snapshot().draft?.version).toBe(7); expect(button(render(), "delivery.taskPlan.create").disabled).toBe(false);
   });
-
-  it.each(["Network retry result unknown", "HTTP 500: retry result unknown", "HTTP 503: retry result unknown"])("keeps the same pending original after another uncertain replay: %s", async (message) => {
-    const tree = manual();
-    vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown"));
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    const submitted = originalBody();
-    vi.mocked(request).mockRejectedValueOnce(new Error(message));
-    button(renderEditor(), "deliveryDiscussion.retryOriginal").onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(2);
-    expect(originalBody(1)).toBe(submitted);
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(true);
-    const unknown = renderEditor();
-    expect(button(unknown, "deliveryDiscussion.retryOriginal")).toBeDefined();
-    unknown.props.onCancel();
-    expect(onClose).not.toHaveBeenCalled();
+  it("blocks creation after save failure and keeps the last durable draft", async () => {
+    const tree = manual(), before = storage.getItem(store.key!); storage.setItem = () => { throw new Error("Quota"); };
+    field(tree, "delivery.titleField").onChange({ target: { value: "Unsaved edit" } }); button(tree, "delivery.taskPlan.create").onClick(); await settle();
+    expect(request).not.toHaveBeenCalled(); expect(storage.getItem(store.key!)).toBe(before); expect(button(render(), "delivery.taskPlan.closeUnsaved")).toBeDefined();
   });
-
-  it("does not rebind an uncertain original to a changed session", async () => {
-    const tree = manual();
-    vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown"));
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    const submitted = originalBody();
-    h.session = "another-session";
-    button(renderEditor(), "deliveryDiscussion.retryOriginal").onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(1);
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(true);
-    h.session = "original-session";
-    vi.mocked(request).mockResolvedValueOnce(ack);
-    button(renderEditor(), "deliveryDiscussion.retryOriginal").onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(2);
-    expect(originalBody(1)).toBe(submitted);
-  });
-
-  it("rejects a retry after a new login reuses the same token and workspace", async () => {
-    const tree = manual();
-    vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown"));
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    h.revision = "login-2";
-    const nextLogin = renderEditor();
-    button(nextLogin, "deliveryDiscussion.retryOriginal").onClick();
-    nextLogin.props.onCancel();
-    await settle();
-    expect(commandCalls()).toHaveLength(1);
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(true);
-    expect(onClose).not.toHaveBeenCalled();
-    expect(onSaved).not.toHaveBeenCalled();
-  });
-
-  it("resolves a confirmed original acknowledgement without updating the newly logged-in workspace", async () => {
-    const tree = manual();
-    vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown"));
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    const originalRetry = button(renderEditor(), "deliveryDiscussion.retryOriginal");
-    const replay = deferred<DeliveryCommandAck>();
-    vi.mocked(request).mockReturnValueOnce(replay.promise);
-    originalRetry.onClick();
-    h.revision = "login-2";
-    replay.resolve(ack);
-    await settle();
-    expect(onUnresolvedChange).toHaveBeenLastCalledWith(false);
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(button(renderEditor(), "deliveryDiscussion.retryOriginal")).toBeUndefined();
-    originalRetry.onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(2);
-  });
-
-  it("keeps the captured discussion source with its original command despite old source actions", async () => {
-    const tree = renderEditor(source);
-    const sourceControl = nodes(tree).find((node) => node.props.source?.value)?.props.source;
-    vi.mocked(request).mockRejectedValueOnce(new Error("Network result unknown"));
-    button(tree, "delivery.taskPlan.create").onClick();
-    await settle();
-    sourceControl.remove(); sourceControl.adopt(); await sourceControl.load("P");
-    const submitted = originalBody();
-    expect(JSON.parse(submitted).source_reference).toEqual(source.reference);
-    vi.mocked(request).mockResolvedValueOnce(ack);
-    button(renderEditor(source), "deliveryDiscussion.retryOriginal").onClick();
-    await settle();
-    expect(commandCalls()).toHaveLength(2);
-    expect(originalBody(1)).toBe(submitted);
-    expect(vi.mocked(request)).toHaveBeenCalledTimes(2);
+  it("keeps a failed edit through automatic Form remounts and retries only local saving", () => {
+    const tree = manual(), setItem = storage.setItem; storage.setItem = () => { throw new Error("Quota"); };
+    field(tree, "delivery.titleField").onChange({ target: { value: "Unsaved latest title" } });
+    expect(store.snapshot().status).toBe("unavailable"); expect(store.snapshot().draft?.rows[0].title).toBe("Unsaved latest title");
+    h.hooks = []; const restored = render(); expect(field(restored, "delivery.titleField").value).toBe("Unsaved latest title");
+    expect(button(restored, "delivery.taskPlan.create").disabled).toBe(true); storage.setItem = setItem;
+    button(restored, "delivery.taskPlan.retryLocalSave").onClick(); expect(store.snapshot().status).toBe("saved");
+    expect(JSON.parse(storage.getItem(store.key!)!).draft.rows[0].title).toBe("Unsaved latest title"); expect(request).not.toHaveBeenCalled();
   });
 });

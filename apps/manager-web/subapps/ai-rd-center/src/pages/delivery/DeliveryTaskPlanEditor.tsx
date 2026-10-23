@@ -3,7 +3,6 @@ import type {
   RequirementEditableResponse,
 } from "@/lib/deliveryRequirementReads";
 import {
-  discussionFailure,
   type DiscussionAdoption,
 } from "@/lib/deliveryDiscussions";
 import {
@@ -23,6 +22,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Popconfirm,
   Select,
   Space,
   Tag,
@@ -31,10 +31,8 @@ import { Plus, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { projectSessionKey } from "@/lib/projectPortfolio";
-import { validDeliveryCommandAck } from "@/lib/deliveryCommandController";
 import {
   prepareDeliveryIntent,
-  saveDelivery,
   type DeliveryIntent,
   type DeliveryContext,
 } from "@/lib/delivery";
@@ -46,9 +44,11 @@ import {
   selectedPlanItems,
   taskPlanProblems,
   type PlanPreviewRequest,
-  type TaskPlanPreview,
   type TaskPlanRow,
 } from "@/lib/deliveryTaskPlan";
+import { useTaskPlanRetention } from "@/lib/useTaskPlanRetention";
+import { type RetainedTaskPlanDraft, type PlanProvenance, type TaskPlanOriginal } from "@/lib/taskPlanRetention";
+import { TaskPlanRecoveryModal } from "./TaskPlanRecoveryModal";
 import { TaskCriteriaEditor } from "./TaskCriteriaEditor";
 import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 
@@ -62,10 +62,10 @@ type Baseline = {
 type Draft = {
   rows: TaskPlanRow[];
   baseline: Baseline;
-  preview: TaskPlanPreview | null;
+  preview: PlanProvenance | null;
 };
 
-export function DeliveryTaskPlanEditor({
+export function DeliveryTaskPlanForm({
   data,
   requirement,
   requirementVersion,
@@ -73,6 +73,8 @@ export function DeliveryTaskPlanEditor({
   onSaved,
   initialSource,
   onUnresolvedChange,
+  retention,
+  canWriteCurrent,
 }: {
   data: DeliveryContext;
   requirement: RequirementEditable;
@@ -81,24 +83,28 @@ export function DeliveryTaskPlanEditor({
   onSaved: (updated: DeliveryCommandAck) => void;
   initialSource?: DiscussionAdoption;
   onUnresolvedChange?: (value: boolean) => void;
+  retention: ReturnType<typeof useTaskPlanRetention>;
+  canWriteCurrent?: () => boolean;
 }) {
   const { t } = useTranslation();
   const tr = (key: string, values?: Record<string, unknown>) =>
     t(`delivery.taskPlan.${key}`, values);
   const common = (key: string) => t(`delivery.${key}`);
   const origin = useRef(projectSessionKey());
-  const source = useDiscussionAdoptionSource(initialSource);
   const projectId = data.project.id;
+  const restored = useRef(retention.view.draft).current;
+  const source = useDiscussionAdoptionSource(restored ? undefined : initialSource);
   const identity = JSON.stringify([projectId, requirement.id]);
   const initialIdentity = useRef(identity);
   const access = useRef({ identity, write: data.permissions.write });
   access.current = { identity, write: data.permissions.write };
   const readOnly = !access.current.write || initialIdentity.current !== identity;
-  const [baseline, setBaseline] = useState<Baseline>(() => ({
-    version: requirementVersion ?? data.version,
-    revision: requirement.flow.revision,
-    basis: requirement.basis,
-    requirement,
+  const [baseline, setBaselineState] = useState<Baseline>(() => ({
+    version: restored?.version ?? requirementVersion ?? data.version,
+    revision: restored?.revision ?? requirement.flow.revision,
+    basis: restored?.basis ?? requirement.basis,
+    requirement: restored ? { ...requirement, ...restored.requirement, basis: restored.basis,
+      flow: { ...requirement.flow, revision: restored.revision, owner_id: restored.requirement.owner_id } } : requirement,
     workspace: data,
   }));
   const newRow = (): TaskPlanRow => ({
@@ -116,7 +122,7 @@ export function DeliveryTaskPlanEditor({
     ends_on: null,
     blocked_reason: "",
   });
-  const [rows, setRows] = useState<TaskPlanRow[]>(() => [
+  const [rows, setRowsState] = useState<TaskPlanRow[]>(() => restored?.rows || [
     {
       ...newRow(),
       ...(initialSource
@@ -131,23 +137,23 @@ export function DeliveryTaskPlanEditor({
         : {}),
     },
   ]);
-  const [generator, setGenerator] = useState<"manual" | "template" | "ai">(
-    "manual",
+  const [generator, setGeneratorState] = useState<"manual" | "template" | "ai">(
+    restored?.generator || "manual",
   );
-  const [mode, setMode] = useState<PlanPreviewRequest["mode"]>("fullstack");
-  const [maxItems, setMaxItems] = useState(8);
-  const [preview, setPreview] = useState<TaskPlanPreview | null>(null);
+  const [mode, setModeState] = useState<PlanPreviewRequest["mode"]>(restored?.mode || "fullstack");
+  const [maxItems, setMaxItemsState] = useState(restored?.max_items || 8);
+  const [preview, setPreviewState] = useState<PlanProvenance | null>(restored?.preview || null);
   const [previous, setPrevious] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [conflict, setConflict] = useState(false);
-  const [generationFailed, setGenerationFailed] = useState(false);
+  const [conflict, setConflict] = useState(Boolean(restored && (restored.version !== (requirementVersion ?? data.version) || restored.basis !== requirement.basis)));
+  const [generationFailed, setGenerationFailed] = useState(Boolean(restored?.preview_request));
   const [latest, setLatest] = useState<RequirementEditableResponse | null>(
     null,
   );
-  const previewRequest = useRef<PlanPreviewRequest>();
+  const previewRequest = useRef<PlanPreviewRequest | undefined>(restored?.preview_request || undefined);
   const submitIntent = useRef<DeliveryIntent>({
     version: requirementVersion ?? data.version,
     key: crypto.randomUUID(),
@@ -162,12 +168,45 @@ export function DeliveryTaskPlanEditor({
   const unknownRef = useRef(false);
   const [batchOwner, setBatchOwner] = useState("");
   const [replaceOwners, setReplaceOwners] = useState(false);
-  const pending = useRef<{
-    projectId: string;
-    payload: Record<string, unknown>;
-    intent: DeliveryIntent;
-    source: DiscussionAdoption["reference"] | undefined;
-  }>();
+  const model = useRef<RetainedTaskPlanDraft>();
+  const draftBatch = useRef(0);
+  if (!model.current) model.current = {
+    version: baseline.version, revision: baseline.revision, basis: baseline.basis || "",
+    requirement: { id: requirement.id, title: baseline.requirement.title, description: baseline.requirement.description,
+      acceptance_criteria: baseline.requirement.acceptance_criteria, priority: baseline.requirement.priority as RetainedTaskPlanDraft["requirement"]["priority"],
+      owner_id: baseline.requirement.flow.owner_id || "" }, rows, generator, mode, max_items: maxItems, preview,
+    preview_request: previewRequest.current || null, source_reference: restored?.source_reference || initialSource?.reference || null,
+  };
+  const persist = (patch: Partial<RetainedTaskPlanDraft>) => {
+    model.current = { ...model.current!, ...patch };
+    return draftBatch.current > 0 || retention.store.saveDraft(model.current);
+  };
+  const batch = (action: () => void) => {
+    draftBatch.current++;
+    try { action(); } finally { if (--draftBatch.current === 0) retention.store.saveDraft(model.current!); }
+  };
+  const setRows = (next: TaskPlanRow[] | ((current: TaskPlanRow[]) => TaskPlanRow[])) => {
+    const value = typeof next === "function" ? next(model.current!.rows) : next; persist({ rows: value }); setRowsState(value);
+  };
+  const setBaseline = (next: Baseline | ((current: Baseline) => Baseline)) => {
+    const value = typeof next === "function" ? next(baseline) : next;
+    persist({ version: value.version, revision: value.revision, basis: value.basis || "", requirement: {
+      id: requirement.id, title: value.requirement.title, description: value.requirement.description,
+      acceptance_criteria: value.requirement.acceptance_criteria, priority: value.requirement.priority as RetainedTaskPlanDraft["requirement"]["priority"],
+      owner_id: value.requirement.flow.owner_id || "",
+    } }); setBaselineState(value);
+  };
+  const setGenerator = (value: "manual" | "template" | "ai") => { persist({ generator: value }); setGeneratorState(value); };
+  const setMode = (value: PlanPreviewRequest["mode"]) => { persist({ mode: value }); setModeState(value); };
+  const setMaxItems = (value: number) => { persist({ max_items: value }); setMaxItemsState(value); };
+  const setPreview = (value: PlanProvenance | null) => {
+    const next = value ? { id: value.id, source: value.source, model: value.model, provider: value.provider, usage: value.usage, warnings: value.warnings } : null;
+    persist({ preview: next }); setPreviewState(next);
+  };
+  useEffect(() => {
+    if (retention.view.owned && retention.view.command.phase === "idle" && !retention.view.draft)
+      retention.store.saveDraft(model.current!);
+  }, [retention.store, retention.view.owned]);
   const criteria = baseline.requirement.acceptance_criteria;
   const items = selectedPlanItems(rows);
   const availableTasks: { id: string; title: string; req_id: string }[] = [];
@@ -175,20 +214,20 @@ export function DeliveryTaskPlanEditor({
     rows,
     criteria.length,
     rows.flatMap((row) =>
-      row.depends_on.filter((id) => !id.startsWith("draft-")),
+      row.depends_on.filter((id) => !rows.some((item) => item.key === id)),
     ),
   );
   const coverage = new Set(
     items.flatMap((item) => item.requirement_criteria_indices),
   );
   const canEdit = () => mounted.current && origin.current === projectSessionKey() &&
-    initialIdentity.current === identity && access.current.identity === identity && access.current.write;
+    initialIdentity.current === identity && access.current.identity === identity && access.current.write && (!canWriteCurrent || canWriteCurrent()) && retention.store.current() && retention.store.snapshot().command.phase === "idle";
   const locked = () => busyRef.current || unknownRef.current || !canEdit();
   const edit = (action: () => void) => {
     if (!locked()) action();
   };
   const close = () => {
-    if (mounted.current && !busyRef.current && !unknownRef.current) onClose();
+    if (mounted.current && !busyRef.current && retention.store.snapshot().status !== "unavailable") { retention.store.close(); onUnresolvedChange?.(false); onClose(); }
   };
   const update = (key: string, value: Partial<TaskPlanRow>) =>
     edit(() =>
@@ -233,6 +272,7 @@ export function DeliveryTaskPlanEditor({
           mode,
           max_items: maxItems,
         };
+      if (!persist({ preview_request: previewRequest.current! })) throw new Error(tr("local.unavailable"));
       controller.current = new AbortController();
       setGenerationFailed(true);
       const result = await previewTaskPlan(
@@ -242,6 +282,7 @@ export function DeliveryTaskPlanEditor({
       );
       if (!canEdit()) return;
       setPrevious({ rows, baseline, preview });
+      batch(() => {
       setRows(
         result.items.map((item) => ({
           ...item,
@@ -260,87 +301,27 @@ export function DeliveryTaskPlanEditor({
         key: crypto.randomUUID(),
       };
       setPreview(result);
+      previewRequest.current = undefined; persist({ preview_request: null });
+      });
       setConflict(false);
       setGenerationFailed(false);
       setNotice("");
     });
-  const save = (retry = false) => {
-    if (retry && (!unknownRef.current || !pending.current)) return;
-    void guarded(async () => {
-      if (!retry && (problems.length || conflict)) return;
-      if (!retry) {
-        const payload = {
-          requirement_id: requirement.id,
-          requirement_revision: baseline.revision,
-          ...(baseline.basis ? { requirement_basis: baseline.basis } : {}),
-          ...(preview ? { preview_id: preview.id } : {}),
-          items,
-        };
-        submitIntent.current = prepareDeliveryIntent(
-          submitIntent.current,
-          "tasks.plan",
-          payload,
-          source.current.current?.reference,
-        );
-        pending.current = {
-          projectId,
-          payload: structuredClone(payload),
-          intent: structuredClone(submitIntent.current),
-          source: source.current.current
-            ? structuredClone(source.current.current.reference)
-            : undefined,
-        };
-      }
-      const command = pending.current;
-      if (!command) return;
-      onUnresolvedChange?.(true);
-      let result: DeliveryCommandAck;
-      try {
-        result = await saveDelivery(
-          command.projectId,
-          "tasks.plan",
-          command.payload,
-          command.intent.version,
-          command.intent.key,
-          command.source,
-        );
-        const original = { action: "tasks.plan", payload: command.payload, intent: command.intent };
-        if (!validDeliveryCommandAck(command.projectId, original, result, "task")) {
-          throw new Error(t("deliveryRelease.ackMismatch"));
-        }
-        const ids = result.result?.task_ids;
-        const drafts = command.payload.items;
-        if (!Array.isArray(ids) || !Array.isArray(drafts) || ids.length !== drafts.length || !ids.length
-          || ids.some((id) => typeof id !== "string" || !id.trim()) || new Set(ids).size !== ids.length
-          || result.resource.id !== ids[ids.length - 1]
-          || ids.some((id) => !result.affected_refs.some((ref) => ref.kind === "task" && ref.id === id))) {
-          throw new Error(t("deliveryRelease.ackMismatch"));
-        }
-      } catch (error) {
-        const problem = discussionFailure(error);
-        // A later refusal cannot prove that the original lost-response write failed.
-        const unresolved = retry || problem.unknown;
-        unknownRef.current = unresolved;
-        setUnknown(unresolved);
-        if (!unresolved) {
-          pending.current = undefined;
-          onUnresolvedChange?.(false);
-        }
-        if (initialSource && problem.conflict) {
-          setConflict(true);
-          setLatest(null);
-          setError(problem.message);
-          return;
-        }
-        throw error;
-      }
-      pending.current = undefined;
-      unknownRef.current = false;
-      setUnknown(false);
-      onUnresolvedChange?.(false);
-      if (mounted.current && origin.current === projectSessionKey()) onSaved(result);
-    }, retry);
-  };
+  const save = () => void guarded(async () => {
+    if (problems.length || conflict || !retention.store.saveDraft(model.current!)) return;
+    const draft = model.current!;
+    const payload: TaskPlanOriginal["payload"] = { requirement_id: requirement.id, requirement_revision: draft.revision,
+      requirement_basis: draft.basis, ...(draft.preview ? { preview_id: draft.preview.id } : {}), items: selectedPlanItems(draft.rows) };
+    submitIntent.current = prepareDeliveryIntent({ ...submitIntent.current, version: draft.version }, "tasks.plan", payload, draft.source_reference || undefined);
+    const result = await retention.store.run({ action: "tasks.plan", payload,
+      intent: { version: submitIntent.current.version, key: submitIntent.current.key },
+      ...(draft.source_reference ? { source_reference: structuredClone(draft.source_reference) } : {}) });
+    unknownRef.current = retention.store.snapshot().command.phase === "unknown";
+    setUnknown(unknownRef.current);
+    if (result && retention.store.retainReceipt() && mounted.current && origin.current === projectSessionKey()) {
+      onUnresolvedChange?.(false); onSaved(result);
+    }
+  });
   const loadLatest = () =>
     void guarded(async () => {
       setLatest(await fetchEditableRequirement(projectId, requirement.id));
@@ -362,6 +343,7 @@ export function DeliveryTaskPlanEditor({
         criteria,
         baseline.revision,
       ]);
+    batch(() => {
     setRows((current) =>
       remapPlanCriteria(current, criteria, req.acceptance_criteria),
     );
@@ -384,7 +366,8 @@ export function DeliveryTaskPlanEditor({
       version: latest.version,
       key: crypto.randomUUID(),
     };
-    previewRequest.current = undefined;
+    previewRequest.current = undefined; persist({ preview_request: null });
+    });
     setGenerationFailed(false);
     setConflict(false);
     setError("");
@@ -392,6 +375,9 @@ export function DeliveryTaskPlanEditor({
   };
   const latestReq = latest?.requirement;
 
+  if (!retention.view.owned || retention.view.command.phase !== "idle") return <TaskPlanRecoveryModal
+    store={retention.store} onClose={onClose} onSaved={onSaved} onUnresolvedChange={onUnresolvedChange}
+    onEdit={() => { unknownRef.current = false; setUnknown(false); setConflict(true); setLatest(null); }} />;
   return (
     <Modal
       open
@@ -411,7 +397,7 @@ export function DeliveryTaskPlanEditor({
             type="primary"
             onClick={() => save()}
             loading={busy}
-            disabled={busy || unknown || readOnly || conflict || Boolean(problems.length)}
+            disabled={busy || unknown || readOnly || conflict || retention.view.status !== "saved" || Boolean(problems.length)}
           >
             {tr("create")} · {items.length}
           </Button>
@@ -425,22 +411,22 @@ export function DeliveryTaskPlanEditor({
           load: async (id) => {
             if (!locked()) await source.load(id);
           },
-          adopt: () => edit(source.adopt),
-          remove: () => edit(source.remove),
+          adopt: () => edit(() => { source.adopt(); persist({ source_reference: source.current.current?.reference || null }); }),
+          remove: () => edit(() => { source.remove(); persist({ source_reference: null }); }),
         }}
         disabled={busy || unknown || readOnly}
       />
-      {unknown && (
-        <Alert
-          type="warning"
-          title={t("deliveryDiscussion.unknown")}
-          action={
-            <Button loading={busy} onClick={() => save(true)}>
-              {t("deliveryDiscussion.retryOriginal")}
-            </Button>
-          }
-        />
-      )}
+      <Alert type={retention.view.status === "unavailable" ? "error" : "info"}
+        title={tr(`local.${retention.view.status}`)} action={retention.view.status === "unavailable" ? <Space wrap>
+          <Button disabled={busy} onClick={() => { if (!busyRef.current) retention.store.saveDraft(model.current!); }}>{tr("retryLocalSave")}</Button>
+          <Popconfirm title={tr("closeUnsavedConfirm")}
+          onConfirm={() => { if (!busyRef.current) { retention.store.close(); onUnresolvedChange?.(false); onClose(); } }}>
+          <Button disabled={busy}>{tr("closeUnsaved")}</Button>
+        </Popconfirm></Space> : undefined} />
+      {restored && <Alert type="info" title={tr("restoredDraft")} />}
+      {model.current.source_reference && !source.value && <Alert type="info" title={tr("restoredSource")}
+        description={`${model.current.source_reference.thread_id} · ${model.current.source_reference.message_id} · ${model.current.source_reference.message_revision}`}
+        action={<Button disabled={busy} onClick={() => edit(() => persist({ source_reference: null }))}>{t("deliveryDiscussion.dropSource")}</Button>} />}
       <p className="delivery-hint">{tr("hint")}</p>
       {readOnly && <Alert type="info" title={tr("readOnly")} />}
       <section className="delivery-plan-context">
@@ -552,9 +538,11 @@ export function DeliveryTaskPlanEditor({
             onClick={() => {
               if (locked()) return;
               const current = { rows, baseline, preview };
+              batch(() => {
               setRows(previous.rows);
               setBaseline(previous.baseline);
               setPreview(previous.preview);
+              });
               submitIntent.current = {
                 version: previous.baseline.version,
                 key: crypto.randomUUID(),
@@ -855,4 +843,9 @@ export function DeliveryTaskPlanEditor({
       </Button>
     </Modal>
   );
+}
+
+export function DeliveryTaskPlanEditor(props: Omit<Parameters<typeof DeliveryTaskPlanForm>[0], "retention">) {
+  const retention = useTaskPlanRetention(props.data.project.id, props.requirement.id, props.onUnresolvedChange);
+  return <DeliveryTaskPlanForm {...props} retention={retention} />;
 }

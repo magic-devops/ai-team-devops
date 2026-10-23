@@ -16,6 +16,7 @@ import { DeliveryManualReviewPanel } from "../../subapps/ai-rd-center/src/pages/
 import { ExternalWorkOrderPanel } from "../components/ExternalWorkOrderPanel";
 import { TaskDispatchHost } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDispatchHost";
 import { TaskDetailWorkspace } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDetailWorkspace";
+import { TaskPlanRecoveryGateway } from "../../subapps/ai-rd-center/src/pages/delivery/TaskPlanRecoveryGateway";
 import { closeTaskDispatchRoute, taskDispatchRouteEvent } from "./taskDispatchRoute";
 import { closeTaskDefinitionRoute, taskDefinitionRouteClosedEvent } from "./taskDefinitionRoute";
 import { useDeliveryDraftState } from "./useDeliveryDraftState";
@@ -87,6 +88,19 @@ beforeEach(() => {
 afterEach(() => { Object.keys(h.hooks).forEach(unmount); vi.unstubAllGlobals(); });
 
 describe("task draft navigation protection", () => {
+  it("passes current query authority to task plans while an unavailable draft pins the old display workspace (UNRUN)", () => {
+    const original = workbench(), first = find(original, TaskPlanRecoveryGateway); expect(first.props.liveRead.data.permissions.write).toBe(true);
+    const host = (tree: ReactNode) => nodes(tree).find((node) => node.props.className === "delivery-plan-recovery-host")!;
+    expect(host(original).props.children.type).toBe(TaskPlanRecoveryGateway);
+    first.props.onPending(true);
+    h.context = { ...h.context, data: { ...h.context.data, permissions: { ...h.context.data.permissions, write: false } } };
+    const revoked = find(workbench(), TaskPlanRecoveryGateway);
+    expect(revoked.props.liveRead.data).toBe(h.context.data); expect(revoked.props.liveRead.data.permissions.write).toBe(false);
+    h.context = { ...h.context, error: new Error("HTTP 503"), isError: true };
+    const failed = workbench(); expect(find(failed, TaskPlanRecoveryGateway).props.liveRead.failed).toBe(true);
+    expect((failed as ReactElement<any>).props.children[0].type).toBe((original as ReactElement<any>).props.children[0].type);
+    expect(host(failed).props.children.key).toBe(host(original).props.children.key);
+  });
   it("keeps all independent recovery owners mounted under the reading directory when task facts fail", () => {
     const first = host(), workspace = find(first, TaskDetailWorkspace);
     expect(workspace.props.task.id).toBe("T");
