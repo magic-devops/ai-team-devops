@@ -42,7 +42,7 @@
   min-width: 0;
   width: 100%;
 }
-.delivery-toolbar > .delivery-reference-select {
+.delivery-toolbar > .delivery-reference-field {
   flex: 1 1 170px;
 }
 .delivery-lane .delivery-query-pagination .ant-btn {
@@ -57,7 +57,7 @@
     min-height: 36px;
     white-space: normal;
   }
-  .delivery-toolbar > .delivery-reference-select {
+  .delivery-toolbar > .delivery-reference-field {
     flex-basis: 100%;
   }
   .delivery-query-task-row.ant-btn {

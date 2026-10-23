@@ -1,0 +1,12 @@
+.delivery-reference-field { display: grid; gap: 4px; width: 100%; min-width: 0; }
+.delivery-reference-field .delivery-reference-select { width: 100%; min-width: 0; }
+.delivery-reference-status:empty { display: none; }
+.delivery-reference-status { font-size: 12px; color: var(--muted, #64748b); overflow-wrap: anywhere; }
+.delivery-reference-status .ant-alert { padding: 6px 8px; align-items: start; }
+.delivery-reference-status .ant-space { flex-wrap: wrap; gap: 4px; }
+.delivery-reference-status .ant-alert-content { min-width: 0; }
+.delivery-reference-unavailable { display: grid; gap: 4px; list-style: none; padding: 0; margin: 4px 0 0; }
+.delivery-reference-unavailable li { display: flex; align-items: start; gap: 6px; }
+.delivery-reference-unavailable li > span { flex: 1; min-width: 0; }
+.delivery-reference-select .ant-select-item-option-content { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .delivery-reference-status .ant-alert { flex-wrap: wrap; } }

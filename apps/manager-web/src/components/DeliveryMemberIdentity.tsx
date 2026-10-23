@@ -22,6 +22,7 @@ export function OwnerSelect({
   label,
   placeholder,
   keepCurrent = false,
+  emptyLabel,
 }: {
   members: DeliveryMember[];
   value?: string;
@@ -32,6 +33,7 @@ export function OwnerSelect({
   placeholder?: string;
   keepCurrent?: boolean;
   queryGeneration?: number | null;
+  emptyLabel?: string;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryTeam.${key}`);
@@ -48,6 +50,7 @@ export function OwnerSelect({
       disabled: false,
     });
   }
+  else if (emptyLabel) options[0] = { value: "", label: emptyLabel, disabled: false };
   return (
     <Select
       className="delivery-owner-select"
@@ -67,6 +70,7 @@ export function OwnerSelect({
 export function ProjectOwnerSelect(
   props: Omit<Parameters<typeof OwnerSelect>[0], "members"> & {
     members?: DeliveryMember[];
+    purpose?: "assignment" | "filter";
   },
 ) {
   const { t } = useTranslation();
@@ -87,8 +91,10 @@ export function ProjectOwnerSelect(
       disabled: false,
     });
   }
+  else if (props.emptyLabel) options[0] = { value: "", label: props.emptyLabel, disabled: false };
   return (
     <DeliveryReferenceSelect
+      key={props.purpose || "assignment"}
       kind="member"
       queryGeneration={props.queryGeneration}
       value={props.value}
@@ -96,7 +102,8 @@ export function ProjectOwnerSelect(
       disabled={props.disabled}
       label={props.label}
       options={options}
-      filter={(data) => data.active === true && data.kind !== "tool"}
+      filter={(data) => (props.purpose === "filter" ? typeof data.active === "boolean" : data.active === true) && (data.kind === "human" || data.kind === "agent")}
+      formatLabel={(item) => `${item.label} · ${t(`deliveryTeam.kinds.${item.data.kind}`)} · ${item.id}${item.data.active === false ? ` · ${t("deliveryTeam.inactive")}` : ""}`}
     />
   );
 }

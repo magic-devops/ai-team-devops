@@ -209,7 +209,6 @@ export function DeliveryTaskPlanForm({
   }, [retention.store, retention.view.owned]);
   const criteria = baseline.requirement.acceptance_criteria;
   const items = selectedPlanItems(rows);
-  const availableTasks: { id: string; title: string; req_id: string }[] = [];
   const problems = taskPlanProblems(
     rows,
     criteria.length,
@@ -646,11 +645,8 @@ export function DeliveryTaskPlanForm({
                 value: item.key,
                 label: item.title || tr("item", { number: number + 1 }),
                 disabled: !item.selected,
+                local: true,
               })),
-            ...availableTasks.map((task) => ({
-              value: task.id,
-              label: `${task.title} · ${task.id}`,
-            })),
           ];
           return (
             <article

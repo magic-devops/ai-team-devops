@@ -76,11 +76,14 @@ describe("retained task-plan consumers", () => {
     store.close(); await settle(); h.hooks = []; start();
     const draft = planDraft(), { selected: _, ...item } = draft.rows[0];
     vi.mocked(request).mockResolvedValueOnce({ id: "preview-retained", version: 7, requirement_revision: 3, requirement_basis: draft.basis,
-      requirement_snapshot: draft.requirement, items: [item], source: "template", model: "", provider: "",
+      requirement_snapshot: draft.requirement, items: [{ ...item, key: "generated-suggestion" }], source: "template", model: "", provider: "",
       usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost_usd: 0 }, warnings: [] });
     button(render(), "delivery.taskPlan.retryRequest").onClick(); await settle();
     expect(vi.mocked(request).mock.calls[1][1]?.body).toBe(original); expect(store.snapshot().draft?.preview?.id).toBe("preview-retained");
     expect(store.snapshot().draft?.preview_request).toBeNull(); expect(store.snapshot().draft?.rows[0].title).toBe("Implement");
+    button(render(), "delivery.taskPlan.add").onClick();
+    const dependencies = nodes(render()).filter((node) => node.props.kind === "task" && Array.isArray(node.props.options));
+    expect(dependencies.some((node) => node.props.options.some((option: any) => option.value === "generated-suggestion" && option.local === true))).toBe(true);
   });
   it("rejects old edit, create and generator callbacks while the original result remains unknown", async () => {
     const tree = manual(); vi.mocked(request).mockRejectedValueOnce(new Error("Network lost")); button(tree, "delivery.taskPlan.create").onClick(); await settle();

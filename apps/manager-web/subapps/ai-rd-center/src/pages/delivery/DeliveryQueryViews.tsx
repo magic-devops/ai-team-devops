@@ -275,6 +275,8 @@ export function DeliveryRequirementIndex({
         />
         <ProjectOwnerSelect
           label={t("delivery.allOwners")}
+          emptyLabel={t("delivery.allOwners")}
+          purpose="filter"
           queryGeneration={queryGeneration}
           value={route.owner}
           onChange={(owner) => filter({ owner })}
