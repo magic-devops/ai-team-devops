@@ -554,6 +554,7 @@ export function deliveryQueryFailure(error: unknown) {
 export function invalidateDeliveryQueries(
   client: QueryClient,
   projectId: string,
+  options?: { throwOnError?: boolean; cancelRefetch?: boolean },
 ) {
   return client.invalidateQueries({
     predicate: (query) => {
@@ -565,7 +566,7 @@ export function invalidateDeliveryQueries(
         (key.includes(projectId) || !key[0].startsWith("delivery"))
       );
     },
-  });
+  }, options);
 }
 export function requirementSummaryProgress(
   requirement: Pick<RequirementSummary, "tasks_total" | "tasks_done">,

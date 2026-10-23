@@ -25,7 +25,8 @@ import type {
 } from "@/lib/deliveryScheduling";
 import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
-import { DeliveryMemberRuntime } from "./DeliveryMemberRuntime";
+import { DeliveryMemberRuntimeOwner } from "./DeliveryMemberRuntime";
+import { RuntimeBindingRecoveryIndex } from "./RuntimeBindingRecovery";
 import "./delivery-team.css";
 
 export function DeliveryTeamMembers({
@@ -439,15 +440,6 @@ export function DeliveryTeamMembers({
                 }
               />
             )}
-            {(selected.kind === "agent" || selected.kind === "tool") && (
-              <DeliveryMemberRuntime
-                key={`${workspace.project.id}:${sessionId}:${selected.id}`}
-                member={selected}
-                projectId={workspace.project.id}
-                sessionId={sessionId}
-                onSaved={onSaved}
-              />
-            )}
             {selected.kind !== "tool" && (
               <section className="delivery-team-task-list">
                 <h4>
@@ -499,7 +491,13 @@ export function DeliveryTeamMembers({
             )}
           </>
         )}
+        {memberInspector.displayId && !memberInspector.displayId.startsWith("user:") && (
+          <DeliveryMemberRuntimeOwner key={`${workspace.project.id}:${sessionId}:${memberInspector.displayId}`}
+            projectId={workspace.project.id} memberId={memberInspector.displayId} member={selected || undefined} sessionId={sessionId} onSaved={onSaved}
+            isActive={() => requestedMemberId === memberInspector.displayId} />
+        )}
       </Drawer>
+      <RuntimeBindingRecoveryIndex projectId={workspace.project.id} onOpen={(id) => change({ teamMemberId: id })} />
     </section>
   );
 }

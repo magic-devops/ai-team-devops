@@ -13,4 +13,4 @@
 
 SDK 读取使用 `delivery_team_runtime_bindings()`，保存使用既有 `delivery_command()`。CLI 使用 `delivery team-runtime --json` 读取，使用 `delivery command --file <原请求文件>` 保存。重试保留原 expected_version、完整 payload 和 idempotency_key；并发冲突须明确核对后另建操作，不自动修改原文件。
 
-关联编辑器的跨窗口丢失回执恢复仍待完善。当前不要将关闭后重新打开并新建保存视为已确认失败后的重试方式；尚未确认的请求应保留原请求身份核实。
+关联编辑器的同一授权标签页会话原请求恢复见 `docs/BINDING_OPERATION_RECOVERY_GUIDE.md`。结果未知时使用原件恢复，确认回执后应用并刷新；跨账号或新标签页恢复不在当前范围。实际运行与界面验证仍待执行。

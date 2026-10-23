@@ -1,8 +1,9 @@
 import { Alert, Button, Modal, Select, Space } from "antd";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { saveDelivery, type DeliveryCommandAck } from "@/lib/delivery";
-import { getWorkspaceScope, getSessionRevision } from "@/lib/authStorage";
+import type { DeliveryCommandAck } from "@/lib/delivery";
+import type { RuntimeBindingCommand } from "@/lib/runtimeBindingCommand";
+import { RuntimeBindingRecovery } from "./RuntimeBindingRecovery";
 import {
   adoptRuntimeBindingDraft,
   changeBindingWorkspace,
@@ -18,26 +19,39 @@ export function MemberRuntimeBindingEditor({
   initial,
   initialCatalogue,
   memberName,
+  command,
+  isActive,
+  canSubmit,
   onClose,
   onSaved,
 }: {
   initial: RuntimeBindingDraft;
   initialCatalogue: TeamRuntimeBindings;
   memberName: string;
+  command: RuntimeBindingCommand;
+  isActive: () => boolean;
+  canSubmit: (operation: RuntimeBindingDraft["operation"]) => boolean;
   onClose: () => void;
-  onSaved: (workspace: DeliveryCommandAck) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void | Promise<void>;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryTeamRuntime.${key}`);
-  const [origin] = useState(() =>
-    JSON.stringify([getWorkspaceScope(), getSessionRevision()]),
-  );
   const [draft, setDraft] = useState(initial);
   const [catalogue, setCatalogue] = useState(initialCatalogue);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
   const [candidate, setCandidate] = useState<TeamRuntimeBindings>();
+  const mounted = useRef(true), pending = useRef(false);
+  const identity = JSON.stringify([initial.projectId, initial.memberId, initial.intent.key]), live = useRef(identity); live.current = identity;
+  const access = useRef({ command, isActive, canSubmit, onSaved, onClose }); access.current = { command, isActive, canSubmit, onSaved, onClose };
+  const draftRef = useRef(draft); draftRef.current = draft;
+  const catalogueRef = useRef(catalogue); catalogueRef.current = catalogue;
+  const changeDraft = (next: RuntimeBindingDraft) => { draftRef.current = next; setDraft(next); };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const current = () => mounted.current && live.current === identity && access.current.command.snapshot === command.snapshot && command.current() && access.current.isActive();
+  const available = () => current() && access.current.canSubmit(draftRef.current.operation);
+  const phase = command.state.phase, locked = busy || command.locked;
   const row = catalogue.members.find(
     (item) => item.member_id === draft.memberId,
   );
@@ -48,6 +62,7 @@ export function MemberRuntimeBindingEditor({
     (item) => item.id === draft.workspaceId,
   );
   const fail = (failure: unknown) => {
+    if (!current()) return;
     const message = (failure as Error).message;
     const parsed = planError(failure);
     setError(
@@ -58,47 +73,48 @@ export function MemberRuntimeBindingEditor({
     setCandidate(undefined);
     if (message.includes("409")) setConflict(true);
   };
-  const checkScope = () => {
-    if (origin !== JSON.stringify([getWorkspaceScope(), getSessionRevision()]))
-      throw new Error("scopeChanged");
+  const close = () => {
+    if (pending.current || busy || !current()) return;
+    if (command.snapshot().phase === "refused") command.reset();
+    if (command.snapshot().phase === "idle" && !command.snapshot().error) access.current.onClose();
   };
   const save = async () => {
-    if (busy || conflict) return;
+    if (pending.current || busy || conflict || !available() || command.snapshot().phase !== "idle" || command.snapshot().error === "retainedOriginalUnavailable") return;
+    pending.current = true;
     setBusy(true);
     setError("");
     try {
-      checkScope();
-      const prepared = prepareRuntimeBinding(draft, catalogue);
-      setDraft(prepared.draft);
-      const result = await saveDelivery(
-        draft.projectId,
-        prepared.action,
-        prepared.payload,
-        prepared.version,
-        prepared.key,
-      );
-      checkScope();
-      onSaved(result);
-      onClose();
+      const prepared = prepareRuntimeBinding(draftRef.current, catalogueRef.current);
+      changeDraft(prepared.draft);
+      const result = await command.run({ action: prepared.action, payload: prepared.payload, intent: { version: prepared.version, key: prepared.key } });
+      if (!current()) return;
+      if (result) {
+        await access.current.onSaved(result);
+        if (!current()) return;
+        command.reset(); if (command.snapshot().phase === "idle") access.current.onClose();
+      } else if (command.snapshot().phase === "refused") {
+        setConflict(true); setCandidate(undefined);
+      }
     } catch (failure) {
       fail(failure);
     } finally {
-      setBusy(false);
+      pending.current = false; if (mounted.current) setBusy(false);
     }
   };
   const readLatest = async () => {
+    if (pending.current || busy || !available() || !["idle", "refused"].includes(command.snapshot().phase)) return;
+    pending.current = true;
     setCandidate(undefined);
     setBusy(true);
     setError("");
     try {
-      checkScope();
       const result = await fetchTeamRuntimeBindings(draft.projectId);
-      checkScope();
+      if (!available()) return;
       setCandidate(result);
     } catch (failure) {
       fail(failure);
     } finally {
-      setBusy(false);
+      pending.current = false; if (mounted.current) setBusy(false);
     }
   };
   const profileValue = draft.agentId
@@ -135,20 +151,20 @@ export function MemberRuntimeBindingEditor({
       title={tr(draft.operation === "unbind" ? "unbindTitle" : "bind")}
       width={620}
       className="delivery-editor team-runtime-editor"
-      onCancel={() => !busy && onClose()}
-      closable={!busy}
-      keyboard={!busy}
+      onCancel={close}
+      closable={!locked}
+      keyboard={!locked}
       maskClosable={false}
       footer={
         <Space wrap>
-          <Button disabled={busy} onClick={onClose}>
+          <Button disabled={locked} onClick={close}>
             {tr("cancel")}
           </Button>
           <Button
             type="primary"
             danger={draft.operation === "unbind"}
             loading={busy}
-            disabled={conflict}
+            disabled={locked || conflict || phase !== "idle" || !available()}
             onClick={() => void save()}
           >
             {tr(draft.operation === "unbind" ? "unbind" : "save")}
@@ -161,6 +177,9 @@ export function MemberRuntimeBindingEditor({
       <p className="runtime-help">
         {tr(draft.operation === "unbind" ? "unbindHint" : "intro")}
       </p>
+      <RuntimeBindingRecovery projectId={draft.projectId} memberId={draft.memberId} command={command}
+        isActive={current} onSaved={(ack) => access.current.onSaved(ack)} onResolved={() => access.current.onClose()}
+        onDeferred={() => { if (current()) access.current.onClose(); }} />
       {error && (
         <Alert
           role="alert"
@@ -191,32 +210,31 @@ export function MemberRuntimeBindingEditor({
             {tr("workspace")}
             <Select
               aria-label={tr("workspace")}
-              disabled={busy || conflict}
+              disabled={locked || conflict || phase !== "idle" || !available()}
               value={draft.workspaceId || undefined}
               options={workspaces}
               showSearch
               optionFilterProp="label"
-              onChange={(workspaceId) =>
-                setDraft(changeBindingWorkspace(draft, workspaceId))
-              }
+              onChange={(workspaceId) => { if (!pending.current && !locked && !conflict && available() && command.snapshot().phase === "idle") changeDraft(changeBindingWorkspace(draftRef.current, workspaceId)); }}
             />
           </label>
           <label>
             {tr("profile")}
             <Select
               aria-label={tr("profile")}
-              disabled={busy || conflict || !workspace}
+              disabled={locked || conflict || phase !== "idle" || !available() || !workspace}
               value={profileValue}
               options={options}
               showSearch
               optionFilterProp="label"
               onChange={(value) => {
+                if (pending.current || locked || conflict || !available() || command.snapshot().phase !== "idle") return;
                 const agent = workspace?.agents.find(
                   (item) => `${item.id}:${item.version}` === value,
                 );
                 if (agent)
-                  setDraft({
-                    ...draft,
+                  changeDraft({
+                    ...draftRef.current,
                     agentId: agent.id,
                     agentVersion: agent.version,
                   });
@@ -225,9 +243,9 @@ export function MemberRuntimeBindingEditor({
           </label>
         </>
       )}
-      {conflict && (
+      {conflict && ["idle", "refused"].includes(phase) && (
         <section className="team-runtime-candidate">
-          <Button loading={busy} onClick={() => void readLatest()}>
+          <Button loading={busy} disabled={locked || !available()} onClick={() => void readLatest()}>
             {tr("readLatest")}
           </Button>
           {candidate && (
@@ -243,20 +261,19 @@ export function MemberRuntimeBindingEditor({
               <p className="runtime-help">{tr("chooseCurrentProfile")}</p>
               <Button
                 disabled={
-                  busy ||
+                  locked || !available() ||
                   !latest?.permissions[
                     draft.operation === "bind" ? "can_bind" : "can_unbind"
                   ]
                 }
                 onClick={() => {
+                  if (pending.current || busy || !available() || !candidate || !["idle", "refused"].includes(command.snapshot().phase)) return;
                   try {
-                    setDraft(
-                      adoptRuntimeBindingDraft(
-                        draft,
-                        candidate,
-                        crypto.randomUUID(),
-                      ),
-                    );
+                    const adopted = adoptRuntimeBindingDraft(draftRef.current, candidate, crypto.randomUUID());
+                    if (command.snapshot().phase === "refused") command.reset();
+                    if (command.snapshot().phase !== "idle" || command.snapshot().error) return;
+                    changeDraft(adopted);
+                    catalogueRef.current = candidate;
                     setCatalogue(candidate);
                     setCandidate(undefined);
                     setConflict(false);

@@ -229,6 +229,31 @@ def test_tool_executor_cannot_become_the_responsible_task_owner(bound):
     assert all_counts(bridge) == before
 
 
+def test_binding_lost_ack_replay_preserves_current_unbound_state_and_original_receipt(bound):
+    bridge, member, body = bound
+    client = bridge[0]
+    before = workspace(bridge)
+    original = {"action": "member.runtime.bind", "payload": {"member_id": member["id"],
+        "workspace_id": body["workspace_id"], "agent_id": body["agent_id"], "agent_version": body["agent_version"]},
+        "expected_version": before["version"], "idempotency_key": "lost-binding-ack"}
+    first = client.post("/api/v1/delivery/commands", json=original)
+    assert first.status_code == 200, first.text
+    assert first.json()["resource"] == {"kind": "member", "id": member["id"]}
+    assert first.json()["result"] is None
+    removed = command(client, "member.runtime.unbind", {"member_id": member["id"]})
+    assert removed.status_code == 200, removed.text
+    counts = all_counts(bridge)
+    replay = client.post("/api/v1/delivery/commands", json=original)
+    assert replay.status_code == 200 and replay.json()["replayed"], replay.text
+    assert replay.json()["applied_version"] == first.json()["applied_version"]
+    assert replay.json()["resource"] == first.json()["resource"]
+    assert replay.json()["version"] == removed.json()["version"]
+    assert all_counts(bridge) == counts
+    catalogue = client.get("/api/v1/delivery/team-runtime-bindings").json()
+    row = next(row for row in catalogue["members"] if row["member_id"] == member["id"])
+    assert row["status"] == "unbound" and row["binding"] is None
+
+
 def test_handed_off_planned_run_survives_rebinding_and_preserves_test_and_human_review(bound):
     bridge, _, _ = bound
     client, _, store, principal, ws, _, task = bridge

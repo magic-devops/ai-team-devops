@@ -5,7 +5,7 @@ import { DeliveryTeamMembers } from "../../subapps/ai-rd-center/src/pages/delive
 import { parseSchedulingRoute } from "./deliveryScheduling";
 import type { DeliveryDisplayContext } from "./delivery";
 import { useDrawerIdentity } from "./useDrawerIdentity";
-import { DeliveryMemberRuntime } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryMemberRuntime";
+import { DeliveryMemberRuntimeOwner } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryMemberRuntime";
 const hooks = vi.hoisted(() => ({ state: [] as unknown[], next: 0, effects: [] as (() => void)[] }));
 vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>("react"),
   useState: (initial: unknown) => {
@@ -51,9 +51,9 @@ describe("controlled drawer closing identity", () => {
     function panel(node: ReactNode): any {
       if (Array.isArray(node)) return node.map(panel).find(Boolean);
       if (!isValidElement<any>(node)) return undefined;
-      return node.type === DeliveryMemberRuntime ? node.props : panel(node.props.children);
+      return node.type === DeliveryMemberRuntimeOwner ? node.props : panel(node.props.children);
     }
-    expect(panel(drawer.children)).toMatchObject({ member: { id: "tool:one", kind: "tool" }, projectId: "project-a", sessionId: "test" });
+    expect(panel(drawer.children)).toMatchObject({ memberId: "tool:one", member: { id: "tool:one", kind: "tool" }, projectId: "project-a", sessionId: "test" });
   });
   it("keeps only the outgoing member content until the close animation completes", () => {
     expect(memberDrawer("agent:one").open).toBe(true);
