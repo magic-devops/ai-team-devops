@@ -2,6 +2,7 @@ import { isValidElement, type ReactNode } from "react";
 import { Button, Checkbox, Select, Tag } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeliveryReleaseWorkbench } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryReleaseWorkbench";
+import { DeliveryReleaseSourceEditor } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryReleaseSourceEditor";
 import { releaseIndex, releaseQuality } from "./deliveryReleaseFixtures";
 import type { DeliveryDisplayContext } from "./delivery";
 import { releaseTranslations } from "../i18n/delivery-release";
@@ -88,16 +89,16 @@ function all(node: ReactNode, type: unknown): Record<string, any>[] {
     ...all(node.props.children, type),
   ];
 }
-const render = (view: "quality" | "releases" = "quality") => {
+const render = (view: "quality" | "releases" = "quality", sessionId = "test", projectId = "P") => {
   hooks.next = 0;
   return DeliveryReleaseWorkbench({
     view,
     workspace: {
-      project: { id: "P", status: "active" },
+      project: { id: projectId, status: "active" },
       version: 7,
       query_generation: 7,
     } as DeliveryDisplayContext,
-    sessionId: "test",
+    sessionId,
     onSaved: vi.fn(),
   });
 };
@@ -290,5 +291,29 @@ describe("quality uses explicit scope and honest catalogue states", () => {
         .flatMap((button) => all(button.children, "strong"))
         .map((strong) => strong.children),
     ).toContain(800);
+  });
+  it("consults the source editor before changing filters, route state or refresh queries", async () => {
+    vi.stubGlobal("location", { hash: "#/dev-flow?view=quality&project_id=P&task_ids=T-one" });
+    all(render(), Button).find((button) => button.children === "deliveryRelease.sourcePrepare")!.onClick();
+    const source = all(render(), DeliveryReleaseSourceEditor)[0]; expect(source).toBeDefined();
+    const check = vi.fn(() => false); source.onExitGuard(check);
+    all(render(), Select).find((select) => select["aria-label"] === "deliveryRelease.effective")!.onChange("attention");
+    expect(check).toHaveBeenCalledOnce();
+    expect(all(render(), Select).find((select) => select["aria-label"] === "deliveryRelease.effective")!.value).toBe("all");
+    expect(history.pushState).not.toHaveBeenCalled();
+    await all(render(), Button).find((button) => button.children === "deliveryRelease.refresh")!.onClick();
+    expect(hooks.invalidations).toEqual([]);
+    source.onExitGuard(null);
+    all(render(), Select).find((select) => select["aria-label"] === "deliveryRelease.effective")!.onChange("attention");
+    expect(all(render(), Select).find((select) => select["aria-label"] === "deliveryRelease.effective")!.value).toBe("attention");
+  });
+  it("hides captured source editors across project or session changes and reflects revoked import permission", () => {
+    vi.stubGlobal("location", { hash: "#/dev-flow?view=quality&project_id=P&task_ids=T-one" });
+    all(render(), Button).find((button) => button.children === "deliveryRelease.sourcePrepare")!.onClick();
+    expect(all(render(), DeliveryReleaseSourceEditor)).toHaveLength(1);
+    expect(all(render("quality", "another-session"), DeliveryReleaseSourceEditor)).toHaveLength(0);
+    expect(all(render("quality", "test", "another-project"), DeliveryReleaseSourceEditor)).toHaveLength(0);
+    (hooks.index as any).permissions.can_import = false;
+    expect(all(render(), DeliveryReleaseSourceEditor)[0].readOnly).toBe(true);
   });
 });

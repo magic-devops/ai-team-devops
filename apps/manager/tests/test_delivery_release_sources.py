@@ -3,8 +3,10 @@ from copy import deepcopy
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
+from sop_manager.routers.delivery_ci_types import CiInput
 from sop_manager.routers.delivery_release_sources import prepare_source_packet, validate_source_packet
-from sop_manager.routers.delivery_release_sources_contract import ReleaseSourcePacketInput
+from sop_manager.routers.delivery_release_sources_contract import ReleaseSourceMapping, ReleaseSourcePacketInput
 from sop_manager.routers.delivery_release import quality, apply_release, preview, release_detail
 from sop_manager.routers.sql_models import Project, User
 from test_delivery_release import env, scope, trusted, signed_ci, candidate_input, import_ci, create_candidate  # noqa: F401
@@ -68,6 +70,36 @@ def test_non_code_association_has_an_explicit_reason_and_no_commit(trusted):
         packet = prepare_source_packet(db, project, data, proposal(current, kind="no_code_change"))
         assert packet["bindings"][0]["base_commit"] is None
         assert packet["bindings"][0]["comment"] == "Documentation task, no code change"
+
+
+def test_multiline_rationale_survives_current_packet_generation_and_validation(trusted):
+    sessions, data, _ = trusted
+    comment = "Documentation checked\r\n\tNo runtime code changes 😀"
+    with sessions() as db:
+        project = db.get(Project, "project")
+        current = quality(db, project, data, requirement_ids=["R-release"])
+        body = proposal(current, kind="no_code_change").model_dump(mode="json")
+        body["mappings"][0]["comment"] = comment
+        packet = prepare_source_packet(db, project, data, ReleaseSourcePacketInput.model_validate(body))
+        validate_source_packet(packet, current, data["release_policy"], project)
+        assert packet["bindings"][0]["comment"] == comment
+
+
+@pytest.mark.parametrize("invalid", ["Bad\x00", "Bad\x0b", "Bad\x7f", "Bad\ud800", "\n\t"])
+def test_source_rationale_still_rejects_invalid_text(invalid):
+    with pytest.raises(ValidationError):
+        ReleaseSourceMapping(task_id="T-one", kind="no_code_change", comment=invalid)
+
+
+@pytest.mark.parametrize("control", ["\n", "\r", "\t", "\x00", "\x7f"])
+def test_ci_identifiers_and_other_scalar_text_do_not_gain_multiline_permission(control):
+    class CiScalar(CiInput):
+        text: str
+
+    with pytest.raises(ValidationError):
+        CiScalar(text="Fixed" + control + "identity")
+    with pytest.raises(ValidationError):
+        ReleaseSourceMapping(task_id="T" + control + "one", kind="no_code_change", comment="Valid rationale")
 
 
 def test_changed_source_packet_is_not_covered_by_the_old_ci_signature(trusted):

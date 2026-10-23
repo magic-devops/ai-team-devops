@@ -1,11 +1,11 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-23T09:14:30.768089+00:00",
+  "updated_at": "2026-10-23T09:54:15.234307+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-23T09:14:30.768089+00:00",
+    "updated_at": "2026-10-23T09:54:15.234307+00:00",
     "status": "source_implemented_runtime_validation_deferred_by_user",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/release-source-trace/",
+    "evidence": ".sop-runtime/delivery-evidence/release-source-drafts/",
     "verification_status": "current_source_runtime_types_build_and_browser_unverified",
-    "next_step": "runtime_validation_after_human_restores_window_then_automatic_adapters_ops_quality_and_full_lifecycle",
+    "next_step": "validate_fixed_commit_when_human_restores_window_then_continue_full_lifecycle",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -652,7 +652,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-release-source-trace: source implementation; runtime validation deferred by human",
+  "current": "T-release-source-drafts: simplify release source preparation with exact-scope tab drafts and actionable feedback; runtime validation deferred",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -1117,7 +1117,7 @@
     "task_id": "T-release-source-trace",
     "base_commit": "232144fc032543ec5f684e8541503c7b281a63ec",
     "updated_at": "2026-10-23T09:14:30.768089+00:00",
-    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "status": "source_committed_runtime_validation_deferred_by_user",
     "design": "docs/DELIVERY_RELEASE_SOURCE_TRACE_DESIGN.md",
     "guide": "docs/DELIVERY_RELEASE_SOURCE_TRACE_GUIDE.md",
     "record": "memory/release-source-trace-progress.md",
@@ -1134,6 +1134,23 @@
     "full_lifecycle_complete": false,
     "approval_model": "fixed_source_packet_in_signed_ci_and_candidate_snapshot_confirmed_by_existing_candidate_review",
     "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
-    "next_step": "validate_fixed_source_after_human_restores_window_then_automatic_adapters_ops_quality_and_full_lifecycle"
+    "next_step": "validate_fixed_source_after_human_restores_window_then_automatic_adapters_ops_quality_and_full_lifecycle",
+    "source_commit": "fac2b1ecb33b8692ebea1b39833db06b747ede20"
+  },
+  "release_source_drafts": {
+    "task_id": "T-release-source-drafts",
+    "base_commit": "fac2b1ecb33b8692ebea1b39833db06b747ede20",
+    "updated_at": "2026-10-23T09:54:15.234307+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/DELIVERY_RELEASE_SOURCE_DRAFTS.md",
+    "record": "memory/release-source-drafts-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/release-source-drafts/",
+    "runtime_tests_executed": false,
+    "typescript_checked": false,
+    "build_executed": false,
+    "browser_verified": false,
+    "full_lifecycle_complete": false,
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "next_step": "validate_fixed_commit_when_human_restores_window_then_continue_full_lifecycle"
   }
 }

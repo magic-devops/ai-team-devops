@@ -352,5 +352,7 @@
 .delivery-release-source-commits { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .delivery-release-source-navigation { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
 .delivery-release-source-navigation .ant-select { flex:1 1 260px; min-width:0; }
+.delivery-release-source-help { margin:12px 0 0; color:var(--muted); font-size:13px; overflow-wrap:anywhere; }
+.delivery-release-source-task textarea { resize:vertical; }
 @media(max-width:720px) { .delivery-release-preparation { grid-template-columns:repeat(2,minmax(0,1fr)); } .delivery-release-source-commits { grid-template-columns:1fr; } }
 @media(max-width:400px) { .delivery-release-preparation { grid-template-columns:1fr; } }

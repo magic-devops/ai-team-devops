@@ -10,7 +10,7 @@ import {
   Skeleton,
   Tag,
 } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { DeliveryContext, DeliveryCommandAck } from "@/lib/delivery";
 import {
@@ -76,7 +76,8 @@ export function DeliveryReleaseWorkbench({
   const [editor, setEditor] = useState<"candidate" | "policy" | "ci" | null>(
     null,
   );
-  const [sourceEditor, setSourceEditor] = useState<{ quality: DeliveryQuality; policy: ReleasePolicy } | null>(null);
+  const [sourceEditor, setSourceEditor] = useState<{ scope: string; quality: DeliveryQuality; policy: ReleasePolicy } | null>(null);
+  const sourceExit = useRef<{ scope: string; check: () => boolean } | null>(null);
   const [deploymentPreparation, setDeploymentPreparation] = useState<{
     candidateId: string;
     rollbackOf: string;
@@ -214,8 +215,12 @@ export function DeliveryReleaseWorkbench({
   const params = new URLSearchParams(hash().split("?")[1]);
   params.set("project_id", projectId);
   const background = releaseHash({ ...route, view }, `#/dev-flow?${params}`);
+  const canNavigate = () => {
+    if (sourceExit.current?.scope === `${projectId}:${sessionId}` && !sourceExit.current.check()) return false;
+    return exit.canNavigate();
+  };
   const navigate = (patch: Partial<ReleaseRoute>, replace = false) => {
-    if (!exit.canNavigate()) return;
+    if (!canNavigate()) return;
     const next = { ...route, view, ...patch };
     if (
       patch.kind !== undefined ||
@@ -235,7 +240,7 @@ export function DeliveryReleaseWorkbench({
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const refresh = async () => {
-    if (!exit.canNavigate()) return;
+    if (!canNavigate()) return;
     navigate(view === "quality" ? { qualityCursor: "" } : { [cursorKey]: "" });
     await qc.invalidateQueries({
       queryKey: ["delivery-context", projectId, sessionId],
@@ -449,7 +454,7 @@ export function DeliveryReleaseWorkbench({
                 disabled={!writable || !context.data?.permissions.can_import || !context.data.policy || !selectedQuality.data?.eligible}
                 onClick={() => {
                   if (context.data?.policy && selectedQuality.data?.eligible) setSourceEditor({
-                    policy: structuredClone(context.data.policy), quality: structuredClone(selectedQuality.data) });
+                    scope: `${projectId}:${sessionId}`, policy: structuredClone(context.data.policy), quality: structuredClone(selectedQuality.data) });
                 }}>{tr("sourcePrepare")}</Button></li>
               <li><strong>3 · {tr("sourceCiStep")}</strong><span>{tr("sourceCiStepHint")}</span></li>
               <li><strong>4 · {tr("sourceApprovalStep")}</strong><span>{tr("sourceApprovalStepHint")}</span></li>
@@ -782,9 +787,13 @@ export function DeliveryReleaseWorkbench({
           }}
         />
       )}
-      {sourceEditor && <DeliveryReleaseSourceEditor key={projectId + sessionId + ":sources"}
+      {sourceEditor?.scope === `${projectId}:${sessionId}` && <DeliveryReleaseSourceEditor key={projectId + sessionId + ":sources"}
         projectId={projectId} quality={sourceEditor.quality} policy={sourceEditor.policy}
-        readOnly={!writable} onClose={() => setSourceEditor(null)} />}
+        onExitGuard={(check) => {
+          if (check) sourceExit.current = { scope: sourceEditor.scope, check };
+          else if (sourceExit.current?.scope === sourceEditor.scope) sourceExit.current = null;
+        }}
+        readOnly={!writable || !context.data?.permissions.can_import} onClose={() => setSourceEditor(null)} />}
       {(editor === "policy" || (editor === "ci" && selectedQuality.data)) &&
         context.data && (
           <DeliveryReleaseEvidenceEditor

@@ -1,5 +1,5 @@
 """Bounded, explicit acceptance-to-source association shared with the CI producer."""
-from typing import Literal
+from typing import ClassVar, Literal
 import json
 
 from pydantic import Field, field_validator, model_validator
@@ -8,6 +8,8 @@ from .delivery_ci_types import CiInput, CommitSha, HexDigest, Identity, safe_htt
 
 
 class ReleaseSourceMapping(CiInput):
+    multiline_text_fields: ClassVar[frozenset[str]] = frozenset({"comment"})
+
     task_id: Identity
     kind: Literal["change", "no_code_change"]
     base_commit: CommitSha | None = None

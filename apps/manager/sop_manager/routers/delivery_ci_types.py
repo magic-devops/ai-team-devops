@@ -1,8 +1,8 @@
 """Shared strict CI and source-packet scalar types; no service dependencies."""
-from typing import Annotated
+from typing import Annotated, ClassVar
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationInfo, field_validator
 
 HexDigest = Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{64}$")]
 CommitSha = Annotated[str, StringConstraints(strict=True, pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")]
@@ -36,12 +36,14 @@ def safe_https(value: str, *, repository=False) -> str:
 
 class CiInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=False)
+    multiline_text_fields: ClassVar[frozenset[str]] = frozenset()
 
     @field_validator("*", mode="after")
     @classmethod
-    def string_is_text(cls, value):
+    def string_is_text(cls, value, info: ValidationInfo):
         if isinstance(value, str):
             value.encode("utf-8")
-            if not value.strip() or any(ord(char) < 32 or ord(char) == 127 for char in value):
-                raise ValueError("Expected nonempty text without control characters")
+            allowed = "\n\r\t" if info.field_name in cls.multiline_text_fields else ""
+            if not value.strip() or any((ord(char) < 32 or ord(char) == 127) and char not in allowed for char in value):
+                raise ValueError("Expected nonempty text without unsupported control characters")
         return value
