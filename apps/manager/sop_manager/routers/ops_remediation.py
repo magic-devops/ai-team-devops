@@ -21,7 +21,7 @@ def _fail(status, code, message):
     raise HTTPException(status, {"code": code, "message": message})
 
 
-def _read_source(project, source_id):
+def _read_source(project, source_id, source_type="self_heal"):
     from .delivery_issue_evidence import _clean
     from .ops_center import _dir
 
@@ -29,7 +29,10 @@ def _read_source(project, source_id):
         _fail(422, "ops_source_invalid", "Invalid operational source identity")
     if resolved_project_id() != project.id or resolved_tenant_id() != project.tenant_id:
         _fail(404, "ops_source_missing", "Source is not in the authorized project scope")
-    path = _dir("self_heal_actions") / f"{source_id}.json"
+    collections = {"self_heal": "self_heal_actions", "rca": "rca"}
+    if source_type not in collections:
+        _fail(422, "ops_source_invalid", "Unsupported operational source type")
+    path = _dir(collections[source_type]) / f"{source_id}.json"
     try:
         # A bounded open, not an unbounded read followed by a length check.
         with path.open("rb") as stream:
@@ -97,13 +100,15 @@ def _saved(row):
         raise HTTPException(409, {"code": "ops_source_record_invalid", "message": "Fixed source is not valid UTF-8 JSON"}) from exc
     if not isinstance(row.snapshot, dict) or digest(row.snapshot) != row.source_digest:
         _fail(409, "ops_source_record_invalid", "Fixed intake source cannot be verified")
-    return {"source_id": row.source_id, "source_digest": row.source_digest, "snapshot": deepcopy(row.snapshot),
+    if row.source_type not in {"self_heal", "rca"} or row.snapshot.get("id") != row.source_id:
+        _fail(409, "ops_source_record_invalid", "Fixed source identity cannot be verified")
+    return {"source_id": row.source_id, "source_type": row.source_type, "source_digest": row.source_digest, "snapshot": deepcopy(row.snapshot),
         "tenant_id": row.tenant_id, "project_id": row.project_id, "issue_id": row.issue_id,
         "created_by": row.created_by, "created_at": row.created_at.isoformat()}
 
 
-def _existing(db, project, data, source_id):
-    row = records(db, OpsIssueSource, project).filter(OpsIssueSource.source_id == source_id).first()
+def _existing(db, project, data, source_id, source_type):
+    row = records(db, OpsIssueSource, project).filter(OpsIssueSource.source_id == source_id, OpsIssueSource.source_type == source_type).first()
     if row is None:
         return None, None
     saved = _saved(row)
@@ -111,19 +116,19 @@ def _existing(db, project, data, source_id):
     return saved, issue
 
 
-def intake_view(db, project, data, source_id, *, version, can_write):
-    saved, issue = _existing(db, project, data, source_id)
-    snapshot, source_digest = (saved["snapshot"], saved["source_digest"]) if saved else _read_source(project, source_id)
+def intake_view(db, project, data, source_id, *, version, can_write, source_type="self_heal"):
+    saved, issue = _existing(db, project, data, source_id, source_type)
+    snapshot, source_digest = (saved["snapshot"], saved["source_digest"]) if saved else _read_source(project, source_id, source_type)
     return OpsIntakeView.model_validate({
         "project_id": project.id, "version": version, "as_of": stamp(), "source_id": source_id,
-        "source_digest": source_digest, "source_kind": "reported_only", "snapshot": snapshot,
+        "source_digest": source_digest, "source_kind": "reported_only", "source_type": source_type, "snapshot": snapshot,
         "existing_issue_id": saved["issue_id"] if saved else None, "existing_issue_available": issue is not None,
         "can_intake": can_write and project.status == "active" and saved is None,
     }).model_dump(mode="json")
 
 
-def apply_intake(db, project, user, data, body):
-    saved, issue = _existing(db, project, data, body.source_id)
+def apply_intake(db, project, user, data, body, source_type="self_heal"):
+    saved, issue = _existing(db, project, data, body.source_id, source_type)
     if saved:
         if saved["source_digest"] != body.source_digest:
             _fail(409, "ops_source_changed", "Use the fixed source already linked to this Issue")
@@ -132,10 +137,11 @@ def apply_intake(db, project, user, data, body):
         return issue.id, None, {"issue_id": issue.id, "source_id": body.source_id, "source_digest": saved["source_digest"]}
     if project.status != "active":
         _fail(409, "ops_project_inactive", "Activate the project before creating remediation work")
-    snapshot, source_digest = _read_source(project, body.source_id)
+    snapshot, source_digest = _read_source(project, body.source_id, source_type)
     if source_digest != body.source_digest:
         _fail(409, "ops_source_changed", "Operational source changed; explicitly read and adopt it again")
-    iid = "ISSUE-" + digest(["ops-intake", project.tenant_id, project.id, body.source_id])[:32]
+    namespace = "rca" if source_type == "rca" else "ops"
+    iid = "ISSUE-" + digest([namespace + "-intake", project.tenant_id, project.id, body.source_id])[:32]
     if db.get(Issue, iid) is not None:
         _fail(409, "ops_issue_conflict", "An Issue already occupies this intake identity")
     issue = Issue(id=iid, tenant_id=project.tenant_id, project_id=project.id, status="open", type="incident",
@@ -143,9 +149,9 @@ def apply_intake(db, project, user, data, body):
     db.add(issue)
     from sop_manager.project_write_guard import ops_intake_write_scope
 
-    with ops_intake_write_scope(db, project.tenant_id, project.id, body.source_id):
-        db.add(OpsIssueSource(id=digest(["ops-source", project.tenant_id, project.id, body.source_id]),
-            source_id=body.source_id, source_digest=source_digest, snapshot=deepcopy(snapshot),
+    with ops_intake_write_scope(db, project.tenant_id, project.id, source_type, body.source_id):
+        db.add(OpsIssueSource(id=digest([namespace + "-source", project.tenant_id, project.id, body.source_id]),
+            source_id=body.source_id, source_type=source_type, source_digest=source_digest, snapshot=deepcopy(snapshot),
             tenant_id=project.tenant_id, project_id=project.id, issue_id=iid, created_by=user.id))
         db.flush()
     return iid, None, {"issue_id": iid, "source_id": body.source_id, "source_digest": source_digest}
@@ -158,10 +164,10 @@ def add_issue_sources(evidence, db, project, data, issue):
     for row in rows:
         source_id = row.source_id
         saved = _saved(row)
-        evidence.add("ops:" + source_id, "ops", saved["snapshot"].get("trigger_condition") or source_id,
+        evidence.add("ops:" + saved["source_type"] + ":" + source_id, "ops", saved["snapshot"].get("trigger_condition") or saved["snapshot"].get("incident_id") or source_id,
             {"project_id": project.id, "view": "issues", "detail": "details", "issue_id": issue.id},
             status="reported_only", summary="ops_suggestion_not_execution_proof",
-            facts={"source_id": source_id, "source_digest": saved["source_digest"], "created_by": saved["created_by"],
+            facts={"source_id": source_id, "source_type": saved["source_type"], "source_digest": saved["source_digest"], "created_by": saved["created_by"],
                    "recorded_state": saved["snapshot"].get("state", "unknown")},
             excerpt=json.dumps(saved["snapshot"], ensure_ascii=False, sort_keys=True), raw=saved)
         selected.append(saved)

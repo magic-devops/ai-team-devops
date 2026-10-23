@@ -1,4 +1,5 @@
 const en = {
+  rca: "Reported root-cause record", selfHeal: "Reported self-heal suggestion", records: "Operational source records", rcaRecords: "Root-cause records",
   title: "Bring an operational suggestion into remediation", reported: "Reported suggestion · not execution evidence",
   hint: "Review the fixed source and create one project problem. Continue through diagnosis, requirements, task execution and acceptance. Deployment and rollback use controlled releases.",
   create: "Add to problems", open: "Open the original problem", source: "Fixed source", issueTitle: "Problem title", description: "Additional context", severity: "Severity",
@@ -11,6 +12,7 @@ const en = {
 };
 type Copy = typeof en;
 const zh: Copy = {
+  rca: "根因分析来源记录", selfHeal: "自愈建议来源记录", records: "运维来源记录", rcaRecords: "根因记录",
   title: "纳入正式运维处置", reported: "运维建议 · 非执行证明",
   hint: "核对固定来源后纳入一个项目问题，再进入诊断、需求、任务执行和验收。实际部署与回滚使用受控发布。",
   create: "纳入问题", open: "打开原问题", source: "固定来源", issueTitle: "问题标题", description: "补充说明", severity: "严重程度",
@@ -22,6 +24,7 @@ const zh: Copy = {
   defer: "保留操作，稍后恢复", sending: "正在保存固定请求并等待回执…",
 };
 const ja: Copy = {
+  rca: "根本原因の報告記録", selfHeal: "自己修復の提案記録", records: "運用の出所記録", rcaRecords: "根本原因の記録",
   title: "正式な運用対応に取り込む", reported: "運用提案 · 実行証拠ではありません",
   hint: "固定した出所を確認し、プロジェクトの問題を一件作成します。診断、要件、タスク実行と受入へ進みます。デプロイとロールバックは管理されたリリースを使います。",
   create: "問題へ取り込む", open: "元の問題を開く", source: "固定した出所", issueTitle: "問題のタイトル", description: "補足", severity: "重大度",

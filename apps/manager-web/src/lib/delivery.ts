@@ -357,6 +357,7 @@ export type DeliveryAction =
   | "stage.reopen"
   | "issue.promote"
   | "issue.ops.intake"
+  | "issue.rca.intake"
   | "issue.diagnosis.adopt"
   | "issue.diagnosis.dismiss"
   | "release.policy.save"

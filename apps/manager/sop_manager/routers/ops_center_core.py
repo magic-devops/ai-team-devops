@@ -1732,11 +1732,12 @@ def report_runbook_evidence(record: dict[str, Any]) -> dict[str, Any]:
     acceptance; legacy self-heal reports cannot satisfy execution requirements.
     """
     result = dict(record, execution_evidence=False, coverage_kind="reported_records")
-    evidence = [dict(item, status="reported_only", title="自愈建议记录")
-                if item.get("id") == "self_heal_action" else dict(item)
+    reported_titles = {"self_heal_action": "自愈建议记录", "rca_verification": "RCA 自报验证记录", "runbook_execution_check": "Runbook 自报执行记录"}
+    evidence = [dict(item, status="reported_only", title=reported_titles[item["id"]])
+                if item.get("id") in reported_titles else dict(item)
                 for item in record.get("collected_evidence") or [] if isinstance(item, dict)]
     sources = [dict(item, status="reported_only", recorded_state=item.get("recorded_state", item.get("status", "")))
-               if item.get("type") == "self_heal" else dict(item)
+               if item.get("type") in {"self_heal", "rca"} else dict(item)
                for item in record.get("sources") or [] if isinstance(item, dict)]
     required = {str(item["id"]): dict(item) for item in record.get("required_evidence") or []
                 if isinstance(item, dict) and item.get("id")}
@@ -1817,8 +1818,8 @@ def build_runbook_execution_evidence(
             "runbook_version": "Runbook 激活版本",
             "rca_root_cause": "RCA 根因",
             "rca_resolution": "处置方案",
-            "rca_verification": "RCA 验证",
-            "runbook_execution_check": "Runbook 执行确认",
+            "rca_verification": "正式问题验收证据",
+            "runbook_execution_check": "正式 Runbook 执行与验证证据",
         }
         evidence: list[dict[str, Any]] = []
         sources: list[dict[str, Any]] = []
@@ -2093,203 +2094,12 @@ def build_ops_rca_insight_tasks(
     }
 
 
-def _check_result(value: Any) -> str:
-    text = str(value or "").strip().lower()
-    if value is True or text in {"pass", "passed", "ok", "healthy", "resolved", "success", "green", "true"}:
-        return "passed"
-    if value is False or text in {"fail", "failed", "error", "unhealthy", "red", "false"}:
-        return "failed"
-    return "pending"
 
 
-def _verification_check(
-    *,
-    check_id: str,
-    title: str,
-    status: str,
-    required: bool = True,
-    evidence: Any = None,
-    recommendation: str = "",
-) -> dict[str, Any]:
-    return {
-        "id": check_id,
-        "title": title,
-        "status": status if status in {"passed", "failed", "pending"} else "pending",
-        "required": required,
-        "evidence": evidence,
-        "recommendation": recommendation,
-    }
 
 
-def build_ops_rca_verification_plan(
-    *,
-    rca_item: dict[str, Any],
-    pipelines: list[dict[str, Any]],
-    runbooks: list[dict[str, Any]],
-    manual_checks: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    checks_input = manual_checks or {}
-    linked = rca_item.get("linked", {}) if isinstance(rca_item.get("linked"), dict) else {}
-    selected_runbook_ids = [str(x) for x in rca_item.get("selected_runbook_ids") or [] if str(x)]
-    recommended = rca_item.get("recommended_runbooks", []) if isinstance(rca_item.get("recommended_runbooks"), list) else []
-    recommended_ids = [str(item.get("id") or "") for item in recommended if isinstance(item, dict) and item.get("id")]
-    bound_runbook_ids = selected_runbook_ids or recommended_ids
-    known_runbook_ids = {str(item.get("id") or "") for item in runbooks}
-    missing_runbook_ids = [item for item in bound_runbook_ids if item and item not in known_runbook_ids]
-
-    linked_pipeline_ids = [str(x) for x in linked.get("pipelines") or [] if str(x)]
-    linked_pipelines = [item for item in pipelines if str(item.get("id") or "") in linked_pipeline_ids]
-    failed_pipelines = [item for item in linked_pipelines if item.get("status") in {"failed", "error"} or item.get("error_msg")]
-
-    severity = str(rca_item.get("severity") or "medium")
-    requires_runbook = severity in {"critical", "high"} or bool(linked_pipeline_ids)
-    has_resolution = bool(str(checks_input.get("resolution") or rca_item.get("resolution") or "").strip())
-    has_evidence = bool(rca_item.get("evidence") or checks_input.get("evidence_url") or checks_input.get("evidence"))
-
-    checks = [
-        _verification_check(
-            check_id="root_cause_captured",
-            title="根因已记录",
-            status="passed" if rca_item.get("root_cause") else "failed",
-            evidence=rca_item.get("root_cause", ""),
-            recommendation="补齐可复盘的根因描述。",
-        ),
-        _verification_check(
-            check_id="resolution_ready",
-            title="处置方案已记录",
-            status="passed" if has_resolution else "pending",
-            evidence=checks_input.get("resolution") or rca_item.get("resolution", ""),
-            recommendation="补齐解决方案、回滚动作或人工处置结论。",
-        ),
-        _verification_check(
-            check_id="evidence_available",
-            title="验证证据已归档",
-            status="passed" if has_evidence else "pending",
-            evidence=checks_input.get("evidence_url") or checks_input.get("evidence") or rca_item.get("evidence", []),
-            recommendation="补充 Trace、告警、截图、日志或任务链接作为关闭证据。",
-        ),
-        _verification_check(
-            check_id="service_health",
-            title="服务健康已恢复",
-            status=_check_result(checks_input.get("service_status") or checks_input.get("metrics_status") or checks_input.get("status")),
-            evidence={
-                "service_status": checks_input.get("service_status", ""),
-                "metrics_status": checks_input.get("metrics_status", ""),
-            },
-            recommendation="回查关键 SLI、错误率、延迟和用户影响面。",
-        ),
-    ]
-
-    if linked_pipeline_ids:
-        if not linked_pipelines:
-            pipeline_status = "pending"
-        elif failed_pipelines:
-            pipeline_status = "failed"
-        else:
-            pipeline_status = "passed"
-        manual_pipeline_status = _check_result(checks_input.get("pipeline_status"))
-        if manual_pipeline_status != "pending":
-            pipeline_status = manual_pipeline_status
-        checks.append(_verification_check(
-            check_id="linked_pipelines_recovered",
-            title="关联流水线已恢复",
-            status=pipeline_status,
-            evidence=[{"id": item.get("id"), "name": item.get("name"), "status": item.get("status"), "error_msg": item.get("error_msg", "")} for item in linked_pipelines],
-            recommendation="确保关联流水线无失败状态，并保留重跑或回滚证据。",
-        ))
-
-    if requires_runbook or bound_runbook_ids:
-        checks.append(_verification_check(
-            check_id="runbook_bound",
-            title="Runbook 已绑定",
-            status="failed" if missing_runbook_ids else "passed" if bound_runbook_ids else "pending",
-            required=requires_runbook,
-            evidence={"selected": selected_runbook_ids, "recommended": recommended_ids, "missing": missing_runbook_ids},
-            recommendation="高风险或流水线故障 RCA 需要绑定可执行 Runbook。",
-        ))
-        checks.append(_verification_check(
-            check_id="runbook_executed",
-            title="Runbook 执行已验证",
-            status=_check_result(checks_input.get("runbook_status") or checks_input.get("runbook_execution_status")),
-            required=bool(bound_runbook_ids),
-            evidence={
-                "runbook_status": checks_input.get("runbook_status", ""),
-                "runbook_execution_status": checks_input.get("runbook_execution_status", ""),
-            },
-            recommendation="确认 Runbook 步骤已完成，并记录操作者、时间和结果。",
-        ))
-
-    required_checks = [item for item in checks if item["required"]]
-    required_failed = [item for item in required_checks if item["status"] == "failed"]
-    pending = [item for item in checks if item["status"] == "pending"]
-    score = round(sum(100 if item["status"] == "passed" else 0 if item["status"] == "failed" else 50 for item in checks) / max(len(checks), 1))
-    if required_failed:
-        status = "failed"
-    elif not pending and score >= 80:
-        status = "passed"
-    elif score >= 70:
-        status = "ready"
-    else:
-        status = "watch"
-    return {
-        "ok": True,
-        "rca_id": rca_item.get("id"),
-        "incident_id": rca_item.get("incident_id"),
-        "status": status,
-        "score": score,
-        "checks": checks,
-        "summary": {
-            "total": len(checks),
-            "passed": sum(1 for item in checks if item["status"] == "passed"),
-            "pending": len(pending),
-            "failed": sum(1 for item in checks if item["status"] == "failed"),
-            "required_failed": len(required_failed),
-        },
-        "agent_consumption": {
-            "api": "/api/v1/ops-center/rca/{id}/verification-plan",
-            "safe_for_agents": True,
-            "purpose": "在关闭 RCA 前核对根因、处置、证据、Runbook 和关联流水线恢复情况。",
-        },
-    }
 
 
-def verify_ops_rca_item(
-    rca_item: dict[str, Any],
-    *,
-    verifier: str,
-    checks: dict[str, Any],
-    plan: dict[str, Any],
-    close_on_pass: bool = True,
-    note: str = "",
-) -> dict[str, Any]:
-    updated = dict(rca_item)
-    verification = {
-        "id": str(uuid4()),
-        "verifier": verifier,
-        "note": note,
-        "status": "passed" if plan.get("status") == "passed" else "failed" if plan.get("status") == "failed" else "watch",
-        "score": plan.get("score", 0),
-        "checks": checks or {},
-        "plan": plan,
-        "created_at": _now(),
-    }
-    history = updated.get("verification_history")
-    if not isinstance(history, list):
-        history = []
-    history.append(verification)
-    updated["verification_history"] = history
-    updated["verification_status"] = verification["status"]
-    updated["verified_by"] = verifier
-    updated["verified_at"] = verification["created_at"]
-    updated["verification_score"] = plan.get("score", 0)
-    if checks.get("resolution"):
-        updated["resolution"] = str(checks.get("resolution"))
-    if close_on_pass and verification["status"] == "passed":
-        updated["status"] = "resolved"
-        updated["resolved_at"] = verification["created_at"]
-    else:
-        updated["status"] = updated.get("status") or "open"
-    return updated
 
 
 def _now() -> str:

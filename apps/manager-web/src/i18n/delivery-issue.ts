@@ -1037,6 +1037,7 @@ function withDetails(base: typeof en, language: 0 | 1 | 2) {
       ...Object.fromEntries(
         [
           ["source_id", "Operational source ID", "运维来源标识", "運用の出所 ID"],
+          ["source_type", "Operational source type", "运维来源类型", "運用の出所の種類"],
           ["source_digest", "Fixed source digest", "固定来源摘要", "固定した出所のダイジェスト"],
           ["recorded_state", "Reported state", "来源自报状态", "報告された状態"],
           ["created_by", "Recorded by", "记录人", "記録者"],

@@ -16,7 +16,7 @@ vi.mock("react", async () => {
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ i18n: { language: "zh-CN" } }) }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => h.query }));
 vi.mock("./opsRemediation", async () => ({ ...await vi.importActual<typeof import("./opsRemediation")>("./opsRemediation"), readOpsIntake: (...args: any[]) => h.read(...args) }));
-const view = { project_id: "P", version: 7, source_id: "ops-one", source_digest: "a".repeat(64), source_kind: "reported_only", snapshot: { trigger_condition: "Investigate API" }, can_intake: true, existing_issue_id: null, existing_issue_available: false, as_of: "2026-10-23T00:00:00Z" };
+const view = { project_id: "P", version: 7, source_type: "self_heal", source_id: "ops-one", source_digest: "a".repeat(64), source_kind: "reported_only", snapshot: { id: "ops-one", trigger_condition: "Investigate API" }, can_intake: true, existing_issue_id: null, existing_issue_available: false, as_of: "2026-10-23T00:00:00Z" };
 function nodes(node: ReactNode): any[] { if (Array.isArray(node)) return node.flatMap(nodes); return isValidElement<any>(node) ? [node, ...["children", "action", "description"].flatMap((key) => nodes(node.props[key]))] : []; }
 function button(tree: ReactNode, label: string) { return nodes(tree).find((n) => n.type === Button && n.props.children === label)!; }
 function owner() {
@@ -30,6 +30,16 @@ beforeEach(() => { h.slots = []; h.effects = []; h.next = 0; h.active = true; h.
 afterEach(() => { for (const slot of h.slots) slot?.cleanup?.(); vi.unstubAllGlobals(); });
 
 describe("one operational intake workflow", () => {
+  it("uses the RCA action and read boundary for an RCA source, preserving the unknown original", async () => {
+    const rca = { ...view, source_type: "rca" };
+    h.query.data = rca; h.read.mockResolvedValue(rca); h.send.mockRejectedValue(new Error("response lost"));
+    frame({ sourceType: "rca" }); const tree = frame({ sourceType: "rca" });
+    button(tree, "纳入问题").props.onClick(); await flush();
+    expect(h.read).toHaveBeenCalledWith("P", "ops-one", undefined, "rca");
+    expect(h.send).toHaveBeenCalledOnce();
+    expect(command.snapshot().original.action).toBe("issue.rca.intake");
+    expect(command.snapshot().phase).toBe("unknown");
+  });
   it("keeps an editable draft when a known refusal is cleared and the reread shares its cached value", async () => {
     frame(); const tree = frame();
     nodes(tree).find((n) => n.type === Input)!.props.onChange({ target: { value: "Keep this investigation" } });
@@ -62,6 +72,12 @@ describe("one operational intake workflow", () => {
     frame(); const tree = frame(); let release!: (value: unknown) => void;
     h.read.mockReturnValue(new Promise((resolve) => { release = resolve; }));
     button(tree, "纳入问题").props.onClick(); frame({ sourceId: "other-source" }); release(view); await flush();
+    expect(h.send).not.toHaveBeenCalled();
+  });
+  it("rejects a late preview when the source type changed with the same external ID", async () => {
+    frame(); const tree = frame(); let release!: (value: unknown) => void;
+    h.read.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+    button(tree, "纳入问题").props.onClick(); frame({ sourceType: "rca" }); release(view); await flush();
     expect(h.send).not.toHaveBeenCalled();
   });
   it("requires explicit adoption of new facts and keeps the human's draft", async () => {

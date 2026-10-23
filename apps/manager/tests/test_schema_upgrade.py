@@ -152,6 +152,7 @@ def test_health_command_still_loads_application_after_lazy_package_change(monkey
 def test_postgresql_upgrade_compiles_transactional_ddl_and_null_only_resume(monkeypatch, missing):
     """Compilation evidence only; this test does not claim a live PostgreSQL server."""
     from sop_manager import schema_upgrade
+    from sop_manager import ops_remediation_schema
     from sqlalchemy.dialects import postgresql
     from types import SimpleNamespace
 
@@ -167,6 +168,10 @@ def test_postgresql_upgrade_compiles_transactional_ddl_and_null_only_resume(monk
         columns += [{"name": "acceptance_criteria", "nullable": True}, {"name": "owner_id", "nullable": False}]
     monkeypatch.setattr(schema_upgrade, "inspect", lambda connection: SimpleNamespace(get_columns=lambda name: columns))
     monkeypatch.setattr(schema_upgrade, "_identity_plan", lambda *args: (None, [], []))
+    # This Compiler only covers the task-identity DDL. Operational source
+    # migration has separate real-table definitions and requires a live dialect
+    # run once the human restores the validation window.
+    monkeypatch.setattr(ops_remediation_schema, "upgrade_ops_source_schema", lambda connection: False)
 
     class Compiler:
         dialect = postgresql.dialect()

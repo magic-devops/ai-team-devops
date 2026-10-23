@@ -6,7 +6,7 @@ from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sop_manager.path_config import resolved_ai_memory_root, resolved_tenant_code, resolved_business_code, resolved_project_id
 from sop_manager.routers.im_integration_core import build_im_briefing, build_im_delivery_plan
 from sop_manager.routers.ops_center_core import (
@@ -18,7 +18,6 @@ from sop_manager.routers.ops_center_core import (
     compare_alert_strategy_variants,
     build_ops_rca_insight_tasks,
     build_ops_rca_insights,
-    build_ops_rca_verification_plan,
     build_runbook_execution_evidence,
     diff_runbook_versions,
     evaluate_alert_noise,
@@ -38,7 +37,6 @@ from sop_manager.routers.ops_center_core import (
     summarize_runbook_execution_evidence,
     summarize_runbook_versions,
     predict_alert_source_slo,
-    verify_ops_rca_item,
 )
 from sop_manager.routers.scope_guard import attach_scope, scope_matches
 
@@ -221,17 +219,12 @@ class RcaInsightTasksIn(RcaInsightIn, TaskOwnerInput):
     dev_tool: str = "codex"
 
 class RcaInsightCreateRcaIn(RcaInsightIn):
-    candidate_id: str = ""
+    model_config = ConfigDict(extra="forbid")
+    candidate_id: str = Field(min_length=1, max_length=160)
     owner: str = "Ops Lead"
-    status: str = Field("open", pattern="^(open|resolved)$")
     selected_runbook_ids: list[str] = Field(default_factory=list)
     note: str = ""
 
-class RcaVerifyIn(BaseModel):
-    verifier: str = "SRE"
-    checks: dict = Field(default_factory=dict)
-    close_on_pass: bool = True
-    note: str = ""
 
 class AlertSourceCreate(BaseModel):
     name: str
@@ -416,7 +409,8 @@ def list_pipelines():
 
 @router.get("/rca")
 def list_rca():
-    return {**_scope(), "items": _load_all("rca"), "total": len(_load_all("rca"))}
+    items = [dict(item, reported_only=True, execution_evidence=False) for item in _load_all("rca")]
+    return {**_scope(), "items": items, "total": len(items), "reported_only": True, "execution_evidence": False}
 
 @router.post("/rca")
 def create_rca(body: RcaCreate):
@@ -1370,6 +1364,9 @@ def rca_insights(body: RcaInsightIn):
 
 @router.post("/rca/insights/tasks")
 def rca_insight_tasks(body: RcaInsightTasksIn):
+    if not body.dry_run:
+        raise HTTPException(410, {"code": "ops_canonical_intake_required",
+            "message": "Review a fixed RCA source and use issue.rca.intake before planning formal remediation tasks"})
     analysis = _rca_insight_payload(body)
     planned = build_ops_rca_insight_tasks(
         analysis,
@@ -1378,25 +1375,13 @@ def rca_insight_tasks(body: RcaInsightTasksIn):
         owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
-    if body.dry_run:
-        return {**_scope(), "analysis": analysis, **planned}
-    from sop_manager.routers.tasks import TaskCreate, create_task
-
-    created = []
-    for task in planned.get("tasks") or []:
-        created.append(create_task(TaskCreate(**task)))
-    out = {**planned, "dry_run": False, "summary": {**planned.get("summary", {}), "created": len(created)}, "items": created, "tasks": created}
-    history = {**_scope(), "id": str(uuid4()), "analysis": analysis, "created_task_ids": [x.get("id") for x in created if x.get("id")], "created_at": _now()}
-    _save("rca_insight_task_runs", history)
-    return {**_scope(), **out, "analysis": analysis}
+    return {**_scope(), "analysis": analysis, **planned}
 
 @router.post("/rca/insights/rca")
 def rca_insight_create_rca(body: RcaInsightCreateRcaIn):
     analysis = _rca_insight_payload(body)
     candidates = analysis.get("candidates", []) if isinstance(analysis.get("candidates"), list) else []
     candidate = next((item for item in candidates if isinstance(item, dict) and item.get("id") == body.candidate_id), None)
-    if not candidate and candidates:
-        candidate = candidates[0]
     if not candidate:
         raise HTTPException(404, "rca insight candidate not found")
     selected = set(body.selected_runbook_ids or [])
@@ -1411,7 +1396,7 @@ def rca_insight_create_rca(body: RcaInsightCreateRcaIn):
         "root_cause": str(candidate.get("root_cause") or candidate.get("title") or "OpsCenter insight"),
         "impact": f"{candidate.get('severity', 'medium')} / confidence={candidate.get('confidence')}",
         "resolution": "\n".join(str(x) for x in candidate.get("recommendations") or []),
-        "status": body.status,
+        "status": "open",
         "source": "ops_center_rca_insight",
         "source_candidate_id": candidate.get("id", ""),
         "severity": candidate.get("severity", "medium"),
@@ -1424,62 +1409,13 @@ def rca_insight_create_rca(body: RcaInsightCreateRcaIn):
         "linked": candidate.get("linked", {}) if isinstance(candidate.get("linked"), dict) else {},
         "created_at": _now(),
     }
-    if body.status == "resolved":
-        item["resolved_at"] = _now()
     _save("rca", item)
     history = {**_scope(), "id": str(uuid4()), "rca_id": item["id"], "candidate": candidate, "created_at": _now()}
     _save("rca_insight_creations", history)
     return {**_scope(), "ok": True, "item": item, "analysis": analysis}
 
-@router.put("/rca/{rca_id}/resolve")
-def resolve_rca(rca_id: str):
-    item = _load_scoped_item("rca", rca_id, "rca not found")
-    item.update({"status": "resolved", "resolved_at": _now()})
-    _save("rca", item)
-    return item
 
-@router.get("/rca/{rca_id}/verification-plan")
-def rca_verification_plan(rca_id: str):
-    item = _load_scoped_item("rca", rca_id, "rca not found")
-    plan = build_ops_rca_verification_plan(
-        rca_item=item,
-        pipelines=_load_all("pipelines"),
-        runbooks=_load_all("runbooks"),
-    )
-    return {**_scope(), **plan, "item": item}
 
-@router.post("/rca/{rca_id}/verify")
-def verify_rca(rca_id: str, body: RcaVerifyIn):
-    item = _load_scoped_item("rca", rca_id, "rca not found")
-    plan = build_ops_rca_verification_plan(
-        rca_item=item,
-        pipelines=_load_all("pipelines"),
-        runbooks=_load_all("runbooks"),
-        manual_checks=body.checks,
-    )
-    updated = verify_ops_rca_item(
-        item,
-        verifier=body.verifier,
-        checks=body.checks,
-        plan=plan,
-        close_on_pass=body.close_on_pass,
-        note=body.note,
-    )
-    _save("rca", updated)
-    history = {
-        **_scope(),
-        "id": str(uuid4()),
-        "rca_id": updated["id"],
-        "incident_id": updated.get("incident_id", ""),
-        "verification_status": updated.get("verification_status", ""),
-        "verification_score": updated.get("verification_score", 0),
-        "plan": plan,
-        "checks": body.checks,
-        "created_at": _now(),
-        "created_by": body.verifier,
-    }
-    _save("rca_verifications", history)
-    return {**_scope(), "ok": True, "item": updated, "plan": plan, "verification": updated.get("verification_history", [])[-1]}
 
 @router.get("/runbooks")
 def list_runbooks():
@@ -1754,6 +1690,10 @@ def summary():
         evaluations=evaluations,
     )
     summary_payload["self_heal_actions"] = len(actions)
+    summary_payload["source_records"] = len(actions) + len(rca)
+    summary_payload["rca_records"] = len(rca)
+    summary_payload["health_score_kind"] = "reported_signal_score"
+    summary_payload["execution_evidence"] = False
     summary_payload["self_heal_approval_queue"] = sum(1 for item in actions if item.get("state") == "approval_required")
     summary_payload["self_heal_applied_unverified"] = sum(1 for item in actions if item.get("state") == "applied")
     summary_payload["self_heal_rolled_back"] = sum(1 for item in actions if item.get("state") == "rolled_back")

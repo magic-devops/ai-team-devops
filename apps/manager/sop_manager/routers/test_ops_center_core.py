@@ -7,7 +7,6 @@ from sop_manager.routers.ops_center_core import (
     compare_alert_strategy_variants,
     build_ops_rca_insight_tasks,
     build_ops_rca_insights,
-    build_ops_rca_verification_plan,
     build_runbook_execution_evidence,
     diff_runbook_versions,
     evaluate_alert_noise,
@@ -23,7 +22,6 @@ from sop_manager.routers.ops_center_core import (
     summarize_runbook_versions,
     summarize_ops_health,
     recommend_runbooks_for_candidate,
-    verify_ops_rca_item,
 )
 
 
@@ -564,7 +562,7 @@ def test_runbook_version_helpers_summarize_and_diff():
     assert summary["versioned_runbooks"] == 1
 
 
-def test_runbook_execution_evidence_helper_collects_rca_verification():
+def test_runbook_collects_reported_rca_without_proving_execution():
     payload = build_runbook_execution_evidence(
         runbooks=[{"id": "rb-1", "name": "API rollback", "active_version_id": "v1", "active_version_no": 1}],
         versions=[{"id": "v1", "runbook_id": "rb-1", "version_no": 1, "status": "active", "checksum": "abc"}],
@@ -590,9 +588,10 @@ def test_runbook_execution_evidence_helper_collects_rca_verification():
     )
 
     assert payload["summary"]["records"] == 1
-    assert payload["items"][0]["status"] == "complete"
-    assert payload["items"][0]["coverage_score"] == 100
-    assert summarize_runbook_execution_evidence(payload["items"])["needs_backfill"] == 0
+    assert payload["items"][0]["status"] == "partial"
+    assert payload["items"][0]["coverage_score"] < 100
+    assert payload["items"][0]["execution_evidence"] is False
+    assert summarize_runbook_execution_evidence(payload["items"])["needs_backfill"] == 1
 
 
 def test_self_reported_action_cannot_complete_runbook_execution_coverage():
@@ -651,18 +650,10 @@ def test_runbook_evidence_backfill_route_persists_records(tmp_path):
         ))
         rca["selected_runbook_ids"] = [runbook["id"]]
         ops_center._save("rca", rca)
-        ops_center.verify_rca(rca["id"], ops_center.RcaVerifyIn(
-            verifier="SRE",
-            checks={
-                "service_status": "healthy",
-                "metrics_status": "healthy",
-                "runbook_status": "passed",
-                "evidence_url": "audit://inc-rb-evidence",
-                "resolution": "rollback release",
-            },
-            close_on_pass=True,
-            note="verified with runbook evidence",
-        ))
+        # Seed a historical self-report; no route may now claim this is verified.
+        rca.update(verification_status="passed", verified_by="SRE", status="resolved",
+                   verification_history=[{"status": "passed", "checks": {"service_status": "healthy", "runbook_status": "passed"}}])
+        ops_center._save("rca", rca)
 
         backfilled = ops_center.backfill_runbook_evidence(ops_center.RunbookEvidenceBackfillIn(
             runbook_ids=[runbook["id"]],
@@ -673,7 +664,7 @@ def test_runbook_evidence_backfill_route_persists_records(tmp_path):
         listed = ops_center.list_runbook_evidence(runbook_id=runbook["id"])
 
         assert backfilled["persisted"] == 1
-        assert backfilled["summary"]["coverage_score"] == 100
+        assert backfilled["summary"]["coverage_score"] < 100
         assert listed["total"] == 1
         assert listed["items"][0]["review_status"] == "open"
         acknowledged = ops_center.runbook_evidence_action(
@@ -685,41 +676,6 @@ def test_runbook_evidence_backfill_route_persists_records(tmp_path):
         reset_request_scope(tokens)
 
 
-def test_rca_verify_route_persists_evidence_and_closes(tmp_path):
-    from sop_manager.path_config import reset_request_scope, set_request_scope
-    from sop_manager.routers import ops_center
-
-    tokens = set_request_scope(
-        tenant_id="tenant-verify",
-        project_id="project-verify",
-        project_path=tmp_path,
-        tenant_code="tenant-verify",
-        business_code="biz-verify",
-        project_code="project-verify",
-    )
-    try:
-        created = ops_center.create_rca(ops_center.RcaCreate(
-            incident_id="INC-VERIFY",
-            root_cause="latency spike",
-            impact="api users",
-            resolution="scaled out api service",
-        ))
-        plan = ops_center.rca_verification_plan(created["id"])
-        assert plan["rca_id"] == created["id"]
-
-        verified = ops_center.verify_rca(created["id"], ops_center.RcaVerifyIn(
-            verifier="SRE",
-            checks={"service_status": "healthy", "metrics_status": "healthy", "evidence_url": "audit://inc-verify"},
-            close_on_pass=True,
-            note="closed by verification",
-        ))
-
-        assert verified["ok"] is True
-        assert verified["item"]["status"] == "resolved"
-        assert verified["item"]["verification_status"] == "passed"
-        assert verified["verification"]["note"] == "closed by verification"
-    finally:
-        reset_request_scope(tokens)
 
 
 def test_alert_source_routes_collect_and_feed_rca_insights(tmp_path):
@@ -938,67 +894,8 @@ def test_alert_strategy_recommendation_routes_apply_policy(tmp_path):
         reset_request_scope(tokens)
 
 
-def test_build_ops_rca_verification_plan_requires_recovery_evidence():
-    plan = build_ops_rca_verification_plan(
-        rca_item={
-            "id": "rca-1",
-            "incident_id": "INC-1",
-            "root_cause": "production rollback required",
-            "resolution": "rollback done",
-            "severity": "high",
-            "selected_runbook_ids": ["rb-rollback"],
-            "linked": {"pipelines": ["pipe-1"]},
-            "evidence": [{"type": "pipeline", "label": "deploy prod"}],
-        },
-        pipelines=[{"id": "pipe-1", "name": "deploy prod", "status": "failed", "error_msg": "apply failed"}],
-        runbooks=[{"id": "rb-rollback", "name": "production rollback", "steps": ["rollback", "verify"]}],
-    )
-
-    assert plan["status"] == "failed"
-    assert plan["summary"]["required_failed"] == 1
-    assert any(item["id"] == "linked_pipelines_recovered" and item["status"] == "failed" for item in plan["checks"])
-
-    passed = build_ops_rca_verification_plan(
-        rca_item={
-            "id": "rca-1",
-            "incident_id": "INC-1",
-            "root_cause": "production rollback required",
-            "resolution": "rollback done",
-            "severity": "high",
-            "selected_runbook_ids": ["rb-rollback"],
-            "linked": {"pipelines": ["pipe-1"]},
-            "evidence": [{"type": "pipeline", "label": "deploy prod"}],
-        },
-        pipelines=[{"id": "pipe-1", "name": "deploy prod", "status": "success"}],
-        runbooks=[{"id": "rb-rollback", "name": "production rollback", "steps": ["rollback", "verify"]}],
-        manual_checks={"service_status": "healthy", "runbook_status": "passed", "pipeline_status": "healthy", "evidence_url": "trace://1"},
-    )
-
-    assert passed["status"] == "passed"
-    assert passed["score"] >= 90
 
 
-def test_verify_ops_rca_item_closes_when_plan_passes():
-    rca = {"id": "rca-1", "incident_id": "INC-1", "root_cause": "latency spike", "resolution": "scaled out", "status": "open"}
-    plan = build_ops_rca_verification_plan(
-        rca_item=rca,
-        pipelines=[],
-        runbooks=[],
-        manual_checks={"service_status": "healthy", "metrics_status": "healthy", "evidence_url": "audit://evidence"},
-    )
-
-    updated = verify_ops_rca_item(
-        rca,
-        verifier="sre",
-        checks={"service_status": "healthy", "metrics_status": "healthy", "evidence_url": "audit://evidence"},
-        plan=plan,
-        close_on_pass=True,
-        note="post incident verification",
-    )
-
-    assert updated["status"] == "resolved"
-    assert updated["verification_status"] == "passed"
-    assert updated["verification_history"][0]["verifier"] == "sre"
 
 
 def test_evaluate_self_heal_matches_enabled_threshold_policy():

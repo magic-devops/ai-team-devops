@@ -4,7 +4,7 @@ import json
 import pytest
 from fastapi import HTTPException
 from sop_manager.routers import delivery, ops_center
-from sop_manager.routers.sql_models import Issue, OpsIssueSource
+from sop_manager.routers.sql_models import Issue, OpsIssueSource, Task
 from sop_manager.project_write_guard import project_file_write_scope
 from test_business_access import env, headers  # noqa: F401
 
@@ -21,14 +21,16 @@ def intake(env, tmp_path, monkeypatch):  # noqa: F811
         # HTTP middleware establishes exactly the same project scope as the
         # consumer; this route exists only inside this test fixture.
         raw_metric = body.pop("raw_metric", None)
+        source_type = body.pop("source_type", "self_heal")
+        collection = "rca" if source_type == "rca" else "self_heal_actions"
         source = {"id": "ops-one", "trigger_condition": "error_rate > 3",
                   "action": "restart api", "risk_level": "high", "state": "verified",
                   "verification_result": {"status": "healthy"}, "evidence": {"password": "fixture-secret"},
                   "created_at": "2026-10-23T00:00:00Z", **body}
-        ops_center._save("self_heal_actions", source)
+        ops_center._save(collection, source)
         if raw_metric is not None:
             with project_file_write_scope():
-                (ops_center._dir("self_heal_actions") / "ops-one.json").write_text(
+                (ops_center._dir(collection) / "ops-one.json").write_text(
                     json.dumps(source)[:-1] + ', "metric": ' + raw_metric + '}', encoding="utf-8")
         return source
 
@@ -36,12 +38,13 @@ def intake(env, tmp_path, monkeypatch):  # noqa: F811
     return client, sessions
 
 
-def current(client, uid="writer", project="selected"):
-    return client.get("/api/v1/delivery/ops-actions/ops-one/intake", headers=headers(uid, project))
+def current(client, uid="writer", project="selected", source_type="self_heal"):
+    collection = "rca" if source_type == "rca" else "ops-actions"
+    return client.get(f"/api/v1/delivery/{collection}/ops-one/intake", headers=headers(uid, project))
 
 
 def command(view, *, key="ops-intake-original", **changes):
-    return {"action": "issue.ops.intake", "expected_version": view["version"], "idempotency_key": key,
+    return {"action": "issue.rca.intake" if view.get("source_type") == "rca" else "issue.ops.intake", "expected_version": view["version"], "idempotency_key": key,
             "payload": {"source_id": view["source_id"], "source_digest": view["source_digest"],
                         "title": "Investigate service regression", "description": "Confirm before executing.",
                         "severity": "P1", **changes}}
@@ -79,6 +82,51 @@ def test_different_keys_do_not_create_duplicate_source_issues(intake):
     assert again.status_code == 200 and again.json()["resource"] == first["resource"]
     with sessions() as db:
         assert db.query(Issue).filter(Issue.id == first["resource"]["id"]).count() == 1
+
+
+def test_rca_and_self_heal_with_same_external_id_have_distinct_fixed_sources(intake):
+    client, sessions = intake
+    assert client.post("/api/v1/delivery/_fixture/ops-source", headers=headers(), json={"source_type": "rca", "root_cause": "Reported API regression", "incident_id": "INC-one"}).status_code == 200
+    heal = current(client).json()
+    first = client.post("/api/v1/delivery/commands", headers=headers(), json=command(heal)).json()
+    rca = current(client, source_type="rca").json()
+    assert rca["source_type"] == "rca" and rca["existing_issue_id"] is None
+    original = command(rca, key="rca-original-request")
+    response = client.post("/api/v1/delivery/commands", headers=headers(), json=original)
+    assert response.status_code == 200, response.text
+    receipt = response.json()
+    assert receipt["resource"]["id"] != first["resource"]["id"]
+    assert client.post("/api/v1/delivery/_fixture/ops-source", headers=headers(), json={"source_type": "rca", "root_cause": "Changed"}).status_code == 200
+    replay = client.post("/api/v1/delivery/commands", headers=headers(), json=original)
+    assert replay.status_code == 200 and replay.json()["replayed"] and replay.json()["resource"] == receipt["resource"]
+    with sessions() as db:
+        rows = db.query(OpsIssueSource).filter_by(project_id="selected", source_id="ops-one").all()
+        assert {row.source_type for row in rows} == {"self_heal", "rca"}
+        assert next(row for row in rows if row.source_type == "rca").snapshot["root_cause"] == "Reported API regression"
+
+
+@pytest.mark.parametrize("path,method", [("verify", "post"), ("resolve", "put"), ("verification-plan", "get")])
+def test_reported_rca_cannot_be_verified_or_closed_by_old_routes(intake, path, method):
+    client, _ = intake
+    response = getattr(client, method)(f"/api/v1/ops-center/rca/ops-one/{path}", headers=headers())
+    assert response.status_code in {404, 405}
+
+
+def test_rca_actual_task_creation_requires_formal_intake(intake, monkeypatch):
+    client, sessions = intake
+    monkeypatch.setattr(ops_center, "_rca_insight_payload", lambda body: {"candidates": []})
+    response = client.post("/api/v1/ops-center/rca/insights/tasks", headers=headers(), json={"dry_run": False})
+    assert response.status_code == 410 and response.json()["detail"]["code"] == "ops_canonical_intake_required"
+    with sessions() as db:
+        assert db.query(Issue).count() == 2
+        assert db.query(Task).count() == 2
+
+
+def test_rca_missing_candidate_does_not_adopt_another_candidate(intake, monkeypatch):
+    client, _ = intake
+    monkeypatch.setattr(ops_center, "_rca_insight_payload", lambda body: {"candidates": [{"id": "different", "title": "Other source"}]})
+    response = client.post("/api/v1/ops-center/rca/insights/rca", headers=headers(), json={"candidate_id": "original-missing"})
+    assert response.status_code == 404
 
 
 def test_changed_source_requires_explicit_new_read_without_creating_an_issue(intake):

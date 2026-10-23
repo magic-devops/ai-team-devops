@@ -6,14 +6,14 @@ import { getSessionRevision, getWorkspaceScope } from "./authStorage";
 import { bindSessionRequest } from "./http";
 import { projectSessionKey } from "./projectPortfolio";
 
-export type OpsIntakeOriginal = { action: "issue.ops.intake"; payload: { source_id: string; source_digest: string; title: string; description: string; severity: "P0" | "P1" | "P2" | "P3" }; intent: DeliveryIntent };
+export type OpsIntakeOriginal = { action: "issue.ops.intake" | "issue.rca.intake"; payload: { source_id: string; source_digest: string; title: string; description: string; severity: "P0" | "P1" | "P2" | "P3" }; intent: DeliveryIntent };
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === "object" && !Array.isArray(value));
 const exact = (value: Record<string, any>, keys: string[]) => Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 const identity = (value: unknown, max = 128): value is string => typeof value === "string" && value.length > 0 && value.length <= max && !/[\s\u0000-\u001f\u007f-\u009f]/.test(value);
 const text = (value: unknown, max: number, empty = false): value is string => typeof value === "string" && (empty || Boolean(value.trim())) && value.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(value);
 const maxRetained = 64 * 1024;
 export function validOpsIntakeOriginal(value: unknown): value is OpsIntakeOriginal {
- if (!record(value) || !exact(value,["action","payload","intent"]) || value.action !== "issue.ops.intake" || !record(value.intent) || !exact(value.intent,["version","key"]) || !Number.isSafeInteger(value.intent.version) || value.intent.version < 0 || !identity(value.intent.key,100) || value.intent.key.length < 8 || !record(value.payload)) return false;
+ if (!record(value) || !exact(value,["action","payload","intent"]) || !["issue.ops.intake", "issue.rca.intake"].includes(value.action) || !record(value.intent) || !exact(value.intent,["version","key"]) || !Number.isSafeInteger(value.intent.version) || value.intent.version < 0 || !identity(value.intent.key,100) || value.intent.key.length < 8 || !record(value.payload)) return false;
  const p=value.payload; return exact(p,["source_id","source_digest","title","description","severity"]) && typeof p.source_id === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(p.source_id) && typeof p.source_digest === "string" && /^[a-f0-9]{64}$/.test(p.source_digest) && text(p.title,256) && text(p.description,10000,true) && ["P0","P1","P2","P3"].includes(p.severity);
 }
 export function validOpsIntakeAck(projectId: string, original: OpsIntakeOriginal, value: unknown): value is DeliveryCommandAck {

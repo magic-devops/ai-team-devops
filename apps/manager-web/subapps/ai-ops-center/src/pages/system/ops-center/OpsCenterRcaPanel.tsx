@@ -1,9 +1,12 @@
+import { useState } from "react";
+import { OpsRemediationIntake } from "./OpsRemediationIntake";
 import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
-import { Button, Drawer, Form, Input, Select, Space, Steps } from "antd";
+import { Alert, Button, Drawer, Form, Input, Select, Skeleton, Space, Steps } from "antd";
 import { RefreshButton } from "@/components/PageStates";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
 type OpsCenterRcaPanelProps = {
+  projectId: string;
   rcaQ: any;
   rcaForm: any;
   setRcaForm: any;
@@ -20,10 +23,6 @@ type OpsCenterRcaPanelProps = {
   rcaInsightTasksResult: any;
   createRcaFromInsight: any;
   rcaInsightCreateResult: any;
-  rcaVerifyResult: any;
-  loadRcaVerificationPlan: any;
-  verifyRca: any;
-  resolveRca: any;
 };
 
 function severityClass(level?: string) {
@@ -34,6 +33,7 @@ function severityClass(level?: string) {
 }
 
 export function OpsCenterRcaPanel({
+  projectId,
   rcaQ,
   rcaForm,
   setRcaForm,
@@ -50,11 +50,10 @@ export function OpsCenterRcaPanel({
   rcaInsightTasksResult,
   createRcaFromInsight,
   rcaInsightCreateResult,
-  rcaVerifyResult,
-  loadRcaVerificationPlan,
-  verifyRca,
-  resolveRca,
 }: OpsCenterRcaPanelProps) {
+  const [selectedSourceId, setSelectedSourceId] = useState("");
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  if (!projectId) return <WorkbenchPanel title="根因分析"><Alert type="info" title="请先选择项目" description="选择项目后查看根因记录，并在同一项目中继续正式问题处置。" /></WorkbenchPanel>;
   return (
           <WorkbenchPanel title="根因分析" actions={
             <div className="flex gap-2">
@@ -65,7 +64,8 @@ export function OpsCenterRcaPanel({
             <Drawer
               title="新建 RCA"
               open={rcaCreateDrawerOpen}
-              onClose={() => setRcaCreateDrawerOpen(false)}
+              onClose={() => { if (!createRca.isPending) setRcaCreateDrawerOpen(false); }}
+              closable={!createRca.isPending} maskClosable={!createRca.isPending} keyboard={!createRca.isPending}
               width="min(620px, 100vw)"
             >
               <div className="rcaCreateFocusedDrawer space-y-5">
@@ -78,7 +78,7 @@ export function OpsCenterRcaPanel({
                     { title: "闭环" },
                   ]}
                 />
-                <Form layout="vertical" requiredMark={false} onFinish={() => createRca.mutate()}>
+                <Form layout="vertical" requiredMark={false} disabled={createRca.isPending} onFinish={() => { if (!createRca.isPending) createRca.mutate(); }}>
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
                     <p className="text-sm font-semibold">事件信息</p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -111,7 +111,7 @@ export function OpsCenterRcaPanel({
 
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                     <p className="text-sm font-semibold">创建后闭环</p>
-                    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">RCA 创建后会进入列表，可继续生成验证计划、执行验证关闭，并与 Runbook 和任务中心形成治理证据。</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">RCA 创建后进入来源列表。核对并纳入正式问题，再继续诊断、需求采纳、任务开发和测试验收。</p>
                     <div className="mt-3 grid gap-2 sm:grid-cols-3">
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
                         <p className="text-xs text-[var(--muted)]">事件</p>
@@ -132,7 +132,7 @@ export function OpsCenterRcaPanel({
                     <Button type="primary" htmlType="submit" loading={createRca.isPending} disabled={!rcaForm.incident_id || !rcaForm.root_cause}>
                       创建 RCA
                     </Button>
-                    <Button onClick={() => setRcaCreateDrawerOpen(false)}>取消</Button>
+                    <Button disabled={createRca.isPending} onClick={() => { if (!createRca.isPending) setRcaCreateDrawerOpen(false); }}>取消</Button>
                   </Space>
                   {createRca.error && <p className="mt-3 text-xs text-red-600">{(createRca.error as Error).message}</p>}
                 </Form>
@@ -169,7 +169,6 @@ export function OpsCenterRcaPanel({
                   {analyzeRcaInsights.isPending ? "分析中..." : "生成归因"}
                 </button>
                 <button onClick={() => createRcaInsightTasks.mutate(true)} disabled={createRcaInsightTasks.isPending || !rcaInsightResult} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm disabled:opacity-50">预览任务</button>
-                <button onClick={() => createRcaInsightTasks.mutate(false)} disabled={createRcaInsightTasks.isPending || !rcaInsightResult} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm disabled:opacity-50">创建任务</button>
               </div>
               {analyzeRcaInsights.error && <p className="mt-2 text-xs text-red-600">{(analyzeRcaInsights.error as Error).message}</p>}
               {createRcaInsightTasks.error && <p className="mt-2 text-xs text-red-600">{(createRcaInsightTasks.error as Error).message}</p>}
@@ -310,7 +309,7 @@ export function OpsCenterRcaPanel({
 
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                     <p className="text-sm font-semibold">归因证据</p>
-                    <p className="mt-1 text-xs text-[var(--muted)]">先生成候选，再按当前任务参数预览或创建治理任务。</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">先生成候选并预览计划，保存选定根因记录后纳入正式问题；任务创建沿用需求与交付流程。</p>
                     <div className="mt-3 grid gap-2 sm:grid-cols-3">
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
                         <p className="text-xs text-[var(--muted)]">候选</p>
@@ -334,9 +333,6 @@ export function OpsCenterRcaPanel({
                     <Button onClick={() => createRcaInsightTasks.mutate(true)} disabled={!rcaInsightResult} loading={createRcaInsightTasks.isPending}>
                       预览任务
                     </Button>
-                    <Button danger onClick={() => createRcaInsightTasks.mutate(false)} disabled={!rcaInsightResult} loading={createRcaInsightTasks.isPending}>
-                      创建任务
-                    </Button>
                     <Button onClick={() => setRcaInsightDrawerOpen(false)}>取消</Button>
                   </Space>
                   {analyzeRcaInsights.error && <p className="mt-3 text-xs text-red-600">{(analyzeRcaInsights.error as Error).message}</p>}
@@ -344,37 +340,17 @@ export function OpsCenterRcaPanel({
                 </Form>
               </div>
             </Drawer>
-            {rcaVerifyResult && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold">RCA 验证闭环：{rcaVerifyResult.incident_id || rcaVerifyResult.item?.incident_id}</p>
-                    <p className="mt-1 text-xs text-[var(--muted)]">评分 {rcaVerifyResult.plan?.score ?? rcaVerifyResult.score ?? 0}，状态 {rcaVerifyResult.plan?.status ?? rcaVerifyResult.status ?? rcaVerifyResult.verification?.status}</p>
-                  </div>
-                  <span className={`rounded-full px-2 py-1 text-xs ${(rcaVerifyResult.plan?.status ?? rcaVerifyResult.status) === "passed" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
-                    {rcaVerifyResult.item?.status || rcaVerifyResult.plan?.status || rcaVerifyResult.status}
-                  </span>
-                </div>
-                <div className="mt-3 grid gap-2 lg:grid-cols-3">
-                  {(rcaVerifyResult.plan?.checks ?? rcaVerifyResult.checks ?? []).map((check: any) => (
-                    <div key={check.id} className="rounded-lg bg-[var(--surface)] px-3 py-2 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-semibold text-[var(--text)]">{check.title}</p>
-                        <span className={check.status === "passed" ? "text-green-700" : check.status === "failed" ? "text-red-700" : "text-amber-700"}>{check.status}</span>
-                      </div>
-                      <p className="mt-1 leading-5 text-[var(--muted)]">{check.recommendation}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <Alert type="info" title="根因记录是待核验的诊断线索" description="来源中的关闭状态、评分和健康标记仅为自报。核对后纳入正式问题，经诊断、需求、任务与测试验收继续处置。" />
+            {projectId && <OpsRemediationIntake projectId={projectId} sourceType="rca" sourceId={selectedSourceId} open={intakeOpen} onClose={() => setIntakeOpen(false)} />}
+            {rcaQ.isPending && <Skeleton active paragraph={{ rows: 2 }} />}
+            {rcaQ.error && <Alert type="warning" title="根因来源暂不可用" description={(rcaQ.error as Error).message} action={<Button onClick={() => void rcaQ.refetch()}>重新读取</Button>} />}
             <div className="space-y-3">
-              {(rcaQ.data?.items ?? []).length === 0 && <p className="py-8 text-center text-sm text-[var(--muted)]">暂无根因分析记录</p>}
-              {(rcaQ.data?.items ?? []).map((r: any) => (
+              {!rcaQ.error && !rcaQ.isPending && (rcaQ.data?.items ?? []).length === 0 && <p className="py-8 text-center text-sm text-[var(--muted)]">暂无根因分析记录</p>}
+              {!rcaQ.error && (rcaQ.data?.items ?? []).map((r: any) => (
                 <div key={r.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-mono text-xs text-[var(--muted)]">事件: {r.incident_id}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${r.status === "open" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>{r.status}</span>
+                    <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--muted)]">来源自报：{r.status}</span>
                   </div>
 	                  <p className="text-sm font-medium">{r.root_cause}</p>
 	                  {r.resolution && <p className="mt-1 text-xs text-[var(--muted)]">解决方案: {r.resolution}</p>}
@@ -386,14 +362,11 @@ export function OpsCenterRcaPanel({
                       </div>
                     )}
                     {(r.verification_status || r.verified_at) && (
-                      <p className="mt-2 text-[11px] text-[var(--muted)]">最近验证：{r.verification_status || "watch"} / {r.verification_score ?? 0} / {r.verified_by || "-"}</p>
+                      <p className="mt-2 text-[11px] text-[var(--muted)]">来源自报验证：{r.verification_status || "watch"} / {r.verification_score ?? 0} / {r.verified_by || "-"}</p>
                     )}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button onClick={() => loadRcaVerificationPlan.mutate(r.id)} disabled={loadRcaVerificationPlan.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text)] disabled:opacity-50">验证计划</button>
-                      {r.status === "open" && <button onClick={() => verifyRca.mutate(r)} disabled={verifyRca.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">验证并关闭</button>}
-                      {r.status === "open" && <button onClick={() => resolveRca.mutate(r.id)} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--brand)]">手动关闭</button>}
+                      <Button size="small" disabled={!projectId} onClick={() => { setSelectedSourceId(String(r.id)); setIntakeOpen(true); }}>核对并纳入问题</Button>
                     </div>
-                    {(loadRcaVerificationPlan.error || verifyRca.error) && <p className="mt-2 text-xs text-red-600">{((loadRcaVerificationPlan.error || verifyRca.error) as Error).message}</p>}
 	                </div>
               ))}
             </div>

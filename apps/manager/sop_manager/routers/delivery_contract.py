@@ -111,6 +111,7 @@ class Command(Input):
         "stage.reopen",
         "issue.create",
         "issue.ops.intake",
+        "issue.rca.intake",
         "sync.record.apply",
         "issue.promote",
         "issue.diagnosis.adopt",
@@ -753,6 +754,7 @@ class SyncRecordApply(Input):
 
 PAYLOADS = {
     "issue.ops.intake": OpsIntakeInput,
+    "issue.rca.intake": OpsIntakeInput,
     "issue.create": IssueCreateCommand,
     "sync.record.apply": SyncRecordApply,
     "project.lifecycle": ProjectLifecycleCommand,

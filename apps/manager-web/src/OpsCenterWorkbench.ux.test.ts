@@ -10,6 +10,17 @@ const runbooksSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pag
 const selfHealSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterSelfHealPanel.tsx"), "utf8");
 
 describe("OpsCenter workbench UX contract", () => {
+  it("connects reported RCA sources to canonical intake with recovery outside source read states", () => {
+    expect(rcaSource).toContain('sourceType="rca"');
+    expect(rcaSource).toContain("OpsRemediationIntake");
+    expect(rcaSource).toContain("来源自报");
+    expect(rcaSource).toContain('if (!projectId) return <WorkbenchPanel');
+    expect(source).toContain('queryKey: ["opsRca", projectId, getSessionRevision()]');
+    for (const retired of ["opsRcaVerify", "opsRcaResolve", "opsRcaVerificationPlan", "verifyRca", "resolveRca"]) expect(source).not.toContain(retired);
+    expect(rcaSource).not.toContain("验证并关闭");
+    expect(rcaSource).not.toContain("手动关闭");
+  });
+
   it("shows scoped historical pipelines with a current project release entry and no manual success writes", () => {
     expect(source).toContain("page.opsCenter.pipelineHistoryOnly");
     expect(source).toContain('projectWorkspaceHash(projectId, "#/dev-flow?view=releases")');
@@ -127,7 +138,7 @@ describe("OpsCenter workbench UX contract", () => {
     expect(rcaSource).toContain("任务化参数");
     expect(rcaSource).toContain("analyzeRcaInsights.mutate()");
     expect(rcaSource).toContain("createRcaInsightTasks.mutate(true)");
-    expect(rcaSource).toContain("createRcaInsightTasks.mutate(false)");
+    expect(rcaSource).not.toContain("createRcaInsightTasks.mutate(false)");
     expect(rcaSource).not.toContain("<input className=\"input-base\" placeholder=\"Agent Run ID\" value={rcaInsightFilter.run_id}");
     expect(rcaSource).not.toContain("<select className=\"input-base\" value={rcaInsightFilter.priority}");
   });

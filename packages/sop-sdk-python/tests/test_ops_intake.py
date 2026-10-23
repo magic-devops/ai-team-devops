@@ -21,15 +21,18 @@ def ack():
             "query_generation": 1, "replayed": False}
 
 
-def test_client_preserves_explicit_original_and_checks_actual_ack():
+@pytest.mark.parametrize("action", ["issue.ops.intake", "issue.rca.intake"])
+def test_client_preserves_explicit_original_and_checks_actual_ack(action):
+    request_body, receipt = original(), ack()
+    request_body["action"] = receipt["action"] = action
     calls = []
     def handle(request):
         calls.append(request)
-        return httpx.Response(200, json=ack())
+        return httpx.Response(200, json=receipt)
     with ManagerClient("https://manager.example", auth=BearerAuth("test"), project_id="P") as client:
         client._client.close(); client._client = httpx.Client(transport=httpx.MockTransport(handle), base_url=client.base_url)
-        assert client.delivery_ops_intake(original()) == ack()
-    assert json.loads(calls[0].content) == original()
+        assert client.delivery_ops_intake(request_body) == receipt
+    assert json.loads(calls[0].content) == request_body
     assert calls[0].headers["X-Project-Id"] == "P"
 
 
@@ -41,4 +44,6 @@ def test_input_is_complete_and_not_rebased(change):
 
 def test_wrong_source_or_issue_receipt_stays_unconfirmed():
     value = ack(); value["result"]["source_digest"] = "b" * 64
+    with pytest.raises(ValueError): intake_ack(original(), value, "P")
+    value = ack(); value["action"] = "issue.rca.intake"
     with pytest.raises(ValueError): intake_ack(original(), value, "P")

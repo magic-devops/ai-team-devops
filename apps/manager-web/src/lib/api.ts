@@ -2148,17 +2148,11 @@ export const api = {
   opsRca: () => request<any>("/api/v1/ops-center/rca"),
   opsRcaCreate: (body: { incident_id: string; root_cause: string; impact?: string; resolution?: string }) =>
     request<any>("/api/v1/ops-center/rca", { method: "POST", body: JSON.stringify(body) }),
-  opsRcaResolve: (id: string) =>
-    request<any>(`/api/v1/ops-center/rca/${encodeURIComponent(id)}/resolve`, { method: "PUT" }),
-  opsRcaVerificationPlan: (id: string) =>
-    request<any>(`/api/v1/ops-center/rca/${encodeURIComponent(id)}/verification-plan`),
-  opsRcaVerify: (id: string, body: { verifier?: string; checks?: Record<string, unknown>; close_on_pass?: boolean; note?: string }) =>
-    request<any>(`/api/v1/ops-center/rca/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(body) }),
   opsRcaInsights: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number }) =>
     request<any>("/api/v1/ops-center/rca/insights", { method: "POST", body: JSON.stringify(body) }),
   opsRcaInsightTasks: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/ops-center/rca/insights/tasks", { method: "POST", body: JSON.stringify(body) }),
-  opsRcaInsightCreateRca: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number; candidate_id?: string; owner?: string; status?: string; selected_runbook_ids?: string[]; note?: string }) =>
+  opsRcaInsightCreateRca: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number; candidate_id: string; owner?: string; selected_runbook_ids?: string[]; note?: string }) =>
     request<any>("/api/v1/ops-center/rca/insights/rca", { method: "POST", body: JSON.stringify(body) }),
   opsAlertSources: () => request<any>("/api/v1/ops-center/alert-sources"),
   opsAlertSourceCreate: (body: { name: string; source_type?: string; endpoint?: string; enabled?: boolean; auth_ref?: string; query?: string; labels?: Record<string, unknown>; headers?: Record<string, unknown>; sample_payload?: unknown; timeout_s?: number }) =>

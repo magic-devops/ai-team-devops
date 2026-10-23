@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Segmented } from "antd";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { opsRemediationCopy } from "@/i18n/ops-remediation";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { projectWorkspaceHash } from "@/lib/projectPortfolioRoute";
@@ -106,7 +107,8 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
   const authed = Boolean(getToken());
   const projectId = getProjectId();
   const controlledReleasesHref = projectId ? projectWorkspaceHash(projectId, "#/dev-flow?view=releases") : "#/dev-flow?view=releases";
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const remediationCopy = opsRemediationCopy(i18n?.language);
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(() => readOpsCenterTabFromHash(initialTab));
@@ -117,7 +119,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
   const [rcaInsightResult, setRcaInsightResult] = useState<any>(null);
   const [rcaInsightTasksResult, setRcaInsightTasksResult] = useState<any>(null);
   const [rcaInsightCreateResult, setRcaInsightCreateResult] = useState<any>(null);
-  const [rcaVerifyResult, setRcaVerifyResult] = useState<any>(null);
   const [alertSourceForm, setAlertSourceForm] = useState({
     name: "",
     source_type: "prometheus",
@@ -203,9 +204,9 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
   const [imResult, setImResult] = useState<any>(null);
   const [imChannels, setImChannels] = useState<string[]>([]);
 
-  const summaryQ = useQuery({ queryKey: ["opsCenterSummary"], queryFn: api.opsCenterSummary, enabled: authed });
+  const summaryQ = useQuery({ queryKey: ["opsCenterSummary", projectId, getSessionRevision()], queryFn: api.opsCenterSummary, enabled: authed && Boolean(projectId) });
   const pipQ = useQuery({ queryKey: ["opsPipelines", getSessionRevision(), getWorkspaceScope()], queryFn: api.opsPipelines, enabled: authed });
-  const rcaQ = useQuery({ queryKey: ["opsRca"], queryFn: api.opsRca, enabled: authed && tab === "rca" });
+  const rcaQ = useQuery({ queryKey: ["opsRca", projectId, getSessionRevision()], queryFn: api.opsRca, enabled: authed && Boolean(projectId) && tab === "rca" });
   const alertSourcesQ = useQuery({ queryKey: ["opsAlertSources"], queryFn: api.opsAlertSources, enabled: authed && tab === "alert-sources" });
   const externalAlertsQ = useQuery({ queryKey: ["opsExternalAlerts"], queryFn: () => api.opsExternalAlerts({ limit: 100 }), enabled: authed && tab === "alert-sources" });
   const alertNoiseQ = useQuery({ queryKey: ["opsAlertNoisePolicies"], queryFn: api.opsAlertNoisePolicies, enabled: authed && tab === "alert-sources" });
@@ -259,34 +260,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
       setRcaForm({ incident_id: "", root_cause: "", impact: "", resolution: "" });
     },
   });
-  const resolveRca = useMutation({
-    mutationFn: (id: string) => api.opsRcaResolve(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["opsRca"] }),
-  });
-  const loadRcaVerificationPlan = useMutation({
-    mutationFn: (id: string) => api.opsRcaVerificationPlan(id),
-    onSuccess: (data) => setRcaVerifyResult(data),
-  });
-  const verifyRca = useMutation({
-    mutationFn: (item: any) => api.opsRcaVerify(item.id, {
-      verifier: "SRE",
-      close_on_pass: true,
-      note: "OpsCenter 工作台验证关闭",
-      checks: {
-        service_status: "healthy",
-        metrics_status: "healthy",
-        pipeline_status: "healthy",
-        runbook_status: (item.selected_runbook_ids ?? item.recommended_runbooks ?? []).length > 0 ? "passed" : "pending",
-        evidence_url: `ops-center://rca/${item.incident_id || item.id}/verification`,
-        resolution: item.resolution || "已完成处置并通过 OpsCenter 自动验证。",
-      },
-    }),
-    onSuccess: (data) => {
-      setRcaVerifyResult(data);
-      void qc.invalidateQueries({ queryKey: ["opsRca"] });
-      void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
-    },
-  });
   const analyzeRcaInsights = useMutation({
     mutationFn: () => api.opsRcaInsights({
       run_id: rcaInsightFilter.run_id,
@@ -298,7 +271,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
       setRcaInsightResult(data);
       setRcaInsightTasksResult(null);
       setRcaInsightCreateResult(null);
-      setRcaVerifyResult(null);
     },
   });
   const createRcaInsightTasks = useMutation({
@@ -748,9 +720,9 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
         }
         metrics={
           <WorkbenchStats items={[
-            { label: t("page.opsCenter.metrics.healthScore"), value: summaryQ.data?.summary?.health_score ?? 100, trend: (summaryQ.data?.summary?.health_score ?? 100) < 80 ? "down" : "neutral" },
+            { label: remediationCopy.records, value: summaryQ.data?.summary?.source_records ?? "—", trend: "neutral" },
             { label: t("page.opsCenter.pipelineHistoryFailed"), value: summaryQ.data?.summary?.pipelines_failed ?? 0, trend: (summaryQ.data?.summary?.pipelines_failed ?? 0) > 0 ? "down" : "neutral" },
-            { label: t("page.opsCenter.metrics.rcaOpen"), value: summaryQ.data?.summary?.rca_open ?? 0, trend: (summaryQ.data?.summary?.rca_open ?? 0) > 0 ? "down" : "neutral" },
+            { label: remediationCopy.rcaRecords, value: summaryQ.data?.summary?.rca_records ?? "—", trend: "neutral" },
             { label: t("page.opsCenter.metrics.externalAlerts"), value: summaryQ.data?.summary?.external_open_alerts ?? 0, trend: (summaryQ.data?.summary?.external_high_alerts ?? 0) > 0 ? "down" : "neutral" },
             { label: t("page.opsCenter.metrics.selfHealMatched"), value: summaryQ.data?.summary?.self_heal_matched ?? 0 },
             { label: t("page.opsCenter.metrics.approvalQueue"), value: summaryQ.data?.summary?.self_heal_approval_queue ?? 0, trend: (summaryQ.data?.summary?.self_heal_approval_queue ?? 0) > 0 ? "down" : "neutral" },
@@ -947,7 +919,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
         )}
         {tab === "rca" && (
           <Suspense fallback={<div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">加载 RCA 治理...</div>}>
-            <OpsCenterRcaPanel
+            <OpsCenterRcaPanel key={`${projectId}:${getSessionRevision()}`} projectId={projectId || ""}
               rcaQ={rcaQ}
               rcaForm={rcaForm}
               setRcaForm={setRcaForm}
@@ -964,10 +936,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
               rcaInsightTasksResult={rcaInsightTasksResult}
               createRcaFromInsight={createRcaFromInsight}
               rcaInsightCreateResult={rcaInsightCreateResult}
-              rcaVerifyResult={rcaVerifyResult}
-              loadRcaVerificationPlan={loadRcaVerificationPlan}
-              verifyRca={verifyRca}
-              resolveRca={resolveRca}
             />
           </Suspense>
         )}

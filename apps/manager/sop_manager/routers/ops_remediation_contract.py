@@ -34,6 +34,7 @@ class OpsIntakeView(BaseModel):
     source_id: SourceId
     source_digest: Digest
     source_kind: Literal["reported_only"]
+    source_type: Literal["self_heal", "rca"]
     snapshot: dict[str, Any]
     existing_issue_id: str | None
     existing_issue_available: bool

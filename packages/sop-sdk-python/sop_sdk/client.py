@@ -576,6 +576,11 @@ class ManagerClient:
         original = intake_command(body)
         return intake_ack(original, self.delivery_command(original), self.project_id)
 
+    def delivery_rca_intake_source(self, source_id: str) -> dict[str, Any]:
+        """Read a fixed reported RCA source; never assert service recovery."""
+        from .ops_intake import source_id as validate_source_id
+        return self._request("GET", f"/api/v1/delivery/rca/{validate_source_id(source_id)}/intake")
+
     def delivery_issues(
         self,
         *,

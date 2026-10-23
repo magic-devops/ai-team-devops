@@ -10,13 +10,14 @@ def register_ops_source_model(Base):
         tenant_id = Column(String(64), nullable=False)
         project_id = Column(String(64), nullable=False)
         source_id = Column(String(128), nullable=False)
+        source_type = Column(String(16), nullable=False)
         source_digest = Column(String(64), nullable=False)
         issue_id = Column(String(64), nullable=False)
         snapshot = Column(JSON, nullable=False)
         created_by = Column(String(64), nullable=False)
         created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
         __table_args__ = (
-            UniqueConstraint("tenant_id", "project_id", "source_id", name="uq_ops_issue_source_scope"),
+            UniqueConstraint("tenant_id", "project_id", "source_type", "source_id", name="uq_ops_issue_source_type_scope"),
             Index("ix_ops_issue_source_issue", "tenant_id", "project_id", "issue_id"),
         )
     return OpsIssueSource

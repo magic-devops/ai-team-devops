@@ -1,13 +1,16 @@
 """CLI original-file protocol definitions, unrun in the deferred window."""
 import json
+import pytest
 from contextlib import contextmanager
 from typer.testing import CliRunner
 from sop_cli.commands import delivery
 
 
-def test_ops_intake_submits_only_the_saved_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize("action,command", [("issue.ops.intake", "ops-intake"), ("issue.rca.intake", "rca-intake")])
+def test_ops_intake_submits_only_the_saved_file(tmp_path, monkeypatch, action, command):
     body = {"action": "issue.ops.intake", "expected_version": 7, "idempotency_key": "fixed-cli-ops-key", "payload": {
         "source_id": "ops-one", "source_digest": "a" * 64, "title": "Investigate", "description": "", "severity": "P1"}}
+    body["action"] = action
     file = tmp_path / "original.json"; file.write_text(json.dumps(body), encoding="utf-8")
     calls = []
     class Client:
@@ -15,7 +18,7 @@ def test_ops_intake_submits_only_the_saved_file(tmp_path, monkeypatch):
     @contextmanager
     def client(): yield Client()
     monkeypatch.setattr(delivery, "get_client", client)
-    result = CliRunner().invoke(delivery.app, ["ops-intake", "--file", str(file)])
+    result = CliRunner().invoke(delivery.app, [command, "--file", str(file)])
     assert result.exit_code == 0 and calls == [body]
     assert json.loads(file.read_text(encoding="utf-8")) == body
 
@@ -26,3 +29,12 @@ def test_ops_intake_does_not_make_up_a_key_or_version(tmp_path, monkeypatch):
     monkeypatch.setattr(delivery, "get_client", forbidden)
     result = CliRunner().invoke(delivery.app, ["ops-intake", "--file", str(file)])
     assert result.exit_code != 0
+
+
+def test_rca_command_rejects_a_saved_self_heal_original_without_sending(tmp_path, monkeypatch):
+    body = {"action": "issue.ops.intake", "expected_version": 7, "idempotency_key": "fixed-other-source", "payload": {
+        "source_id": "ops-one", "source_digest": "a" * 64, "title": "Investigate", "description": "", "severity": "P1"}}
+    file = tmp_path / "different-source.json"; file.write_text(json.dumps(body), encoding="utf-8")
+    def forbidden(): raise AssertionError("Network client must not be opened")
+    monkeypatch.setattr(delivery, "get_client", forbidden)
+    assert CliRunner().invoke(delivery.app, ["rca-intake", "--file", str(file)]).exit_code != 0

@@ -50,19 +50,37 @@ def ops_intake_source(source_id: Annotated[str, typer.Option("--source-id")]):
     _query_output("delivery_ops_intake_source", source_id)
 
 
-@app.command("ops-intake")
-def ops_intake(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False)]):
-    """提交保存的完整原请求；未知结果重放同一文件，禁止自动换版本或键。"""
+def _source_intake(file: Path, action: str):
     from sop_sdk.delivery_ack import strict_json
     from sop_sdk.ops_intake import intake_command
     try:
         with file.open("rb") as stream:
             body = intake_command(strict_json(stream.read(64 * 1024 + 1), 64 * 1024))
+        if body["action"] != action:
+            raise ValueError("The saved original belongs to a different source intake action")
         with get_client() as client:
             console.print_json(data=client.delivery_ops_intake(body))
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc
+
+
+@app.command("ops-intake")
+def ops_intake(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False)]):
+    """提交自愈建议完整原请求；未知结果重放同一文件，不换版本或键。"""
+    _source_intake(file, "issue.ops.intake")
+
+
+@app.command("rca-intake")
+def rca_intake(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False)]):
+    """提交根因来源完整原请求；不把记录状态当作实际恢复。"""
+    _source_intake(file, "issue.rca.intake")
+
+
+@app.command("rca-intake-source")
+def rca_intake_source(source_id: Annotated[str, typer.Option("--source-id")]):
+    """读取固定根因来源及原问题，不触发验证、关闭或执行。"""
+    _query_output("delivery_rca_intake_source", source_id)
 
 
 @app.command("context")

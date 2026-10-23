@@ -6,7 +6,7 @@ import json
 from sqlalchemy import JSON, Column, MetaData, String, Table, func, inspect, select, text
 from sqlalchemy.schema import CreateColumn
 
-SCHEMA_REVISION = "20261017_task_owner_identity"
+SCHEMA_REVISION = "20261023_typed_ops_sources"
 UPGRADE_COMMAND = "sop-manager schema apply"
 
 
@@ -29,6 +29,7 @@ def _state(value):
 
 
 def verify_schema(engine) -> dict:
+    from .ops_remediation_schema import inspect_ops_source_schema
     with engine.connect() as connection:
         inspector = inspect(connection)
         exists = inspector.has_table("tasks")
@@ -41,13 +42,14 @@ def verify_schema(engine) -> dict:
                 nulls[name] = connection.execute(select(func.count()).select_from(table).where(table.c[name].is_(None))).scalar_one()
         _, workspaces = _workspace_rows(connection, inspector)
         old_maps = sum("task_owners" in _state(row["data"]) for row in workspaces)
+        ops_sources = inspect_ops_source_schema(connection, inspector)
     current = exists and not missing and not old_maps and "assigned_to" not in columns and all(
         not columns[name]["nullable"] and not nulls.get(name) for name in ("acceptance_criteria", "owner_id")
-    )
+    ) and not ops_sources["upgrade_required"]
     return {
         "revision": SCHEMA_REVISION,
         "dialect": engine.dialect.name,
-        "status": "current" if current else "upgrade_required" if exists else "uninitialized",
+        "status": "current" if current else "upgrade_required" if exists or ops_sources["exists"] or ops_sources["upgrade_required"] else "uninitialized",
         "missing": missing,
         "obsolete": ["tasks.assigned_to"] if "assigned_to" in columns else [],
         "nullable": columns.get("acceptance_criteria", {}).get("nullable"),
@@ -55,6 +57,7 @@ def verify_schema(engine) -> dict:
         "owner_nullable": columns.get("owner_id", {}).get("nullable"),
         "owner_null_rows": nulls.get("owner_id", 0),
         "owner_map_workspaces": old_maps,
+        "ops_sources": ops_sources,
     }
 
 
@@ -62,7 +65,7 @@ def require_current_schema(engine) -> None:
     if verify_schema(engine)["status"] == "upgrade_required":
         raise SchemaUpgradeRequired(
             f"Manager database schema is outdated. Stop Manager and run `{UPGRADE_COMMAND}` "
-            "with the same DATABASE_URL before restarting. Only explicit scoped task owner IDs are migrated; names do not identify owners."
+            "with the same DATABASE_URL before restarting. Fixed operational sources and Issue identities are preserved; names do not identify task owners."
         )
 
 
@@ -95,6 +98,7 @@ def _identity_plan(connection, inspector):
 
 
 def apply_schema_upgrade(engine) -> dict:
+    from .ops_remediation_schema import upgrade_ops_source_schema
     before = verify_schema(engine)
     if before["status"] == "current":
         return before
@@ -129,9 +133,11 @@ def apply_schema_upgrade(engine) -> dict:
             connection.execute(workspace_table.update().where(workspace_table.c.project_id == row["project_id"], workspace_table.c.tenant_id == row["tenant_id"], workspace_table.c.version == row["version"]).values(data=state, version=row["version"] + 1))
         if "assigned_to" in columns:
             connection.execute(text("ALTER TABLE tasks DROP COLUMN assigned_to"))
+        ops_sources_upgraded = upgrade_ops_source_schema(connection)
     return {
         **verify_schema(engine), "status": "upgraded",
         "owners_migrated": len(owner_updates), "workspaces_migrated": len(workspace_updates),
+        "ops_sources_upgraded": ops_sources_upgraded,
         "evidence_policy": "prior_unversioned_scope_bases_require_revalidation",
         "historical_evidence_rebound": False,
     }

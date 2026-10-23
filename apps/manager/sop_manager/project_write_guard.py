@@ -170,9 +170,9 @@ def event_write_scope(db, tenant_id, project_id):
     return _scope(db, tenant_id, project_id, "event")
 
 
-def ops_intake_write_scope(db, tenant_id, project_id, source_id):
+def ops_intake_write_scope(db, tenant_id, project_id, source_type, source_id):
     """One canonical intake may append its exact fixed operational source."""
-    return _scope(db, tenant_id, project_id, "ops_intake:" + source_id)
+    return _scope(db, tenant_id, project_id, "ops_intake:" + source_type + ":" + source_id)
 
 
 # T-durable-execution-handoff: exact internal technical capabilities only.
@@ -718,7 +718,7 @@ def _check_discussion_write(db, table, scope, operation, old, values):
 
 def _check_event_write(db, table, scope, operation, old, values):
     if table.name == "ops_issue_sources":
-        if operation != "insert" or not _permission(db, scope, "ops_intake:" + str(values.get("source_id"))):
+        if operation != "insert" or not _permission(db, scope, "ops_intake:" + str(values.get("source_type")) + ":" + str(values.get("source_id"))):
             _deny("ops_source_immutable", "Only the canonical intake may append a fixed operational source")
     if table.name == "issue_event_origins":
         if operation != "insert":

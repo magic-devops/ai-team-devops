@@ -12,8 +12,8 @@ def source_id(value):
 
 def intake_command(value):
     _exact(value, {"action", "payload", "expected_version", "idempotency_key"})
-    if value["action"] != "issue.ops.intake":
-        raise ValueError("Provide the original issue.ops.intake command")
+    if value["action"] not in {"issue.ops.intake", "issue.rca.intake"}:
+        raise ValueError("Provide the original operational source intake command")
     _integer(value["expected_version"])
     _identity(value["idempotency_key"], 100)
     if len(value["idempotency_key"]) < 8:
