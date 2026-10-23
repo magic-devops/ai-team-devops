@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { projectSessionKey } from "@/lib/projectPortfolio";
+import { cursorPageNumber, useCursorPageHistory, type CursorPage } from "@/lib/cursorPageHistory";
 import { useDeliveryMemberReferences } from "@/lib/deliveryQueryHooks";
 import { allocationSummary } from "@/lib/deliveryScheduling";
 import { fetchRequirementDetail } from "@/lib/deliveryQuery";
@@ -67,7 +68,7 @@ function useBrowserRoute(disabled: boolean) {
   useEffect(() => {
     live.current = true;
     const invalidate = () => {
-      live.current = false;
+      if (owner.current !== projectSessionKey()) live.current = false;
     };
     for (const event of ["sop-session", "storage"])
       window.addEventListener(event, invalidate);
@@ -112,7 +113,7 @@ function ReadProblem({ error, retry }: { error: unknown; retry: () => void }) {
       description={(error as Error)?.message || ""}
       action={
         <Button size="small" onClick={retry}>
-          {t("deliveryProgress.refresh")}
+          {t("deliveryProgress.bounded.retryRead")}
         </Button>
       }
     />
@@ -124,37 +125,46 @@ export function ProgressPager({
   cursor,
   next,
   page,
+  previous,
   busy,
   onPage,
 }: {
-  total: number;
-  count: number;
+  total: number | null;
+  count: number | null;
   cursor: string;
   next: string | null;
   page: number;
+  previous?: CursorPage | null;
   busy?: boolean;
   onPage: (cursor: string, page: number) => void;
 }) {
   const { t } = useTranslation();
+  const currentPage = cursor ? cursorPageNumber(page) : 1;
+  const hasCounts = total !== null && count !== null && Number.isSafeInteger(total) && Number.isSafeInteger(count) && count >= 0 && total >= count;
   return (
     <nav
       className="delivery-actions delivery-progress-pager"
       aria-label={t("deliveryProgress.bounded.pagination")}
     >
-      <span role="status">
-        {t("deliveryProgress.bounded.pageCount", { page, count, total })}
+      <span role="status" className="delivery-progress-pager-status">
+        {hasCounts ? t("deliveryProgress.bounded.pageCount", { page: currentPage, count, total }) : t("deliveryProgress.bounded.pageUnread")}
+        {cursor && !previous && <small>{t("deliveryProgress.bounded.previousUnknown")}</small>}
       </span>
       <Button
         size="small"
         disabled={busy || !cursor}
-        onClick={() => onPage("", 1)}
+        onClick={() => { if (!busy && cursor) onPage("", 1); }}
       >
         {t("deliveryProgress.bounded.first")}
       </Button>
+      <Button size="small" disabled={busy || !previous || previous.cursor === cursor}
+        onClick={() => { if (!busy && previous && previous.cursor !== cursor) onPage(previous.cursor, previous.page); }}>
+        {t("deliveryProgress.bounded.previous")}
+      </Button>
       <Button
         size="small"
-        disabled={busy || !next || next === cursor}
-        onClick={() => next && onPage(next, page + 1)}
+        disabled={busy || !next || next === cursor || currentPage === Number.MAX_SAFE_INTEGER}
+        onClick={() => { if (!busy && next && next !== cursor && currentPage < Number.MAX_SAFE_INTEGER) onPage(next, currentPage + 1); }}
       >
         {t("deliveryProgress.bounded.next")}
       </Button>
@@ -178,7 +188,7 @@ export function DeliveryProgressBaselineCatalogue({
     { params, change } = useBrowserRoute(disabled),
     owner = useRef(projectSessionKey());
   const cursor = params.get("progress_baseline_cursor") || "",
-    page = Math.max(1, Number(params.get("progress_baseline_page")) || 1);
+    page = cursor ? cursorPageNumber(params.get("progress_baseline_page")) : 1;
   const query = useQuery({
     queryKey: [
       "delivery-progress-baselines",
@@ -198,6 +208,8 @@ export function DeliveryProgressBaselineCatalogue({
     !query.isError && owner.current === projectSessionKey()
       ? query.data
       : undefined;
+  const previous = useCursorPageHistory(JSON.stringify([projectId, sessionId, owner.current === projectSessionKey(), "baselines", route.scope, route.scopeId]),
+    data?.as_of || null, cursor, data ? { cursor, page, next: data.next_cursor } : null);
   return (
     <section className="delivery-progress-catalogue">
       <p className="delivery-hint">
@@ -258,15 +270,18 @@ export function DeliveryProgressBaselineCatalogue({
           {!data.items.length && (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={t("deliveryProgress.bounded.noBaselines")}
+              description={t(data.total ? "deliveryProgress.bounded.emptyPage" : "deliveryProgress.bounded.noBaselines")}
             />
           )}
-          <ProgressPager
-            total={data.total}
-            count={data.items.length}
+        </>
+      )}
+      {owner.current === projectSessionKey() && !progressReadDenied(query.error) && <ProgressPager
+            total={data?.total ?? null}
+            count={data?.items.length ?? null}
             cursor={cursor}
-            next={data.next_cursor}
+            next={data?.next_cursor || null}
             page={page}
+            previous={previous}
             busy={query.isFetching || disabled}
             onPage={(value, number) =>
               change({
@@ -275,8 +290,7 @@ export function DeliveryProgressBaselineCatalogue({
               })
             }
           />
-        </>
-      )}
+      }
     </section>
   );
 }
@@ -399,7 +413,7 @@ export function DeliveryProgressSnapshotBrowser({
         ? "requirements"
         : "tasks",
     cursor = params.get("progress_cursor") || "",
-    page = Math.max(1, Number(params.get("progress_page")) || 1),
+    page = cursor ? cursorPageNumber(params.get("progress_page")) : 1,
     itemId = params.get("progress_item") || "";
   const metadata = useQuery<ProgressObservationRead | ProgressBaselineRead>({
     queryKey: [
@@ -526,6 +540,8 @@ export function DeliveryProgressSnapshotBrowser({
     exact.data.item.id === itemId
       ? exact.data.item
       : undefined;
+  const previous = useCursorPageHistory(JSON.stringify([projectId, sessionId, owner.current === projectSessionKey(), sourceKind, sourceId, scope.scope, scope.scopeId, collection]),
+    basis || null, cursor, data && !denied ? { cursor, page, next: data.next_cursor } : null);
   const memberRefs = useDeliveryMemberReferences(
     projectId,
     sessionId,
@@ -646,15 +662,7 @@ export function DeliveryProgressSnapshotBrowser({
           {items.error && (
             <ReadProblem
               error={items.error}
-              retry={() =>
-                cursor
-                  ? change({
-                      progress_cursor: null,
-                      progress_page: null,
-                      progress_item: null,
-                    })
-                  : void items.refetch()
-              }
+              retry={() => void items.refetch()}
             />
           )}
           {data && (
@@ -720,15 +728,18 @@ export function DeliveryProgressSnapshotBrowser({
               {!data.items.length && (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={t("deliveryProgress.noTasks")}
+                  description={t(data.total ? "deliveryProgress.bounded.emptyPage" : "deliveryProgress.bounded.emptyScope")}
                 />
               )}
-              <ProgressPager
-                total={data.total}
-                count={data.items.length}
+            </>
+          )}
+          {header.available && <ProgressPager
+                total={data?.total ?? (collection === "tasks" ? header.task_count : header.requirement_count) ?? null}
+                count={data?.items.length ?? null}
                 cursor={cursor}
-                next={data.next_cursor}
+                next={data?.next_cursor || null}
                 page={page}
+                previous={previous}
                 busy={items.isFetching || disabled}
                 onPage={(value, number) =>
                   change({
@@ -738,8 +749,7 @@ export function DeliveryProgressSnapshotBrowser({
                   })
                 }
               />
-            </>
-          )}
+          }
           {itemId && exact.isPending && <Skeleton active />}
           {itemId && exact.error && (
             <ReadProblem
@@ -824,7 +834,7 @@ export function DeliveryProgressComparisonBrowser({
       ? (rawKind as ProgressComparisonKind)
       : null,
     cursor = params.get("progress_diff_cursor") || "",
-    page = Math.max(1, Number(params.get("progress_diff_page")) || 1),
+    page = cursor ? cursorPageNumber(params.get("progress_diff_page")) : 1,
     itemId = params.get("progress_diff_item") || "";
   const summary = useQuery({
     queryKey: [
@@ -917,6 +927,9 @@ export function DeliveryProgressComparisonBrowser({
     exact.data.item.id === itemId
       ? exact.data
       : undefined;
+  const previous = useCursorPageHistory(JSON.stringify([projectId, sessionId, owner.current === projectSessionKey(), "comparison", baselineId, kind]),
+    info ? JSON.stringify([info.baseline_basis, info.query_generation]) : null, cursor,
+    data && !denied ? { cursor, page, next: data.next_cursor } : null);
   return (
     <section className="delivery-progress-comparison">
       <h3>{t("deliveryProgress.changes")}</h3>
@@ -985,13 +998,7 @@ export function DeliveryProgressComparisonBrowser({
       {kind && items.error && (
         <ReadProblem
           error={items.error}
-          retry={() =>
-            change({
-              progress_diff_cursor: null,
-              progress_diff_page: null,
-              progress_diff_item: null,
-            })
-          }
+          retry={() => void items.refetch()}
         />
       )}
       {data && !denied && (
@@ -1029,12 +1036,17 @@ export function DeliveryProgressComparisonBrowser({
               </article>
             ))}
           </div>
-          <ProgressPager
-            total={data.total}
-            count={data.items.length}
+          {!data.items.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={t(data.total ? "deliveryProgress.bounded.emptyPage" : "deliveryProgress.bounded.emptyDifferences")} />}
+        </>
+      )}
+      {info?.available && info.complete && kind && !denied && <ProgressPager
+            total={data?.total ?? info.counts?.[kind] ?? null}
+            count={data?.items.length ?? null}
             cursor={cursor}
-            next={data.next_cursor}
+            next={data?.next_cursor || null}
             page={page}
+            previous={previous}
             busy={items.isFetching || disabled}
             onPage={(value, number) =>
               change({
@@ -1044,8 +1056,7 @@ export function DeliveryProgressComparisonBrowser({
               })
             }
           />
-        </>
-      )}
+      }
       {itemId && exact.isPending && <Skeleton active />}
       {itemId && exact.error && (
         <ReadProblem error={exact.error} retry={() => void exact.refetch()} />

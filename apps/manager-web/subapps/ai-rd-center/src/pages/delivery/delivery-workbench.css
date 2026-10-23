@@ -304,6 +304,17 @@
   padding: 12px;
   background: var(--surface);
 }
+.delivery-progress-pager-status {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  min-width: 0;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.delivery-progress-pager-status small {
+  color: var(--muted);
+}
 .delivery-progress-exact li,
 .delivery-progress-proof .ant-alert,
 .delivery-progress-proof-facts {
