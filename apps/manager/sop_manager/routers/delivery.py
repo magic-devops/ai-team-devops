@@ -45,6 +45,7 @@ from .delivery_execution_handoff_contract import ExecutionHandoffDetail, TaskHan
 from .delivery_execution_control_operation_contract import ControlOperationDetail, ControlOperationPage, command_openapi_contracts
 from .delivery_task_submission_contract import (
     SubmissionCurrent, SubmissionDetail, SubmissionLocator, SubmissionPage,
+    SubmissionReworkPreview, SubmissionReworkPreviewInput,
     command_openapi_contracts as submission_openapi_contracts,
 )
 from .delivery_execution_runtime_contract import (
@@ -1483,6 +1484,20 @@ def task_submission_current(
 
     project = _progress_project(db, user, project_id)
     return submission_current(db, project, user, task_id,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None))
+
+
+@router.post("/tasks/{task_id}/delivery-submissions/rework-preview", response_model=SubmissionReworkPreview)
+def task_submission_rework_preview(
+    task_id: Annotated[str, Path(min_length=1, max_length=64)], body: SubmissionReworkPreviewInput, request: Request,
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_task_submission_rework import rework_preview
+
+    project = _progress_project(db, user, project_id)
+    return rework_preview(db, project, user, task_id, body.rework_reference,
         store=getattr(request.app.state, "hermes_store", None),
         execution=getattr(request.app.state, "hermes_execution", None))
 

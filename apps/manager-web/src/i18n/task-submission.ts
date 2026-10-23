@@ -1,4 +1,5 @@
 const en = {
+  rework: "Prepare rework report", reworkPreview: "Reuse selected report", reworkAdopt: "Adopt materials and edit", reworkHistorical: "Historical materials · review before reuse", reworkReset: "Current criteria are unknown and tests are not run. Evidence links and prior conclusions have been reset; report the new results explicitly.", reworkSourceRequired: "Select this delivery's source type and enter its person, agent or tool name.", reworkSourceHint: "The earlier submitter and source are not the author of this new report. Select the source for the current work.", reworkNoOrder: "The earlier work order and stop statement are not reused. A current work order needs a new explicit stop statement.", reworkChanged: "The selected report or current basis changed. Your edits are retained; read and explicitly adopt the new basis before checking again.", reworkFixed: "Fixed rework source", reworkBasis: "Rework basis", reworkDecision: "Original change request", reworkScopes: "Authorized execution scopes", reworkReading: "Reading the selected report and current scope", reworkInvalid: "The selected source or rework preview could not be verified. Refresh the exact report before continuing.",
   title: "External delivery", intro: "Submit work completed outside this platform against this task's criteria. Source and test results are reports; acceptance requires a human review.",
   handoff: "Report and hand off this work order", workOrder: "Work order", handoffHint: "Save one fixed report and hand off this claimed order together. The task will await human review.", stopAttestation: "I confirm that the external work for this order has stopped.", stopRequired: "Confirm that external work stopped before handing off the order.", stoppedReported: "The claimant reported that external work stopped. This is not a runtime stop verification or human acceptance.", reportOnlyHint: "Saving only the report keeps the work order held. You can link that saved report after the external work stops.", previewOnly: "Check report only", previewHandoff: "Check report and handoff", confirmHandoff: "Submit report and hand off", submittedHandoff: "Report saved and work order handed off. Human review is still required.", openWorkOrder: "Open linked work order", requestWorkOrderChanged: "The selected work order is no longer available at that revision. Reopen the order before writing its report.",
   create: "Submit external work", loading: "Reading current delivery basis", readFailed: "Delivery facts unavailable", refresh: "Refresh", history: "Earlier submissions", more: "Next page", first: "Recent submissions", empty: "No external submission yet.",
@@ -10,6 +11,9 @@ const en = {
   kinds: { human: "Person", agent: "Agent", tool: "Development tool" }, results: { met: "Reported met", not_met: "Reported not met", unknown: "Unknown" },
   testStates: { passed: "Reported passed", failed: "Reported failed", skipped: "Skipped", not_run: "Not run", unknown: "Unknown" },
   reasonCodes: {
+    submission_rework_basis_changed: "The selected source or current work order changed. Read and explicitly adopt a new rework preview.",
+    submission_rework_original_invalid: "The complete fixed rework origin cannot be verified. Restore the exact original before continuing.",
+    submission_rework_preview_budget: "The complete rework preview exceeds its read limit. No content was truncated; narrow the delivery scope.",
     project_archived: "Restore the archived project before changing delivery.",
     task_acceptance_invalid: "Define valid task acceptance criteria before reporting delivery.",
     task_acceptance_missing: "Define a task criterion or explicitly select a requirement criterion first.",
@@ -54,6 +58,7 @@ const en = {
 };
 type Copy = typeof en;
 const zh: Copy = {
+  rework: "准备返工报告", reworkPreview: "复用选中报告", reworkAdopt: "采用材料并编辑", reworkHistorical: "历史材料 · 复用前请核对", reworkReset: "当前验收结果已重置为未知，测试已重置为未运行；历史结论和证据关联不会自动继承，请明确填写本次结果。", reworkSourceRequired: "请选择本次成果的来源类型，并填写人员、智能体或开发工具名称。", reworkSourceHint: "历史提交人与来源不会作为本次报告作者，请明确填写本次工作的来源。", reworkNoOrder: "不复用历史工单与停止声明；如需交接当前工单，请重新明确确认本次外部工作已停止。", reworkChanged: "选中报告或当前依据已变化。编辑内容已保留，请读取并明确采用新依据后重新检查。", reworkFixed: "固定返工来源", reworkBasis: "返工依据", reworkDecision: "原退回意见", reworkScopes: "授权执行范围", reworkReading: "正在读取选中报告及当前范围", reworkInvalid: "无法核实选中来源或返工预览，请刷新该固定报告后继续。",
   title: "外部交付", intro: "将平台外完成的工作对应到本任务验收标准。来源与测试结果属于提交者报告，须经人工审核后验收。",
   handoff: "提交报告并交接工单", workOrder: "工单", handoffHint: "一次保存固定报告并交接当前工单，随后由人工审核任务交付。", stopAttestation: "我确认此工单的外部工作已经停止。", stopRequired: "请明确确认外部工作已停止，再交接工单。", stoppedReported: "接单人自述外部工作已停止；这不代表运行器已核实停止或人工验收通过。", reportOnlyHint: "仅保存报告会保留工单占用；外部工作停止后，可关联这份已保存的报告。", previewOnly: "仅核对报告", previewHandoff: "核对报告并交接", confirmHandoff: "提交报告并交接", submittedHandoff: "报告已保存，工单已交接，仍需人工审核。", openWorkOrder: "查看关联工单", requestWorkOrderChanged: "所选工单或其版本已变化，请重新打开工单，再填写对应报告。",
   create: "提交外部成果", loading: "正在读取当前交付依据", readFailed: "暂时无法读取交付事实", refresh: "刷新", history: "历史交付", more: "下一页", first: "最近交付", empty: "尚无外部交付原件。",
@@ -65,6 +70,9 @@ const zh: Copy = {
   kinds: { human: "人员", agent: "智能体", tool: "开发工具" }, results: { met: "报告已满足", not_met: "报告未满足", unknown: "未知" },
   testStates: { passed: "报告通过", failed: "报告失败", skipped: "已跳过", not_run: "未运行", unknown: "未知" },
   reasonCodes: {
+    submission_rework_basis_changed: "选中来源或当前工单已变化，请读取并明确采用新的返工预览。",
+    submission_rework_original_invalid: "无法核验完整固定返工来源，请恢复该原件后继续。",
+    submission_rework_preview_budget: "完整返工预览超过安全读取上限，原文未截断，请缩小交付范围。",
     project_archived: "项目已归档，请先恢复项目，再修改交付。",
     task_acceptance_invalid: "请先完善有效的任务验收标准，再报告交付。",
     task_acceptance_missing: "请先定义任务验收标准，或明确选择需求验收标准。",
@@ -108,6 +116,7 @@ const zh: Copy = {
   },
 };
 const ja: Copy = {
+  rework: "修正報告を準備", reworkPreview: "選択した報告を再利用", reworkAdopt: "資料を採用して編集", reworkHistorical: "過去の資料・再利用前に確認", reworkReset: "現在の基準は不明、テストは未実行に戻りました。過去の結論と証拠の関連は継承されません。今回の結果を明示してください。", reworkSourceRequired: "今回の成果の出所種別と、担当者・エージェント・ツール名を入力してください。", reworkSourceHint: "過去の提出者と出所は今回の報告者として継承されません。今回の作業の出所を選択してください。", reworkNoOrder: "過去の依頼と停止申告は再利用しません。現在の依頼を引き渡す場合は停止を新たに明示してください。", reworkChanged: "選択した報告または現在の根拠が変わりました。編集内容は保持されています。新しい根拠を取得して明示的に採用してください。", reworkFixed: "固定した修正元", reworkBasis: "修正の根拠", reworkDecision: "元の修正要求", reworkScopes: "許可された実行範囲", reworkReading: "選択した報告と現在の範囲を取得中", reworkInvalid: "選択した出所または修正プレビューを検証できません。その固定報告を更新してください。",
   title: "外部成果の提出", intro: "このタスクの基準に沿って外部で完了した作業を提出します。出所とテスト結果は報告であり、検収には人の審査が必要です。",
   handoff: "報告と作業依頼の引き渡し", workOrder: "作業依頼", handoffHint: "固定した報告の保存と、この依頼の引き渡しを一度に行います。その後、人が成果を審査します。", stopAttestation: "この依頼の外部作業が停止したことを申告します。", stopRequired: "依頼を引き渡す前に、外部作業の停止を明示してください。", stoppedReported: "担当者による停止の申告です。実行環境の停止確認や人による検収ではありません。", reportOnlyHint: "報告のみを保存すると依頼の占有は継続します。外部作業の停止後に、この報告を関連付けられます。", previewOnly: "報告のみ確認", previewHandoff: "報告と引き渡しを確認", confirmHandoff: "報告を提出して引き渡す", submittedHandoff: "報告を保存し、依頼を引き渡しました。人による審査が必要です。", openWorkOrder: "関連する依頼を開く", requestWorkOrderChanged: "選択した依頼または版が変更されました。依頼を開き直してから報告してください。",
   create: "外部成果を提出", loading: "現在の提出根拠を取得中", readFailed: "提出情報を取得できません", refresh: "更新", history: "過去の提出", more: "次のページ", first: "最近の提出", empty: "外部成果はまだ提出されていません。",
@@ -119,6 +128,9 @@ const ja: Copy = {
   kinds: { human: "担当者", agent: "エージェント", tool: "開発ツール" }, results: { met: "達成と報告", not_met: "未達成と報告", unknown: "不明" },
   testStates: { passed: "成功と報告", failed: "失敗と報告", skipped: "スキップ", not_run: "未実行", unknown: "不明" },
   reasonCodes: {
+    submission_rework_basis_changed: "選択した出所または現在の依頼が変わりました。新しい修正プレビューを取得して明示的に採用してください。",
+    submission_rework_original_invalid: "固定した完全な修正元を検証できません。その原本を復旧してください。",
+    submission_rework_preview_budget: "完全な修正プレビューが読み取り上限を超えています。原文は省略していません。成果の範囲を絞ってください。",
     project_archived: "プロジェクトはアーカイブ済みです。提出を変更する前に復元してください。",
     task_acceptance_invalid: "成果を報告する前に有効なタスク検収基準を定義してください。",
     task_acceptance_missing: "タスク基準を定義するか、要件の検収基準を明示的に選択してください。",
@@ -164,5 +176,13 @@ const ja: Copy = {
 export function taskSubmissionCopy(language = "en"): Copy { return language.startsWith("zh") ? zh : language.startsWith("ja") ? ja : en; }
 export function taskSubmissionReason(language: string | undefined, reason: { code: string; message: string }): string {
   const codes = taskSubmissionCopy(language).reasonCodes;
-  return Object.hasOwn(codes, reason.code) ? codes[reason.code as keyof typeof codes] : reason.message;
+  return Object.hasOwn(codes, reason.code) ? codes[reason.code as keyof typeof codes] : submissionFeedbackReasons[reason.code]?.[language?.startsWith("zh") ? 0 : language?.startsWith("ja") ? 2 : 1] || reason.message;
 }
+const submissionFeedbackReasons: Record<string, readonly [string, string, string]> = {
+  feedback_reference_missing: ["选中的退回报告不存在或当前无法读取，请回到该原件核对。", "The selected returned report is unavailable. Reopen that exact original.", "選択した差し戻し報告を取得できません。その原本を開き直してください。"],
+  feedback_reference_invalid: ["选中的报告摘要或退回决定不匹配，请从该原件重新选择。", "The selected report digest or change request does not match. Select it again from the original.", "選択した報告ダイジェストまたは修正要求が一致しません。原本から選び直してください。"],
+  feedback_original_invalid: ["无法核验选中报告与人工审核原件，暂不能复用其材料。", "The selected report or human review original cannot be verified. Its materials cannot be reused.", "選択した報告または人のレビュー原本を検証できません。資料を再利用できません。"],
+  feedback_context_invalid: ["固定反馈的正文、摘要或权限依据不完整，请核对原件后重试。", "The fixed feedback content, digest or permission basis is incomplete. Verify the original before retrying.", "固定フィードバックの内容、ダイジェストまたは権限根拠が不完全です。原本を確認してください。"],
+  feedback_context_budget: ["完整反馈超过 64 KiB，原文未截断，请缩小交付范围。", "Complete feedback exceeds 64 KiB. Nothing was truncated; narrow the delivery scope.", "完全なフィードバックが64 KiBを超えています。原文は省略していません。範囲を絞ってください。"],
+  feedback_source_budget: ["反馈原件超过安全读取上限，原文未截断，暂不能复用。", "The feedback original exceeds its read limit. Nothing was truncated; reuse is unavailable.", "フィードバック原本が読み取り上限を超えています。省略はしていません。再利用できません。"],
+};

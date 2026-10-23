@@ -206,6 +206,9 @@ def _assert_original(row):
             or row.original.get("definition") != row.definition or row.original.get("native_boundary") != row.native_boundary
             or digest(semantic_snapshot(row.definition)) != row.definition_digest or digest(row.native_boundary) != row.native_boundary_digest):
         _fail("submission_original_invalid", "The fixed external delivery original cannot be verified.")
+    from .delivery_task_submission_rework import validate_rework_original
+
+    validate_rework_original(row)
 
 
 def _issue(db, project, row, user, *, comment="", existing=None):
@@ -262,12 +265,25 @@ def _submit(db, project, user, data, body, store, execution, command_key):
     expected = sorted((item["source"], item["index"], item["text_digest"]) for item in fixed["criteria"])
     if actual != expected:
         _fail("submission_criteria_changed", "Report every exact original acceptance condition once.")
+    rework = None
+    if body.rework_reference is not None:
+        from .delivery_external_work_order_service import submission_handoff_context
+        from .delivery_task_submission_rework import prepare_rework
+
+        target = {**fixed, "native_boundary_digest": boundary["digest"],
+            "work_order": submission_handoff_context(db, project, user, body.task_id,
+                can_submit=True, store=store, execution=execution)}
+        rework, _draft = prepare_rework(db, project, user, body.task_id, body.rework_reference, target, store=store)
+        if rework["basis"] != body.rework_basis:
+            _fail("submission_rework_basis_changed", "The selected historical source or current target changed; explicitly adopt a new rework preview.")
     payload = body.model_dump(mode="json")
     accepted_version = _version(db, project)
     identity = identifier("submission")
     original = {"schema": "manager.task-delivery.v1", "submission_id": identity, "tenant_id": project.tenant_id,
         "project_id": project.id, "task_id": body.task_id, "actor": user.id, "accepted_version": accepted_version,
         "command_key": command_key, "payload": payload, "definition": fixed["definition"], "native_boundary": boundary["boundary"]}
+    if rework is not None:
+        original["rework"] = rework
     row = Submission(id=identity, tenant_id=project.tenant_id, project_id=project.id, task_id=body.task_id,
         submitted_by=user.id, submitted_by_name=user.username, accepted_version=accepted_version,
         task_basis=fixed["task_basis"], definition_digest=fixed["definition_digest"], native_boundary_digest=boundary["digest"],
@@ -277,6 +293,7 @@ def _submit(db, project, user, data, body, store, execution, command_key):
                 "reported_passed": sum(item["status"] == "passed" for item in payload["tests"]),
                 "reported_failed": sum(item["status"] == "failed" for item in payload["tests"])},
         invalidated=False, invalidated_at=None, invalidated_reason="")
+    _assert_original(row)
     if report_failures(payload):
         row.issue_id = _issue(db, project, row, user)
     older = db.scalars(select(Submission).where(*_scope(project, Submission), Submission.task_id == row.task_id,
@@ -286,6 +303,8 @@ def _submit(db, project, user, data, body, store, execution, command_key):
         db.add(row)
         db.flush()
     result = {"task_ids": [row.task_id], "submission_id": row.id, "submission_digest": row.submission_digest, "issue_id": row.issue_id}
+    if rework is not None:
+        result.update(rework_reference=deepcopy(rework["reference"]), rework_basis=rework["basis"])
     if body.work_order is not None:
         from .delivery_external_work_order_contract import WorkOrderReport
         from .delivery_external_work_order_service import apply_work_order
@@ -311,6 +330,7 @@ def _review(db, project, user, data, body, store, execution):
     if row is None:
         _fail("submission_missing", "Submission is not available for this task and project.", 404)
     _assert_original(row)
+    assert_submission_access(db, project, user, [row.id], store=store)
     if row.submission_digest != body.submission_digest:
         _fail("submission_original_changed", "The review does not identify the exact submitted original.")
     if db.scalar(select(Decision.id).where(*_scope(project, Decision), Decision.submission_id == row.id)):
@@ -379,13 +399,25 @@ def _submission_runtime_scope_map(db, project, submission_ids):
         return {}
     predicate = (*_scope(project, Submission), Submission.id.in_(identities))
     field = Submission.native_boundary
-    size = func.length(cast(field, LargeBinary)) if db.bind.dialect.name == "sqlite" else func.octet_length(cast(field, Text))
-    sizes = db.scalars(select(size).where(*predicate)).all()
+    lineage_fields = {key: Submission.original["rework"][key] for key in (
+        "schema", "reference", "basis", "feedback_context_sha256", "feedback_runtime_scopes")}
+    def byte_size(column):
+        return func.length(cast(column, LargeBinary)) if db.bind.dialect.name == "sqlite" else func.octet_length(cast(column, Text))
+    sizes = [sum(value or 0 for value in row) for row in db.execute(
+        select(byte_size(field), *(byte_size(column) for column in lineage_fields.values())).where(*predicate))]
     if len(sizes) != len(identities):
         _fail("submission_missing", "A fixed external delivery scope is unavailable.", 404)
     if any((value or 0) > 1024 * 1024 for value in sizes) or sum(value or 0 for value in sizes) > 16 * 1024 * 1024:
         _fail("submission_native_history_budget", "The original runtime scopes exceed the bounded read budget.", 413)
-    rows = db.execute(select(Submission.id, field, Submission.payload["work_order"]["id"].as_string()).where(*predicate)).all()
+    loaded = db.execute(select(Submission.id, field, Submission.payload["work_order"]["id"].as_string(),
+        Submission.payload["rework_reference"], Submission.payload["rework_basis"].as_string(),
+        Submission.original["rework"].as_string().is_not(None), *lineage_fields.values()).where(*predicate)).all()
+    from .delivery_task_submission_rework import fixed_lineage_scopes
+
+    rows, scopes_by_lineage = [], {}
+    for identity, boundary, binding, reference, basis, present, *locator in loaded:
+        rows.append((identity, boundary, binding))
+        scopes_by_lineage[identity] = fixed_lineage_scopes(reference, basis, dict(zip(lineage_fields, locator)), present=present)
     if any(not isinstance(boundary, dict) for _identity, boundary, _binding in rows):
         _fail("submission_missing", "The accepted submission scope is unavailable.", 404)
     scopes_by_order = {}
@@ -407,7 +439,7 @@ def _submission_runtime_scope_map(db, project, submission_ids):
                 _fail("work_order_missing", "The bound work order's original runtime scope is unavailable.", 404)
             scopes_by_order[identity] = original_scopes
     return {identity: sorted({item["workspace_id"] for item in boundary.get("identities", []) if item.get("workspace_id")}
-        | set(scopes_by_order.get(binding, []))) for identity, boundary, binding in rows}
+        | set(scopes_by_order.get(binding, [])) | set(scopes_by_lineage[identity])) for identity, boundary, binding in rows}
 
 
 def _submission_runtime_scope_set(db, project, submission_ids):

@@ -86,6 +86,17 @@ beforeEach(() => {
 afterEach(() => { Object.keys(h.hooks).forEach(unmount); vi.unstubAllGlobals(); });
 
 describe("task draft navigation protection", () => {
+  it("blocks starting a report or rework preview while another Task editor owns a draft", () => {
+    const first = host(), submission = find(first, DeliveryTaskSubmissionPanel).props;
+    expect(submission.canStart()).toBe(true);
+    find(first, DeliveryDesignContextPanel).props.onEditingChange(true);
+    expect(submission.canStart()).toBe(false);
+    find(first, DeliveryDesignContextPanel).props.onEditingChange(false);
+    expect(submission.canStart()).toBe(true);
+    submission.onEditingChange(true); expect(submission.canStart()).toBe(true);
+    find(first, DeliveryDesignContextPanel).props.onEditingChange(true); expect(submission.canStart()).toBe(false);
+    find(first, DeliveryDesignContextPanel).props.onEditingChange(false); expect(submission.canStart()).toBe(true);
+  });
   for (const kind of ["submission", "work-order"] as const) for (const failed of ["pending", "error", "old-schema", "requirement"]) {
     it(`retains ${kind} recovery outside the ${failed} context without current GET authority`, () => {
       h.externalIds[kind] = ["T"];

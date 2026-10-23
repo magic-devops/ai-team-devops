@@ -288,6 +288,8 @@ export function DeliveryTaskDetail({
   };
   const draftExit = useExecutionExitGuard();
   const draftActive = useRef(false), draftNotify = useRef(onDraftChange); draftNotify.current = onDraftChange;
+  const draftScopes = useRef({ identity, scopes: new Set<TaskDraftScope>() });
+  if (draftScopes.current.identity !== identity) draftScopes.current = { identity, scopes: new Set<TaskDraftScope>() };
   const externalPending = useRef(externalDeliveryRecoveryPending(projectId, taskId));
   const hasExternalPending = () => externalPending.current || externalDeliveryRecoveryPending(projectId, taskId);
   const designPending = useRef(designRecoveryPending(projectId, { kind: "task", id: taskId }));
@@ -376,6 +378,7 @@ export function DeliveryTaskDetail({
   }, [queueLocked]);
   const editingChanged = useCallback((scope: TaskDraftScope, editing: boolean) => {
     if (!mounted.current || origin.current !== projectSessionKey() || activeIdentity.current !== identity || editing && parentAccess.current?.() === false) return;
+    if (editing) draftScopes.current.scopes.add(scope); else draftScopes.current.scopes.delete(scope);
     const pending = draftExit.setPending(`${identity}:${scope}`, editing);
     draftActive.current = pending;
     if (pending) {
@@ -614,7 +617,7 @@ export function DeliveryTaskDetail({
         onUnresolvedChange={(value) => { designPending.current = value || designRecoveryPending(projectId, { kind: "task", id: taskId }); notifyTaskPending(setTaskPending(`design:${taskId}`, designPending.current)); }} />
       <DeliveryTaskSubmissionPanel key={`${projectId}:${sessionId}:${taskId}:external`} projectId={projectId} taskId={taskId} sessionId={sessionId}
         disabled={executionExit.pending || hasWorkOrderPending() || queueLocked || Boolean(displayedOperationRecovery) || busy} requestCreate={reportRequest} requestWorkOrder={reportOrder}
-        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.submission}
+        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} canStart={() => [...draftScopes.current.scopes].every((scope) => scope === "submission")} onSaved={saved} onEditingChange={draftCallbacks.submission}
         onUnresolvedChange={(value) => {
           externalPending.current = value || externalDeliveryRecoveryPending(projectId, taskId);
           if (origin.current === projectSessionKey() && activeIdentity.current === identity) onExternalPending?.("submission", externalPending.current);

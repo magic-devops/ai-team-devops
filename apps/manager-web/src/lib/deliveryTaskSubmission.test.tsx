@@ -14,21 +14,23 @@ import { TaskExternalRecovery } from "../../subapps/ai-rd-center/src/pages/deliv
 import { taskSubmissionCopy, taskSubmissionReason } from "../i18n/task-submission";
 import { eventTargetHref } from "./eventReceiptState";
 import { issueEvidenceHref } from "./deliveryIssue";
+import { canonicalDeliveryJson } from "./deliveryCanonical";
+import { TaskSubmissionReworkPreview } from "../../subapps/ai-rd-center/src/pages/delivery/TaskSubmissionReworkPreview";
 
-const h = vi.hoisted(() => ({ frames: {} as Record<string, any[]>, frame: "", next: 0, local: new Map<string, string>(), retained: new Map<string, string>(),
-  current: {} as any, detail: {} as any, page: {} as any, currentError: null as Error | null, detailError: null as Error | null, sent: [] as any[], queries: [] as any[], saved: vi.fn(), pending: vi.fn(),
-  mode: "success" as "success" | "unknown", storageFail: false, canWrite: true, taskData: {} as any, editing: vi.fn(),
+const h = vi.hoisted(() => ({ frames: {} as Record<string, any[]>, frame: "", next: 0, effects: [] as Array<() => void | (() => void)>, local: new Map<string, string>(), retained: new Map<string, string>(),
+  current: {} as any, detail: {} as any, detailsById: null as Record<string, any> | null, page: {} as any, currentError: null as Error | null, detailError: null as Error | null, sent: [] as any[], queries: [] as any[], saved: vi.fn(), pending: vi.fn(),
+  mode: "success" as "success" | "unknown", storageFail: false, canWrite: true, canStart: true, rework: null as any, taskData: {} as any, editing: vi.fn(),
 }));
 vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>("react"),
   useRef: (initial: any) => { const slots = h.frames[h.frame] ||= [], index = h.next++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
   useState: (initial: any) => { const slots = h.frames[h.frame] ||= [], index = h.next++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], (next: any) => { slots[index] = typeof next === "function" ? next(slots[index]) : next; }]; },
   useMemo: (factory: () => unknown, deps: unknown[]) => { const slots = h.frames[h.frame] ||= [], index = h.next++; if (!(index in slots) || deps.some((part, i) => part !== slots[index].deps[i])) slots[index] = { deps, value: factory() }; return slots[index].value; },
-  useCallback: (value: unknown) => value, useEffect: () => {}, useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
+  useCallback: (value: unknown) => value, useEffect: (effect: () => void | (() => void)) => { h.effects.push(effect); }, useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "zh-CN" } }) }));
 vi.mock("./http", async () => ({ ...await vi.importActual<typeof import("./http")>("./http"), request: vi.fn() }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: (options: any) => {
-  h.queries.push(options); const kind = options.queryKey[0], data = kind === "delivery-task-submission-current" ? h.current : kind === "delivery-task-submission" ? h.detail : kind === "delivery-task-detail" ? h.taskData : h.page;
+  h.queries.push(options); const kind = options.queryKey[0], data = kind === "delivery-task-submission-current" ? h.current : kind === "delivery-task-submission" ? h.detailsById ? h.detailsById[options.queryKey.at(-1)] : h.detail : kind === "delivery-task-detail" ? h.taskData : h.page;
   const error = kind === "delivery-task-submission-current" ? h.currentError : kind === "delivery-task-submission" ? h.detailError : null;
   return { data, error, isError: Boolean(error), isPending: !data, isFetching: false, refetch: vi.fn(async () => ({ data, isError: Boolean(error) })) };
 }, useQueryClient: () => ({ invalidateQueries: vi.fn(async () => {}), resetQueries: vi.fn(async () => {}), getQueryData: () => h.taskData }) }));
@@ -49,7 +51,8 @@ const original = (review = false): SubmissionOriginal => ({ action: review ? "ta
 function ack(value: SubmissionOriginal, issue: string | null = null) {
   const review = value.action === "task.delivery.review", resource = { kind: review ? "task_review" : "task_submission", id: review ? "R1" : "S1" };
   const binding = review ? null : (value.payload as TaskSubmissionPayload).work_order;
-  return { project_id: "P", action: value.action, resource, result: { task_ids: ["T"], submission_id: "S1", submission_digest: d, issue_id: issue, ...(review ? { decision_id: "K1", review_id: "R1" } : {}), ...(binding ? { work_order: { id: binding.id, order_revision: binding.order_revision + 1, state: "reported" } } : {}) },
+  const rework = !review && (value.payload as TaskSubmissionPayload).rework_reference ? { rework_reference: (value.payload as TaskSubmissionPayload).rework_reference, rework_basis: (value.payload as TaskSubmissionPayload).rework_basis } : {};
+  return { project_id: "P", action: value.action, resource, result: { task_ids: ["T"], submission_id: "S1", submission_digest: d, issue_id: issue, ...rework, ...(review ? { decision_id: "K1", review_id: "R1" } : {}), ...(binding ? { work_order: { id: binding.id, order_revision: binding.order_revision + 1, state: "reported" } } : {}) },
     affected_refs: [resource, { kind: "task", id: "T" }, ...(review ? [{ kind: "task_submission", id: "S1" }] : []), ...(issue ? [{ kind: "issue", id: issue }] : []), ...(binding ? [{ kind: "work_order", id: binding.id }] : [])],
     applied_version: value.intent.version + 1, version: value.intent.version + 1, query_generation: null, replayed: false };
 }
@@ -57,7 +60,7 @@ function frame<T>(name: string, callback: () => T) { h.frame = name; h.next = 0;
 function nodes(node: ReactNode): any[] { if (Array.isArray(node)) return node.flatMap(nodes); if (!isValidElement<any>(node)) return []; if (node.type === TaskExternalRecovery) return [node, ...nodes(frame("original-recovery", () => TaskExternalRecovery(node.props)))]; return [node, ...["children", "footer", "action", "description"].flatMap((key) => nodes(node.props[key]))]; }
 const find = (tree: ReactNode, type: unknown, predicate: (props: any) => boolean = () => true) => nodes(tree).find((node) => node.type === type && predicate(node.props))?.props;
 const button = (tree: ReactNode, text: string) => find(tree, Button, (props) => props.children === text);
-const panel = () => frame("panel", () => DeliveryTaskSubmissionPanel({ projectId: "P", taskId: "T", sessionId: "session", canSubmit: () => h.canWrite, onSaved: h.saved, onUnresolvedChange: h.pending, onEditingChange: h.editing }));
+const panel = () => frame("panel", () => DeliveryTaskSubmissionPanel({ projectId: "P", taskId: "T", sessionId: "session", canSubmit: () => h.canWrite, canStart: () => h.canStart, onSaved: h.saved, onUnresolvedChange: h.pending, onEditingChange: h.editing }));
 async function ready(handoff = false) {
   button(panel(), copy.create).onClick();
   const input = (type: unknown, label: string, value: string) => find(panel(), type, (props) => props["aria-label"] === label).onChange({ target: { value } });
@@ -67,8 +70,8 @@ async function ready(handoff = false) {
   await button(panel(), handoff ? copy.previewHandoff : h.current.work_order ? copy.previewOnly : copy.preview).onClick(); return panel();
 }
 beforeEach(() => {
-  h.frames = {}; h.frame = ""; h.next = 0; h.local.clear(); h.retained.clear(); h.sent = []; h.queries = []; h.saved.mockReset(); h.pending.mockReset(); h.editing.mockReset(); h.mode = "success"; h.storageFail = false; h.canWrite = true;
-  h.current = current(); h.detail = detail(); h.page = { project_id: "P", task_id: "T", as_of: now, items: [summary()], total: 1, limit: 20, next_cursor: null }; h.currentError = null; h.detailError = null;
+  h.frames = {}; h.frame = ""; h.next = 0; h.effects = []; h.local.clear(); h.retained.clear(); h.sent = []; h.queries = []; h.saved.mockReset(); h.pending.mockReset(); h.editing.mockReset(); h.mode = "success"; h.storageFail = false; h.canWrite = true; h.canStart = true; h.rework = null;
+  h.current = current(); h.detail = detail(); h.detailsById = null; h.page = { project_id: "P", task_id: "T", as_of: now, items: [summary()], total: 1, limit: 20, next_cursor: null }; h.currentError = null; h.detailError = null;
   h.taskData = { project: { id: "P" }, version: 7, query_generation: 1, permissions: { write: true }, members: [], task: { id: "T", execution_id: "", execution_gate: { eligible: true, reasons: [] } } };
   vi.stubGlobal("localStorage", { getItem: (key: string) => h.local.get(key) || null, setItem: (key: string, value: string) => h.local.set(key, value), removeItem: (key: string) => h.local.delete(key) });
   vi.stubGlobal("sessionStorage", { getItem: (key: string) => h.retained.get(key) || null, setItem: (key: string, value: string) => { if (h.storageFail && (!value || JSON.parse(value).phase === "succeeded")) throw new Error("Storage unavailable"); h.retained.set(key, value); } });
@@ -82,7 +85,7 @@ beforeEach(() => {
     return new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
   });
   vi.mocked(request).mockReset().mockImplementation(async (path, init) => {
-    if (path.endsWith("/current")) return h.current; if (path.includes("/delivery-submissions?")) return h.page; if (path.includes("/delivery-submissions/")) return h.detail;
+    if (path.endsWith("/rework-preview")) return h.rework; if (path.endsWith("/current")) return h.current; if (path.includes("/delivery-submissions?")) return h.page; if (path.includes("/delivery-submissions/")) return h.detail;
     const body = JSON.parse(String(init?.body)); h.sent.push(body); if (h.mode === "unknown") throw new TypeError("Lost reply");
     return ack({ action: body.action, payload: body.payload, intent: { version: body.expected_version, key: body.idempotency_key } });
   });
@@ -248,6 +251,91 @@ describe("external submit/review exact receipt and durable originals", () => {
   it("partitions retained keys by user/login/project/task without credentials", () => {
     const first = submissionStorageKey("P", "T")!; expect(first).not.toContain("private-token"); expect(submissionStorageKey("P", "U")).not.toBe(first);
     setSession("private-token", "P", "tenant"); expect(submissionStorageKey("P", "T")).not.toBe(first);
+  });
+});
+
+async function reworkFacts() {
+  h.current.latest_submission_id = "S1";
+  h.detail.submission.status = "changes_requested"; h.detail.submission.review_id = "R1";
+  h.detail.decision = { id: "D1", review_id: "R1", decision: "request_changes", reviewer: { id: "Reviewer", name: "Human reviewer" }, comment: "Repair the failed case", created_at: now };
+  const reference = { submission_id: "S1", submission_digest: h.detail.submission.digest, decision_id: "D1" };
+  const context = { schema: "manager.delivery-feedback.v1", project_id: "P", task_id: "T", reference, submission: { definition: structuredClone(h.detail.definition), payload: structuredClone(h.detail.payload) }, decision: { ...h.detail.decision, issue_id: h.detail.submission.issue_id } };
+  delete (context.decision as any).id;
+  const sha = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalDeliveryJson(context))))).map((part) => part.toString(16).padStart(2, "0")).join("");
+  h.rework = { project_id: "P", task_id: "T", version: h.current.version, query_generation: h.current.query_generation, as_of: h.current.as_of, rework_reference: reference, rework_basis: a,
+    current: structuredClone(h.current), feedback_context: context, feedback_context_sha256: sha, allowed: true, reasons: [],
+    draft: { source: null, summary: h.detail.payload.summary, artifacts: structuredClone(h.detail.payload.artifacts),
+      criteria: h.current.criteria.map(({ source, index, text_digest }: any) => ({ source, index, text_digest, result: "unknown", evidence_ids: [] })).sort((left: any, right: any) => left.source.localeCompare(right.source) || left.index - right.index),
+      tests: h.detail.payload.tests.map(({ id, title }: any) => ({ id, title, status: "not_run", evidence_ids: [] })) } };
+  return structuredClone(h.rework);
+}
+async function reworkDraft() {
+  await reworkFacts(); await button(panel(), copy.rework).onClick();
+  const preview = find(panel(), TaskSubmissionReworkPreview); expect(preview).toBeDefined(); preview.onAdopt(); return panel();
+}
+describe("actual selected-source rework report interaction definitions", () => {
+  it("requires preview and explicit adoption, resets old conclusions and never inherits source or stop", async () => {
+    h.detail.payload.work_order = { id: "OldW", order_revision: 1, stopped_attestation: true };
+    await reworkFacts(); await button(panel(), copy.rework).onClick(); expect(h.sent).toHaveLength(0); expect(h.editing).not.toHaveBeenCalled();
+    expect(find(panel(), Modal).open).toBe(false); const preview = find(panel(), TaskSubmissionReworkPreview); preview.onAdopt();
+    const tree = panel(); expect(find(tree, Modal).open).toBe(true); expect(h.editing).toHaveBeenCalledWith(true);
+    expect(find(tree, Select, (props) => props["aria-label"] === copy.kind).value).toBeUndefined();
+    expect(find(tree, Input, (props) => props["aria-label"] === copy.name).value).toBe("");
+    expect(find(tree, Select, (props) => props["aria-label"] === `${copy.criteria} 1`).value).toBe("unknown");
+    expect(find(tree, Select, (props) => props["aria-label"] === `${copy.tests} 1`).value).toBe("not_run");
+    await button(tree, copy.preview).onClick(); expect(button(panel(), copy.confirm)).toBeUndefined(); expect(JSON.stringify(panel())).toContain(copy.reworkSourceRequired);
+  });
+  it("submits current declared results with selected S/digest/Decision rather than a newer report", async () => {
+    await reworkDraft();
+    find(panel(), Select, (props) => props["aria-label"] === copy.kind).onChange("agent");
+    find(panel(), Input, (props) => props["aria-label"] === copy.name).onChange({ target: { value: "Current agent" } });
+    const newer = structuredClone(h.detail); newer.submission.id = "S2"; newer.decision.id = "D2"; h.detailsById = { S1: h.detail, S2: newer };
+    h.current.latest_submission_id = "S2"; h.rework.current.latest_submission_id = "S2";
+    const cleanup = h.effects.splice(0).map((effect) => effect()); window.dispatchEvent(new Event("popstate"));
+    panel(); expect(h.queries.filter((query) => query.queryKey[0] === "delivery-task-submission").at(-1).queryKey.at(-1)).toBe("S1");
+    await button(panel(), copy.preview).onClick(); expect(button(panel(), copy.confirm)).toBeDefined();
+    await button(panel(), copy.confirm).onClick(); expect(h.sent).toHaveLength(1);
+    expect(h.sent[0].payload.rework_reference).toEqual({ submission_id: "S1", submission_digest: d, decision_id: "D1" });
+    expect(h.sent[0].payload.source).toEqual({ kind: "agent", name: "Current agent", url: "" }); expect(h.sent[0].payload).not.toHaveProperty("work_order");
+    cleanup.forEach((close) => { if (typeof close === "function") close(); });
+  });
+  it("preserves edits when fixed basis changes, and resets result links only after adopting it explicitly", async () => {
+    await reworkDraft(); find(panel(), Select, (props) => props["aria-label"] === copy.kind).onChange("tool");
+    find(panel(), Input, (props) => props["aria-label"] === copy.name).onChange({ target: { value: "Current tool" } });
+    find(panel(), Input.TextArea, (props) => props["aria-label"] === copy.summary).onChange({ target: { value: "Edited summary" } });
+    find(panel(), Select, (props) => props["aria-label"] === `${copy.criteria} 1`).onChange("met");
+    find(panel(), Select, (props) => props["aria-label"] === `${copy.evidenceIds} 1`).onChange(["e1"]);
+    h.rework.rework_basis = b; h.rework.current.task_basis = b;
+    await button(panel(), copy.preview).onClick(); expect(button(panel(), copy.confirm)).toBeUndefined();
+    expect(find(panel(), Input.TextArea, (props) => props["aria-label"] === copy.summary).value).toBe("Edited summary");
+    expect(find(panel(), Select, (props) => props["aria-label"] === `${copy.criteria} 1`).value).toBe("met");
+    button(panel(), copy.adopt).onClick(); expect(find(panel(), Input.TextArea, (props) => props["aria-label"] === copy.summary).value).toBe("Edited summary");
+    expect(find(panel(), Select, (props) => props["aria-label"] === `${copy.criteria} 1`).value).toBe("unknown"); expect(h.sent).toHaveLength(0);
+  });
+  it.each(["other-draft", "permission", "selected-source", "route", "account"])("discards the awaited preview after %s changed", async (change) => {
+    const response = await reworkFacts(); let resolve!: (value: unknown) => void; h.rework = new Promise((done) => { resolve = done; });
+    const pending = button(panel(), copy.rework).onClick();
+    if (change === "other-draft") h.canStart = false; if (change === "permission") h.canWrite = false;
+    if (change === "selected-source") { h.detail = structuredClone(h.detail); h.detail.decision.id = "Other"; panel(); }
+    if (change === "route") { location.hash += "&submission_id=Other"; window.dispatchEvent(new Event("hashchange")); }
+    if (change === "account") setSession("other-token", "P", "tenant");
+    resolve(response); await pending; expect(find(panel(), TaskSubmissionReworkPreview)).toBeUndefined(); expect(h.sent).toHaveLength(0); expect(h.editing).not.toHaveBeenCalled();
+  });
+  it("closes both the readonly preview and edited draft after fresh write permission is revoked", async () => {
+    await reworkFacts(); await button(panel(), copy.rework).onClick(); const preview = find(panel(), TaskSubmissionReworkPreview); h.canWrite = false; preview.onClose(); expect(find(panel(), TaskSubmissionReworkPreview)).toBeUndefined();
+    h.canWrite = true; await reworkDraft(); const close = button(panel(), copy.close); h.canWrite = false; close.onClick(); expect(find(panel(), Modal).open).toBe(false); expect(h.editing).toHaveBeenLastCalledWith(false);
+  });
+  it("does not let an old preview's adopt or close callback affect a later preview", async () => {
+    await reworkFacts(); await button(panel(), copy.rework).onClick(); const old = find(panel(), TaskSubmissionReworkPreview); old.onClose();
+    await button(panel(), copy.rework).onClick(); const next = find(panel(), TaskSubmissionReworkPreview); old.onAdopt(); old.onClose();
+    expect(find(panel(), TaskSubmissionReworkPreview).preview).toBe(next.preview); expect(h.editing).not.toHaveBeenCalled(); expect(h.sent).toHaveLength(0);
+  });
+  it.each(["permission", "other-draft"])("does not prepare a human review after awaited %s changed", async (change) => {
+    h.current.latest_submission_id = "S1"; button(panel(), copy.accept).onClick();
+    find(panel(), Input.TextArea, (props) => props["aria-label"] === copy.comment).onChange({ target: { value: "Reviewed evidence" } });
+    let resolve!: (value: unknown) => void; vi.mocked(request).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    const waiting = button(panel(), copy.reviewPreview).onClick(); if (change === "permission") h.canWrite = false; else h.canStart = false;
+    resolve(detail()); await waiting; expect(button(panel(), copy.reviewConfirm)).toBeUndefined(); expect(h.sent).toHaveLength(0);
   });
 });
 

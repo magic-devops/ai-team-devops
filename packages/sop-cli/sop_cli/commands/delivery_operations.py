@@ -5,9 +5,10 @@ from typing import Optional
 
 import typer
 
-from sop_sdk.delivery_ack import DeliveryAckError, MAX_ORIGINAL_BYTES, strict_json
+from sop_sdk.delivery_ack import DeliveryAckError, MAX_ORIGINAL_BYTES, canonical, strict_json
 from sop_sdk.delivery_journal import DeliveryJournal, DeliveryJournalError
-from sop_sdk.delivery_operations import DeliveryOperations, DeliveryScopeError
+from sop_sdk.delivery_operations import DeliveryOperations, DeliveryScopeError, read_rework_draft
+from sop_sdk.submission_rework import MAX_ADOPTION_BYTES, SubmissionReworkChanged, validate_adoption
 from sop_sdk.errors import SopAuthError, SopConflictError, SopForbiddenError, SopServerError, SopTransportError
 from .._util import console, get_client, warn
 
@@ -45,7 +46,9 @@ def _output(journal, method, *args, local=False, **kwargs):
         console.print_json(data=value)
     except Exception as exc:
         # Never echo raw HTTP error bodies, headers, auth configuration or URLs.
-        if isinstance(exc, DeliveryAckError):
+        if isinstance(exc, SubmissionReworkChanged):
+            message = "采用的返工来源或当前条件已变化。请用 rework-draft 重新预览并明确采用；原编辑内容与已保存操作均保留。"
+        elif isinstance(exc, DeliveryAckError):
             message = "回执尚未通过原件校验，结果仍未知。请用 inspect 审阅，之后用 resume 恢复同一原件。"
         elif isinstance(exc, DeliveryScopeError):
             message = "当前账号、服务端或项目与保存原件不符。请切回原账号及项目，用 list/inspect 找回原操作后 resume。"
@@ -116,6 +119,47 @@ def prepare_submit(task: str = typer.Option(..., "--task"),
         warn("报告必须是完整、有界且无重复字段的 UTF-8 JSON。")
         raise typer.Exit(1)
     _output(journal, "prepare_submit", task, authored, work_order_id=work_order, stopped_attestation=stopped)
+
+
+@app.command("rework-draft")
+def rework_draft(task: str = typer.Option(..., "--task"), submission: str = typer.Option(..., "--submission"),
+        output: Optional[Path] = typer.Option(None, "--output", help="将完整采用文档保存为 UTF-8 JSON；不覆盖已有文件。省略时输出 JSON。")):
+    """预览选定退回报告，生成本次可编辑材料；不创建交付操作、不发送命令。"""
+    try:
+        if output is not None and (output.exists() or output.is_symlink()):
+            raise FileExistsError()
+        with get_client() as client:
+            value = read_rework_draft(client, task, submission)
+        if output is None:
+            console.print_json(data=value)
+        else:
+            raw = canonical(value, MAX_ADOPTION_BYTES)
+            with output.open("xb") as handle:
+                handle.write(raw + b"\n")
+            console.print_json(data={"saved": str(output), "next": "编辑 authored，再用 prepare-rework；保留完整 preview。"})
+    except FileExistsError:
+        warn("输出文件已存在，未覆盖。请选用新文件名，原材料保持不变。")
+        raise typer.Exit(1) from None
+    except Exception:
+        warn("无法读取或保存完整返工来源。请核对选定报告、退回决定和访问权限，再用 rework-draft 重试。")
+        raise typer.Exit(1) from None
+
+
+@app.command("prepare-rework")
+def prepare_rework(task: str = typer.Option(..., "--task"),
+        file: Path = typer.Option(..., "--file", help="rework-draft 的完整采用文档；只编辑 authored，保留 preview。"),
+        journal: Path = typer.Option(DEFAULT_JOURNAL, "--journal"),
+        work_order: Optional[str] = typer.Option(None, "--work-order"),
+        stopped: bool = typer.Option(False, "--stopped", help="本次明确选择当前工单并确认外部工作已停止；不继承旧声明。")):
+    """复核同一已采用来源，准备新报告原件；尚不发送。"""
+    try:
+        with file.open("rb") as handle:
+            adopted = strict_json(handle.read(MAX_ADOPTION_BYTES + 1), MAX_ADOPTION_BYTES)
+        adopted = validate_adoption(adopted, task_id=task)
+    except (OSError, ValueError):
+        warn("需要完整、有效的返工采用文档和本次作者。请用 rework-draft 预览，明确采用后只编辑 authored；原文件不变。")
+        raise typer.Exit(1) from None
+    _output(journal, "prepare_rework", task, adopted, work_order_id=work_order, stopped_attestation=stopped)
 
 
 @app.command("prepare-review")

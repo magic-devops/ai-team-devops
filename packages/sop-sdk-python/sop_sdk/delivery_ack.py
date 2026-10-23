@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from urllib.parse import urlsplit
 
 from .task_submission import _json_value, _nonfinite, _unique_pairs, submission_command_body
-from .work_order_original import WORK_ORDER_ACTIONS, _digest, _identity, _text, work_order_command_body
+from .work_order_original import WORK_ORDER_ACTIONS, _digest, _feedback_reference, _identity, _text, work_order_command_body
 
 SUBMISSION_ACTIONS = frozenset({"task.delivery.submit", "task.delivery.review"})
 OPERATION_ACTIONS = WORK_ORDER_ACTIONS | SUBMISSION_ACTIONS
@@ -75,8 +75,14 @@ def _submission_payload(action, p):
     required = {"task_id", "task_basis", "native_boundary_digest"}
     required |= {"definition_digest", "source", "summary", "artifacts", "criteria", "tests"} if action.endswith("submit") else {
         "submission_id", "submission_digest", "decision", "comment"}
-    if not isinstance(p, Mapping) or set(p) not in (required, required | {"work_order"} if action.endswith("submit") else required):
+    optional = {"work_order", "rework_reference", "rework_basis"} if action.endswith("submit") else set()
+    if not isinstance(p, Mapping) or not required <= set(p) <= required | optional:
         raise ValueError("Retain the exact complete external submission or review")
+    if ("rework_reference" in p) != ("rework_basis" in p):
+        raise ValueError("Retain the adopted rework reference and basis together")
+    if "rework_reference" in p:
+        if p["rework_reference"] is None: raise ValueError("Choose an explicit adopted rework source")
+        _feedback_reference(p["rework_reference"]); _digest(p["rework_basis"])
     _identity(p["task_id"])
     for field in ("task_basis", "native_boundary_digest"): _digest(p[field])
     if action.endswith("review"):
@@ -205,7 +211,10 @@ def validate_ack(original, value, *, project_id, binding=None):
             if action == "work_order.report": expected.add(("task_submission", p["submission_id"]))
         else:
             submit, w = action == "task.delivery.submit", p.get("work_order")
-            _exact(r, {"task_ids", "submission_id", "submission_digest", "issue_id"} | (set() if submit else {"decision_id", "review_id"}) | ({"work_order"} if submit and w else set()))
+            rework = submit and "rework_reference" in p
+            _exact(r, {"task_ids", "submission_id", "submission_digest", "issue_id"} | (set() if submit else {"decision_id", "review_id"}) | ({"work_order"} if submit and w else set()) | ({"rework_reference", "rework_basis"} if rework else set()))
+            if rework and (r["rework_reference"] != p["rework_reference"] or r["rework_basis"] != p["rework_basis"]):
+                raise ValueError("Adopted rework source receipt changed")
             _evidence_id(r["submission_id"]); _digest(r["submission_digest"])
             if r["issue_id"] is not None: _identity(r["issue_id"])
             if not submit:

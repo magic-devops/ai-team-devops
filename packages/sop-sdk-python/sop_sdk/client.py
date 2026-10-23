@@ -539,6 +539,14 @@ class ManagerClient:
         """Read the exact current definition and native boundary before reporting."""
         return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions/current", strict_response_limit=1024 * 1024)
 
+    def delivery_task_submission_rework_preview(self, task_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Read one explicit returned report; no report, operation or result is written."""
+        from .submission_rework import reference_body
+        if not isinstance(body, Mapping) or set(body) != {"rework_reference"}:
+            raise ValueError("Provide only the exact adopted rework reference")
+        return self._request("POST", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions/rework-preview",
+                             json_body=reference_body(body["rework_reference"]), strict_response_limit=256 * 1024)
+
     def delivery_task_submissions(self, task_id: str, *, limit: int = 20, cursor: str = "") -> dict[str, Any]:
         """Read one bounded report page; report status is not runtime proof."""
         return self._request("GET", f"/api/v1/delivery/tasks/{_requirement_segment(task_id)}/delivery-submissions",

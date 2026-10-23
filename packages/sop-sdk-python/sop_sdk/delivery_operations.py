@@ -9,6 +9,8 @@ import uuid
 from .delivery_ack import (canonical, command_original, strict_json,
     validate_ack, _digest, _identity, _integer)
 from .delivery_journal import DeliveryJournal, DeliveryJournalError, MAX_RECORD_BYTES, _validate
+from .submission_rework import (adoption, assert_same_source, validate_adoption,
+    validate_preview)
 
 COMMAND_PATH = "/api/v1/delivery/commands"
 PERMISSION = {"claim": "can_claim", "progress": "can_progress", "cancel": "can_cancel", "release": "can_release", "report": "can_report"}
@@ -83,6 +85,23 @@ def _required(value, name):
 def _fresh_body(action, payload, version):
     return command_original({"action": action, "payload": payload, "expected_version": version,
         "idempotency_key": "operation-" + uuid.uuid4().hex})
+
+
+def read_rework_draft(client, task_id, submission_id):
+    """Read an explicit S and its authorized seed, without creating a journal."""
+    _identity(task_id); _identity(submission_id)
+    client = _frozen_client(client)
+    scope = _context(client)
+    detail = _view(client.delivery_task_submission(task_id, submission_id), scope, task=task_id)
+    summary, decision = detail.get("submission"), detail.get("decision")
+    if (not isinstance(summary, dict) or summary.get("id") != submission_id or summary.get("task_id") != task_id
+            or not isinstance(decision, dict) or decision.get("decision") != "request_changes"):
+        raise ValueError("Select an exact returned submission with a human request-changes decision")
+    reference = {"submission_id": submission_id, "submission_digest": summary.get("digest"), "decision_id": decision.get("id")}
+    preview = validate_preview(client.delivery_task_submission_rework_preview(task_id, {"rework_reference": reference}),
+        project_id=scope["project_id"], task_id=task_id, reference=reference)
+    if _context(client) != scope: raise DeliveryScopeError("Authenticated source changed while adopting rework")
+    return adoption(preview)
 
 
 class DeliveryOperations:
@@ -208,6 +227,35 @@ class DeliveryOperations:
             payload["work_order"] = {"id": work_order_id, "order_revision": context["order_revision"], "stopped_attestation": True}
         return self._save(client, scope, _fresh_body("task.delivery.submit", payload, current["version"]), {"task_id": task_id})
 
+    def rework_draft(self, task_id, submission_id):
+        """Explicitly adopt this S/decision; reset historical author and results."""
+        return read_rework_draft(self.client, task_id, submission_id)
+
+    def prepare_rework(self, task_id, adopted, *, work_order_id=None, stopped_attestation=False):
+        """Prepare from an adopted complete source, never silently rebase it."""
+        _identity(task_id)
+        adopted = validate_adoption(adopted, task_id=task_id)
+        if type(stopped_attestation) is not bool or bool(work_order_id) != stopped_attestation:
+            raise ValueError("A selected current work order requires this attempt's explicit stop attestation")
+        client, scope = self._prepare()
+        protected = adopted["preview"]
+        fresh = validate_preview(client.delivery_task_submission_rework_preview(task_id,
+            {"rework_reference": protected["rework_reference"]}), project_id=scope["project_id"],
+            task_id=task_id, reference=protected["rework_reference"])
+        assert_same_source(protected, fresh)
+        current = fresh["current"]
+        payload = deepcopy(adopted["authored"])
+        payload.update({field: current[field] for field in ("task_id", "task_basis", "definition_digest", "native_boundary_digest")})
+        payload.update(rework_reference=deepcopy(protected["rework_reference"]), rework_basis=protected["rework_basis"])
+        if work_order_id:
+            _identity(work_order_id)
+            w = current.get("work_order")
+            if not isinstance(w, dict) or w.get("id") != work_order_id:
+                raise ValueError("Select this attempt's exact current work order explicitly")
+            _integer(w.get("order_revision"), 1)
+            payload["work_order"] = {"id": work_order_id, "order_revision": w["order_revision"], "stopped_attestation": True}
+        return self._save(client, scope, _fresh_body("task.delivery.submit", payload, fresh["version"]), {"task_id": task_id})
+
     def prepare_review(self, task_id, submission_id, decision, comment):
         _identity(task_id)
         client, scope = self._prepare()
@@ -254,6 +302,12 @@ class DeliveryOperations:
         else:
             binding = {"task_id": p["task_id"]}
             if action == "task.delivery.submit":
+                if "rework_reference" in p:
+                    preview = validate_preview(client.delivery_task_submission_rework_preview(p["task_id"],
+                        {"rework_reference": p["rework_reference"]}), project_id=scope["project_id"],
+                        task_id=p["task_id"], reference=p["rework_reference"])
+                    if not preview["allowed"] or preview["rework_basis"] != p["rework_basis"]:
+                        raise ValueError("Imported adopted rework source changed; never replace its saved basis")
                 current = _view(client.delivery_task_submission_current(p["task_id"]), scope, task=p["task_id"])
                 _required(current.get("can_submit"), "the imported external report")
                 if current["version"] != original["expected_version"] or any(current.get(k) != p[k] for k in ("task_basis", "definition_digest", "native_boundary_digest")):

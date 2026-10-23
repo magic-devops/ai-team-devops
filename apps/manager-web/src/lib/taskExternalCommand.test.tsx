@@ -24,6 +24,21 @@ beforeEach(() => {
 });
 afterEach(() => { for (const cleanup of h.cleanup.reverse()) cleanup(); vi.unstubAllGlobals(); });
 describe("one retained controller for each real Task/external operation scope", () => {
+  it("recovers the fixed selected rework pair and requires its exact receipt without regenerating the original", async () => {
+    const original = retainedSubmission(); const payload = original.payload as any;
+    payload.rework_reference = { submission_id: "EarlierS", submission_digest: "a".repeat(64), decision_id: "EarlierD" }; payload.rework_basis = "b".repeat(64);
+    h.saved.set(submissionStorageKey("P", "T")!, JSON.stringify({ phase: "unknown", original }));
+    let wrong = true;
+    vi.stubGlobal("fetch", async (_url: unknown, options: RequestInit) => {
+      const body = JSON.parse(String(options.body)); h.sent.push(body); const answer: any = retainedAck(original);
+      answer.result.rework_reference = structuredClone(payload.rework_reference); answer.result.rework_basis = wrong ? "c".repeat(64) : payload.rework_basis;
+      return new Response(JSON.stringify(answer), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    const command = frame("selected-rework", () => useSubmissionCommand("P", "T", "session"));
+    await command.replay(); expect(command.snapshot().phase).toBe("unknown"); expect(command.snapshot().original).toEqual(original);
+    wrong = false; await command.replay(); expect(command.snapshot().phase).toBe("succeeded"); expect(h.sent).toHaveLength(2); expect(h.sent[1]).toEqual(h.sent[0]);
+    expect(h.sent[1].payload.rework_reference).toEqual(payload.rework_reference); expect(h.sent[1].payload.rework_basis).toBe(payload.rework_basis);
+  });
   it.each(["submission", "work-order"] as const)("normal and fallback %s owners ignore caller session labels and cannot send twice", async (kind) => {
     const key = kind === "submission" ? submissionStorageKey("P", "T")! : workOrderStorageKey("P", "T")!;
     const original = kind === "submission" ? retainedSubmission() : retainedWorkOrder(); h.saved.set(key, JSON.stringify({ phase: "unknown", original }));

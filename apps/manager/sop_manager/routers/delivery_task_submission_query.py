@@ -168,5 +168,6 @@ def submission_detail(db, project, user, task_id, submission_id, *, store=None, 
     return {"project_id": project.id, "task_id": task_id, "version": version, "as_of": stamp(), "task_basis": task_basis,
         "native_boundary_digest": boundary_digest, "submission": _summary(SimpleNamespace(**dict(summary))),
         "payload": deepcopy(row.payload), "definition": public_design_snapshot(row.definition), "decision": decision_view,
+        "rework": deepcopy(row.original.get("rework")),
         "permissions": {"can_review": can_review, "can_accept": can_review and not accept_reasons,
                         "reasons": reasons + accept_reasons}}

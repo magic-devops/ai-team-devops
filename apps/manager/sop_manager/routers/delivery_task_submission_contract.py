@@ -4,17 +4,28 @@ import json
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_serializer, model_validator
 
 from .delivery_execution_contract import ExecutionSnapshot
 from .delivery_external_work_order_contract import Executor, Identity as WorkOrderIdentity
 from .delivery_issue_contract import human_text
+from .delivery_feedback_contract import FeedbackReference
 
 Digest = Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{64}$")]
 Identity = Annotated[str, StringConstraints(strict=True, min_length=1, max_length=64), AfterValidator(human_text)]
 EvidenceId = Annotated[str, StringConstraints(strict=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")]
 Text = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=2000), AfterValidator(human_text)]
 MAX_REPORT_BYTES = 48 * 1024
+
+
+def _paired_rework_schema(schema):
+    # Omission is ordinary work; explicit null is not a selected source.
+    for key in ("rework_reference", "rework_basis"):
+        field = schema["properties"][key]
+        options = [item for item in field.pop("anyOf") if item.get("type") != "null"]
+        field.update(options[0])
+        field.pop("default", None)
+    schema["dependentRequired"] = {"rework_reference": ["rework_basis"], "rework_basis": ["rework_reference"]}
 
 
 def http_link(value):
@@ -89,6 +100,8 @@ class SubmissionWorkOrderContext(Contract):
 
 
 class TaskDeliverySubmit(Contract):
+    model_config = ConfigDict(strict=True, extra="forbid", json_schema_extra=_paired_rework_schema)
+
     task_id: Identity
     task_basis: Digest
     definition_digest: Digest
@@ -99,6 +112,25 @@ class TaskDeliverySubmit(Contract):
     criteria: list[SubmissionCriterion] = Field(min_length=1, max_length=160)
     tests: list[SubmissionTest] = Field(max_length=40)
     work_order: SubmissionWorkOrderBinding | None = None
+    rework_reference: FeedbackReference | None = None
+    rework_basis: Digest | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def explicit_rework_pair(cls, value):
+        if isinstance(value, dict) and {"rework_reference", "rework_basis"}.intersection(value):
+            if value.get("rework_reference") is None or value.get("rework_basis") is None:
+                raise ValueError("Select a complete fixed rework reference and preview basis together")
+        return value
+
+    @model_serializer(mode="wrap")
+    def original_shape(self, handler):
+        values = handler(self)
+        if self.rework_reference is None:
+            # Ordinary originals and event inputs keep their prior exact shape.
+            values.pop("rework_reference", None)
+            values.pop("rework_basis", None)
+        return values
 
     @model_validator(mode="after")
     def fixed_references_and_budget(self):
@@ -206,6 +238,44 @@ class SubmissionCurrent(Contract):
     work_order: SubmissionWorkOrderContext | None
 
 
+class SubmissionRework(Contract):
+    schema: Literal["manager.submission-rework.v1"]
+    reference: FeedbackReference
+    basis: Digest
+    feedback_context: dict
+    feedback_context_sha256: Digest
+    feedback_runtime_scopes: list[Identity] = Field(max_length=1000)
+    target_work_order: SubmissionWorkOrderContext | None
+
+
+class SubmissionReworkPreviewInput(Contract):
+    rework_reference: FeedbackReference
+
+
+class SubmissionReworkDraft(Contract):
+    source: None
+    summary: Text
+    artifacts: list[SubmissionArtifact] = Field(min_length=1, max_length=40)
+    criteria: list[SubmissionCriterion] = Field(max_length=160)
+    tests: list[SubmissionTest] = Field(max_length=40)
+
+
+class SubmissionReworkPreview(Contract):
+    project_id: Identity
+    task_id: Identity
+    version: int = Field(ge=0)
+    query_generation: int | None
+    as_of: str
+    rework_reference: FeedbackReference
+    rework_basis: Digest
+    current: SubmissionCurrent
+    feedback_context: dict
+    feedback_context_sha256: Digest
+    draft: SubmissionReworkDraft
+    allowed: bool
+    reasons: list[SubmissionReason]
+
+
 class SubmissionDetail(Contract):
     project_id: Identity
     task_id: Identity
@@ -218,6 +288,7 @@ class SubmissionDetail(Contract):
     definition: ExecutionSnapshot
     decision: SubmissionDecision | None
     permissions: SubmissionPermissions
+    rework: SubmissionRework | None = None
 
 
 class SubmissionPage(Contract):

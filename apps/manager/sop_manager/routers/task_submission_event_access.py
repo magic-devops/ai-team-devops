@@ -38,6 +38,35 @@ def plan_submission_event(db, project, event):
                     or any(not isinstance(value, str) or not value or len(value) > 64 for value in original_scopes)):
                 return {"kind": PLAN_KIND, "unavailable": True}
             scopes.update(original_scopes)
+        if isinstance(report, dict) and {"rework_reference", "rework_basis"}.intersection(report):
+            from sqlalchemy import select
+            from .delivery_feedback_contract import FeedbackReference
+            from .delivery_external_work_order_model import DeliveryExternalWorkOrder as Order
+            from .delivery_external_work_order_service import byte_size
+            from .delivery_task_submission_model import DeliveryTaskSubmission as Submission, DeliveryTaskSubmissionDecision as Decision
+            from .delivery_feedback_service import _scopes
+
+            selected = FeedbackReference.model_validate(report.get("rework_reference"))
+            basis = report.get("rework_basis")
+            if not isinstance(basis, str) or len(basis) != 64 or any(char not in "0123456789abcdef" for char in basis):
+                return {"kind": PLAN_KIND, "unavailable": True}
+            source = db.scalar(select(Submission.id).join(Decision, Decision.submission_id == Submission.id).where(
+                Submission.tenant_id == project.tenant_id, Submission.project_id == project.id, Submission.task_id == task_id,
+                Submission.id == selected.submission_id, Submission.submission_digest == selected.submission_digest,
+                Decision.tenant_id == project.tenant_id, Decision.project_id == project.id, Decision.task_id == task_id,
+                Decision.id == selected.decision_id, Decision.submission_digest == selected.submission_digest,
+                Decision.decision == "request_changes"))
+            if source is None:
+                return {"kind": PLAN_KIND, "unavailable": True}
+            scopes.update(submission_runtime_scopes(db, project, source))
+            # The preview's current W may be displayed without a new explicit
+            # stop binding. Retain its opaque scope at intake in that case too.
+            predicate = (Order.tenant_id == project.tenant_id, Order.project_id == project.id, Order.active_task_id == task_id)
+            size = db.scalar(select(byte_size(db, Order.runtime_scopes)).where(*predicate))
+            if size is not None:
+                if size > 1024 * 1024:
+                    return {"kind": PLAN_KIND, "unavailable": True}
+                scopes.update(_scopes(db.scalar(select(Order.runtime_scopes).where(*predicate))))
         return {"kind": PLAN_KIND, "runtime_scopes": sorted(scopes)}
     except (HTTPException, ValueError, TypeError):
         # Durable intake still retains an invalid/unavailable report. No guessed
