@@ -13,7 +13,8 @@ export type ExecutorSnapshot = {
   agent_title: string; profile_digest: string; provider: string; recorded_at: string; recorded_by: string;
 };
 export type MemberRuntimeState = {
-  member_id: string; binding_basis: string; generation: number; binding: RuntimeBinding | null;
+  member_id: string; member_name: string | null; member_kind: "agent" | "tool" | null;
+  binding_basis: string; generation: number; binding: RuntimeBinding | null;
   status: "unbound" | "current" | "stale" | "unavailable";
   reasons: { code: string; message: string }[];
   permissions: { can_bind: boolean; can_unbind: boolean };

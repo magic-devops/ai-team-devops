@@ -31,8 +31,7 @@ export function dispatchChoices(facts: TaskDispatchFacts): DispatchChoice[] {
   });
   const options: DispatchChoice[] = [];
   for (const row of bindings?.members || []) {
-    const member = data.members.find((item) => item.id === row.member_id);
-    if (!row.binding && member?.kind !== "agent") continue;
+    if (!row.binding && row.member_kind !== "agent" && row.member_kind !== "tool") continue;
     const reasons = [...common], binding = row.binding;
     if (row.status !== "current" || !binding) reasons.push(...(row.reasons?.length ? row.reasons : [reason("executor_unbound")]));
     const workspace = targets?.workspaces.find((item) => item.id === binding?.workspace_id);
@@ -40,7 +39,7 @@ export function dispatchChoices(facts: TaskDispatchFacts): DispatchChoice[] {
     const availableTargets = workspace && agent ? places(workspace).filter((target) => eligible(target, "agent", agent.provider)) : [];
     if (binding && (!workspace || !agent)) reasons.push(reason("dispatch_profile_changed"));
     if (workspace && agent && !availableTargets.length) reasons.push(...places(workspace).flatMap((target) => executionTargetProblems(target, "agent", agent.provider).map(reason)), reason("dispatch_no_targets"));
-    options.push(make("agent", row.member_id, "member", { title: member?.name || row.member_id, workspace: workspace?.name || "", profile: agent?.title || "", tool: agent?.provider || "", version: binding?.agent_version, targetCount: availableTargets.length }, reasons));
+    options.push(make("agent", row.member_id, "member", { title: row.member_name || row.member_id, workspace: workspace?.name || "", profile: agent?.title || "", tool: agent?.provider || "", version: binding?.agent_version, targetCount: availableTargets.length }, reasons));
   }
   const externalReasons = !external ? [reason("dispatch_external_unreadable")] : external.can_dispatch ? [] : external.reasons.length ? external.reasons : [reason("dispatch_external_unavailable")];
   for (const member of external?.executors || []) {

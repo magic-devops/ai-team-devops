@@ -297,7 +297,7 @@ export function ExecutionPlanEditor({
     { value: "", label: tm("direct"), disabled: false },
     ...(teamData?.members || []).map((item) => ({
       value: item.member_id,
-      label: `${members.find((member) => member.id === item.member_id)?.name || item.member_id} · ${item.member_id} · ${tm(`states.${item.status}`)}`,
+      label: `${item.member_name || members.find((member) => member.id === item.member_id)?.name || item.member_id} · ${item.member_id} · ${tm(`states.${item.status}`)}`,
       disabled: item.status !== "current" || !item.binding,
     })),
   ];

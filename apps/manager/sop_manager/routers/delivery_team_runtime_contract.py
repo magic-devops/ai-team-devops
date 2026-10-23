@@ -72,6 +72,8 @@ class RuntimeBindingPermissions(RuntimeContract):
 
 class MemberRuntimeState(RuntimeContract):
     member_id: str
+    member_name: str | None
+    member_kind: Literal["agent", "tool"] | None
     binding_basis: str
     generation: int
     binding: RuntimeBinding | None

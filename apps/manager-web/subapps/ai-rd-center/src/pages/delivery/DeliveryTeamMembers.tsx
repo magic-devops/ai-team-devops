@@ -439,7 +439,7 @@ export function DeliveryTeamMembers({
                 }
               />
             )}
-            {selected.kind === "agent" && (
+            {(selected.kind === "agent" || selected.kind === "tool") && (
               <DeliveryMemberRuntime
                 key={`${workspace.project.id}:${sessionId}:${selected.id}`}
                 member={selected}

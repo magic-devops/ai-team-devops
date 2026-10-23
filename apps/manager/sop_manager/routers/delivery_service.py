@@ -444,7 +444,7 @@ def _save_entry(data, action, body, roster, values, *, actor):
                 409,
                 {"code": "member_kind_immutable", "message": "Resource kind cannot change after creation"},
             )
-        if previous["kind"] == "agent" and previous["active"] and not body.active:
+        if previous["kind"] in {"agent", "tool"} and previous["active"] and not body.active:
             from .delivery_team_runtime import invalidate_member_runtime_binding
 
             invalidate_member_runtime_binding(data, body.id, actor=actor, reason="member_inactive")

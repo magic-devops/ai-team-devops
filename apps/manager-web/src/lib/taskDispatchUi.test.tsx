@@ -24,7 +24,7 @@ async function settle() { for (let i = 0; i < 12; i++) await Promise.resolve(); 
 const task: any = { project: { id: "P" }, version: 7, planning_basis: "f".repeat(64), permissions: { write: true }, members: [{ id: "agent:one", name: "Bound agent" }], dependencies: [], requirement: null, task: { id: "T", req_id: "", title: "Task", basis: "a".repeat(64), execution_gate: { eligible: true, reasons: [] } } };
 const target: any = { id: "local", kind: "local", can_execute: true, basis: "c".repeat(64), reason_codes: [], runtime_capabilities: ["agent", "command"], policy: { allowed_runtimes: ["agent", "command"], allowed_providers: ["codex"] }, providers: [{ id: "codex", executable_present: true }] };
 const targets: any = { project_id: "P", can_execute: true, runtime_configured: true, workspaces: [{ id: "W", name: "Workspace", agents: [{ id: "A", version: 2, title: "Profile", provider: "codex" }], local: target, devices: [] }] };
-const bindings: any = { project_id: "P", members: [{ member_id: "agent:one", status: "current", binding_basis: "b".repeat(64), binding: { workspace_id: "W", agent_id: "A", agent_version: 2 } }] };
+const bindings: any = { project_id: "P", members: [{ member_id: "agent:one", member_name: "Bound agent", member_kind: "agent", status: "current", binding_basis: "b".repeat(64), binding: { workspace_id: "W", agent_id: "A", agent_version: 2 } }] };
 const feedbackA = { submission_id: "S", submission_digest: "d".repeat(64), decision_id: "D" };
 const feedbackB = { submission_id: "S2", submission_digest: "e".repeat(64), decision_id: "D2" };
 function report(ref = feedbackA): any { return { project_id: "P", task_id: "T", submission: { id: ref.submission_id, digest: ref.submission_digest, invalidated: true }, decision: { id: ref.decision_id, decision: "request_changes" } }; }
@@ -38,10 +38,15 @@ beforeEach(() => {
   vi.mocked(readSubmissionDetail).mockReset().mockImplementation(async (_p, _t, id) => report(id === "S2" ? feedbackB : feedbackA));
   h.slots = []; h.effects = []; h.scope = "scope"; vi.mocked(fetchDeliveryTaskEditData).mockResolvedValue(structuredClone(task)); vi.mocked(fetchDeliveryTargets).mockResolvedValue(structuredClone(targets)); vi.mocked(fetchTeamRuntimeBindings).mockResolvedValue(structuredClone(bindings)); vi.mocked(readWorkOrderCurrent).mockResolvedValue({ task_id: "T", project_id: "P", can_dispatch: true, active_work_order_id: null, executors: [{ id: "agent:one", name: "Bound agent", kind: "agent", active: true, available: true }], reasons: [] } as any); });
 describe("one Task dispatch choice (source definitions only)", () => {
-  it("prefills the existing Agent editor from a real binding without posting or silently creating W", async () => {
+  for (const kind of ["agent", "tool"] as const) it(`prefills the existing editor from a real ${kind} directory binding outside task references without posting or creating W`, async () => {
+    vi.mocked(fetchDeliveryTaskEditData).mockResolvedValue({ ...structuredClone(task), members: [] });
+    const directory = structuredClone(bindings); directory.members[0].member_kind = kind;
+    directory.members[0].member_name = "Real directory identity";
+    vi.mocked(fetchTeamRuntimeBindings).mockResolvedValue(directory);
     const external = vi.fn(), queue: any = { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, locked: false, run: vi.fn() };
     const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, queueCommand: queue, onExternal: external, onSaved: vi.fn() }));
     read(); h.effects.forEach((effect) => effect()); await settle();
+    expect(nodes(read()).find((node) => node.type === TaskDispatchChoices)!.props.options).toContainEqual(expect.objectContaining({ member: "agent:one", mode: "agent", title: "Real directory identity", available: true }));
     choose(read(), "agent", "agent:one");
     await next(read());
     const editor = nodes(read()).find((node) => node.type === ExecutionPlanEditor)!;

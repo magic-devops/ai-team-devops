@@ -8,7 +8,7 @@ vi.mock("react-i18next", () => ({ useTranslation: () => ({ i18n: { language: "en
 const target = { id: "local", kind: "local", can_execute: true, reason_codes: [], runtime_capabilities: ["agent", "command"], providers: [{ id: "codex", executable_present: true }], policy: { allowed_runtimes: ["agent", "command"], allowed_providers: ["codex"] } };
 function facts(): TaskDispatchFacts { return { data: { project: { id: "P" }, permissions: { write: true }, task: { id: "T", execution_gate: { eligible: true, reasons: [] } }, members: [{ id: "agent:one", name: "Bound agent", kind: "agent" }] },
   targets: { project_id: "P", runtime_configured: true, can_execute: true, workspaces: [{ id: "W", name: "Workspace", agents: [{ id: "A", version: 2, title: "Profile", provider: "codex" }], local: structuredClone(target), devices: [] }] },
-  bindings: { project_id: "P", members: [{ member_id: "agent:one", status: "current", binding_basis: "b".repeat(64), binding: { workspace_id: "W", agent_id: "A", agent_version: 2 }, reasons: [] }] },
+  bindings: { project_id: "P", members: [{ member_id: "agent:one", member_name: "Bound agent", member_kind: "agent", status: "current", binding_basis: "b".repeat(64), binding: { workspace_id: "W", agent_id: "A", agent_version: 2 }, reasons: [] }] },
   external: { project_id: "P", task_id: "T", can_dispatch: true, active_work_order_id: null, reasons: [], executors: [{ id: "agent:one", name: "External agent", tool: "workbuddy", kind: "agent", active: true, available: true, reasons: [] }] }, failures: [] } as unknown as TaskDispatchFacts; }
 function nodes(node: ReactNode): any[] { if (Array.isArray(node)) return node.flatMap(nodes); if (!isValidElement<any>(node)) return []; return [node, ...["children", "description", "action"].flatMap((key) => nodes(node.props[key]))]; }
 describe("one explicit execution resource", () => {
@@ -18,8 +18,23 @@ describe("one explicit execution resource", () => {
     expect(options.find((row) => row.mode === "external" && row.member === "agent:one")?.available).toBe(true);
     expect(dispatchChoiceKey("agent", "agent:one")).not.toBe(dispatchChoiceKey("external", "agent:one"));
   });
-  for (const fault of ["active_order", "task_gate", "offline", "provider", "policy", "version", "binding", "runtime_read"]) it(`shows an unavailable reason before opening an editor: ${fault}`, () => {
+  it("keeps an unbound tool visible with an explicit reason and offers its pinned profile after binding", () => {
+    const f = facts(); f.data.members = [];
+    f.bindings!.members[0].member_name = "Tool outside task references";
+    f.bindings!.members[0].member_kind = "tool";
+    f.bindings!.members[0].binding = null; f.bindings!.members[0].status = "unbound";
+    f.bindings!.members[0].reasons = [{ code: "executor_unbound", message: "Associate a configuration" }];
+    const unbound = dispatchChoices(f).find((row) => row.mode === "agent" && row.member === "agent:one")!;
+    expect(unbound).toMatchObject({ available: false, targetCount: 0, title: "Tool outside task references" });
+    expect(unbound.reasons).toContainEqual(f.bindings!.members[0].reasons[0]);
+    f.bindings!.members[0] = { ...facts().bindings!.members[0], member_kind: "tool", member_name: "Tool outside task references" };
+    const bound = dispatchChoices(f).find((row) => row.mode === "agent" && row.member === "agent:one")!;
+    expect(bound).toMatchObject({ available: true, profile: "Profile", version: 2, tool: "codex", targetCount: 1 });
+    expect(dispatchChoices(f).find((row) => row.mode === "external" && row.member === "agent:one")).toBeDefined();
+  });
+  for (const kind of ["agent", "tool"] as const) for (const fault of ["active_order", "task_gate", "offline", "provider", "policy", "version", "binding", "runtime_read"]) it(`shows an unavailable reason before opening an editor: ${kind}/${fault}`, () => {
     const f = facts();
+    f.data.members = []; f.bindings!.members[0].member_kind = kind;
     if (fault === "active_order") f.external!.active_work_order_id = "W-active";
     if (fault === "task_gate") f.data.task.execution_gate = { eligible: false, reasons: [{ code: "blocked", message: "Resolve dependency first" }] };
     if (fault === "offline") { f.targets!.workspaces[0].local.can_execute = false; f.targets!.workspaces[0].local.reason_codes = ["worker_offline"]; }
@@ -57,7 +72,7 @@ describe("one explicit execution resource", () => {
     const f = facts(); f.external!.executors[0].name = "Bound agent";
     const tree = TaskDispatchChoices({ options: dispatchChoices(f), value: null, search: "", limit: 40, disabled: false, onSearch: vi.fn(), onChoose: vi.fn(), onMore: vi.fn() });
     const radios = nodes(tree).filter((node) => node.type === Radio && node.props["aria-label"].startsWith("Bound agent"));
-    expect(radios.map((node) => node.props["aria-label"])).toEqual(["Bound agent · Platform agent", "Bound agent · External collaboration"]);
+    expect(radios.map((node) => node.props["aria-label"])).toEqual(["Bound agent · Platform execution", "Bound agent · External collaboration"]);
     expect(nodes(tree).find((node) => node.type === Radio.Group).props.role).toBe("radiogroup");
   });
 });

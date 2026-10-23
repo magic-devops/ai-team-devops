@@ -196,12 +196,8 @@ def _validate_configuration(db, project, user, state, entry, store, execution, p
 
     assert_execution_feedback_access(db, project, user, entry, store=store)
     require_dependencies(db, project, state, entry["task_id"])
-    if entry.get("executor_member_id"):
-        from .delivery_team_runtime import resolve_executor_binding
-
-        resolve_executor_binding(db, project, state, user, store,
-            member_id=entry["executor_member_id"], expected_basis=entry["executor_binding_basis"],
-            workspace_id=entry["workspace_id"], agent_id=entry["agent_id"], agent_version=entry["agent_version"])
+    # A persisted run is past the affiliation handoff boundary. Validate its
+    # fixed profiles and target; changing the team association affects new plans.
     with store.engine.connect() as conn:
         validate_bound_profiles(store, conn, principal, entry["workspace_id"], run["data"].get("agent_bindings", {}))
     snapshot = run["data"].get("target_snapshot")

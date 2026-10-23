@@ -30,7 +30,7 @@ export function DeliveryMemberRuntime({
   const query = useQuery({
     queryKey: key,
     queryFn: ({ signal }) => fetchTeamRuntimeBindings(projectId, signal),
-    enabled: member.kind === "agent",
+    enabled: member.kind === "agent" || member.kind === "tool",
     retry: false,
     gcTime: 0,
     refetchInterval: 15000,
@@ -38,7 +38,7 @@ export function DeliveryMemberRuntime({
   const [draft, setDraft] = useState<RuntimeBindingDraft>();
   const [initialCatalogue, setInitialCatalogue] = useState(query.data);
   const row = query.data?.members.find((item) => item.member_id === member.id);
-  if (member.kind !== "agent") return null;
+  if (member.kind !== "agent" && member.kind !== "tool") return null;
   const edit = (operation: RuntimeBindingDraft["operation"]) => {
     if (!query.data) return;
     setInitialCatalogue(structuredClone(query.data));
@@ -64,6 +64,7 @@ export function DeliveryMemberRuntime({
         </Button>
       </div>
       <p className="runtime-help">{tr("intro")}</p>
+      {member.kind === "tool" && <p className="runtime-help">{tr("toolHint")}</p>}
       {query.isPending && (
         <Skeleton active title={false} paragraph={{ rows: 2 }} />
       )}

@@ -5,7 +5,7 @@ import { adoptExecutionDraft, openExecutionDraft, executionPayload, type Deliver
 import { commandDraft } from "./executionCommands";
 import type { DeliveryTaskData } from "./delivery";
 vi.mock("./http", () => ({ request: vi.fn() }));
-const member: MemberRuntimeState = { member_id: "agent:member", binding_basis: "binding-2", generation: 2, status: "current", permissions: { can_bind: true, can_unbind: true }, reasons: [], binding: { workspace_id: "runtime", agent_id: "profile", agent_version: 2, profile_digest: "digest", source: { workspace_name: "Runtime", agent_title: "Profile", provider: "codex" }, bound_by: "user:lead", bound_at: "2026-10-17T00:00:00Z" } };
+const member: MemberRuntimeState = { member_id: "agent:member", member_name: "Executor", member_kind: "agent", binding_basis: "binding-2", generation: 2, status: "current", permissions: { can_bind: true, can_unbind: true }, reasons: [], binding: { workspace_id: "runtime", agent_id: "profile", agent_version: 2, profile_digest: "digest", source: { workspace_name: "Runtime", agent_title: "Profile", provider: "codex" }, bound_by: "user:lead", bound_at: "2026-10-17T00:00:00Z" } };
 const catalogue: TeamRuntimeBindings = { project_id: "project", version: 7, as_of: "", runtime_configured: true, members: [member], workspaces: [{ id: "runtime", name: "Runtime", agents: [{ id: "profile", version: 2, title: "Profile", provider: "codex" }] }] };
 const workspace = { project: { id: "project" }, version: 7, task: { id: "T-one", basis: "task", owner_id: "user:owner", execution_gate: { eligible: true } } } as unknown as DeliveryTaskData;
 beforeEach(() => vi.mocked(request).mockClear());

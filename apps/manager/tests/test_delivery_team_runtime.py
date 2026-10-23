@@ -23,8 +23,8 @@ def module():
     return import_module("sop_manager.routers.delivery_team_runtime")
 
 
-@pytest.fixture
-def bindings(tmp_path):
+@pytest.fixture(params=["agent", "tool"])
+def bindings(tmp_path, request):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     sql_models.Base.metadata.create_all(engine)
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
@@ -106,7 +106,7 @@ def bindings(tmp_path):
                 {
                     "id": "member-a",
                     "name": "Same label",
-                    "kind": "agent",
+                    "kind": request.param,
                     "active": True,
                     "role": "Implementer",
                     "tool": "codex",
@@ -222,12 +222,52 @@ def test_same_name_members_share_a_profile_without_merging_identity(bindings):
     assert first["binding_basis"] != second["binding_basis"]
 
 
-@pytest.mark.parametrize("member_id", ["user:config", "tool", "inactive", "missing"])
-def test_only_available_registered_agents_can_bind(bindings, member_id):
+@pytest.mark.parametrize("member_id", ["user:config", "inactive", "missing"])
+def test_only_available_registered_executors_can_bind(bindings, member_id):
     with pytest.raises(HTTPException) as error:
         bind(bindings, member_id=member_id)
     assert error.value.status_code in {409, 422}
     assert "member_runtime_bindings" not in bindings.state
+
+
+def test_tool_catalogue_and_binding_pin_real_profile_without_changing_permissions(bindings):
+    before = deepcopy(bindings.state)
+    unbound = next(row for row in view(bindings)["members"] if row["member_id"] == "tool")
+    assert unbound["member_name"] == "Tool" and unbound["member_kind"] == "tool"
+    assert unbound["status"] == "unbound" and unbound["permissions"]["can_bind"]
+    assert bindings.state == before
+    principal = runtime_identity(bindings.users["config"], bindings.store)
+    bind(bindings, member_id="tool")
+    row = next(row for row in view(bindings)["members"] if row["member_id"] == "tool")
+    assert row["status"] == "current" and row["generation"] == 1
+    snapshot = resolve(bindings, member_id="tool")
+    assert snapshot["member_id"] == "tool" and snapshot["member_name"] == "Tool"
+    assert snapshot["profile_digest"] == digest(bindings.agents[0]["data"])
+    assert "instructions" not in str(view(bindings))
+    assert runtime_identity(bindings.users["config"], bindings.store) == principal
+    assert "execute" not in principal.permissions
+
+
+@pytest.mark.parametrize("kind,active,code", [
+    ("human", True, "executor_member_kind_unsupported"),
+    ("unknown", True, "executor_member_kind_unsupported"),
+    ("tool", False, "executor_member_inactive"),
+])
+def test_humans_unsupported_kinds_and_inactive_tools_cannot_bind(bindings, kind, active, code):
+    bindings.state["members"].append({"id": "candidate", "kind": kind, "active": active})
+    before = deepcopy(bindings.state)
+    with pytest.raises(HTTPException) as error:
+        bind(bindings, member_id="candidate")
+    assert error.value.status_code == 422 and error.value.detail["code"] == code
+    assert bindings.state == before
+
+
+def test_directory_identity_is_null_for_a_removed_member_and_does_not_invent_a_label(bindings):
+    bind(bindings, member_id="tool")
+    bindings.state["members"] = [row for row in bindings.state["members"] if row["id"] != "tool"]
+    row = next(row for row in view(bindings)["members"] if row["member_id"] == "tool")
+    assert row["member_name"] is None and row["member_kind"] is None
+    assert row["status"] == "unavailable" and row["reasons"][0]["code"] == "executor_member_missing"
 
 
 def test_binding_requires_project_configuration_authority(bindings):

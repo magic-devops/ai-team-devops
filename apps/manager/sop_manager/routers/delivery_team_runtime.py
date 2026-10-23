@@ -1,4 +1,4 @@
-"""Explicit project Agent associations with real, immutable runtime profiles.
+"""Explicit project Agent/Tool associations with real, immutable runtime profiles.
 
 These records describe execution affiliation. They do not grant workspace
 membership, runtime permissions or authority over the business task owner.
@@ -60,11 +60,11 @@ def _member(data, member_id):
 
 def _member_reasons(data, member_id):
     member = _member(data, member_id)
-    if member_id.startswith("user:") or member and member.get("kind") != "agent":
+    if member_id.startswith("user:") or member and member.get("kind") not in {"agent", "tool"}:
         return [
             _reason(
-                "executor_member_not_agent",
-                "Only registered Agent members can be associated with execution profiles.",
+                "executor_member_kind_unsupported",
+                "Only registered Agent or Tool members can be associated with execution profiles.",
             )
         ]
     if member is None:
@@ -319,10 +319,12 @@ def runtime_bindings_view(db, project, data, user, store, *, can_configure, vers
     member_ids = {
         item["id"]
         for item in data.get("members", [])
-        if isinstance(item, dict) and item.get("kind") == "agent" and isinstance(item.get("id"), str)
+        if isinstance(item, dict) and item.get("kind") in {"agent", "tool"} and isinstance(item.get("id"), str)
     } | set(_records(data))
     members = []
     for member_id in sorted(member_ids):
+        member = _member(data, member_id)
+        supported = member is not None and member.get("kind") in {"agent", "tool"}
         record = _record(data, member_id)
         binding = _binding(record)
         reasons = _member_reasons(data, member_id)
@@ -350,6 +352,8 @@ def runtime_bindings_view(db, project, data, user, store, *, can_configure, vers
         members.append(
             {
                 "member_id": member_id,
+                "member_name": member.get("name") if supported else None,
+                "member_kind": member["kind"] if supported else None,
                 "binding_basis": binding_basis(project, data, member_id),
                 "generation": _generation(record),
                 "binding": deepcopy(binding),

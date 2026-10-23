@@ -5,6 +5,7 @@ import { DeliveryTeamMembers } from "../../subapps/ai-rd-center/src/pages/delive
 import { parseSchedulingRoute } from "./deliveryScheduling";
 import type { DeliveryDisplayContext } from "./delivery";
 import { useDrawerIdentity } from "./useDrawerIdentity";
+import { DeliveryMemberRuntime } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryMemberRuntime";
 const hooks = vi.hoisted(() => ({ state: [] as unknown[], next: 0, effects: [] as (() => void)[] }));
 vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>("react"),
   useState: (initial: unknown) => {
@@ -16,7 +17,7 @@ vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
-  const members = queryKey[1] === "project-a" ? [{ id: "agent:one", name: "Visible agent", kind: "agent", active: true }] : [];
+  const members = queryKey[1] === "project-a" ? [{ id: "agent:one", name: "Visible agent", kind: "agent", active: true }, { id: "tool:one", name: "Visible tool", kind: "tool", active: true }] : [];
   const selected = queryKey[0] === "delivery-member-exact" ? members.filter((member) => member.id === queryKey[3]) : queryKey[0] === "delivery-members-page" ? members : [];
   return { data: { items: selected.map((data) => ({ id: data.id, data })), total: selected.length, next_cursor: null }, isPending: false, isError: false };
 } }));
@@ -45,6 +46,15 @@ function taskIdentity(scope: string, id: string) {
   return result;
 }
 describe("controlled drawer closing identity", () => {
+  it("mounts the same runtime association panel for a selected tool identity", () => {
+    const drawer = memberDrawer("tool:one");
+    function panel(node: ReactNode): any {
+      if (Array.isArray(node)) return node.map(panel).find(Boolean);
+      if (!isValidElement<any>(node)) return undefined;
+      return node.type === DeliveryMemberRuntime ? node.props : panel(node.props.children);
+    }
+    expect(panel(drawer.children)).toMatchObject({ member: { id: "tool:one", kind: "tool" }, projectId: "project-a", sessionId: "test" });
+  });
   it("keeps only the outgoing member content until the close animation completes", () => {
     expect(memberDrawer("agent:one").open).toBe(true);
     const closing = memberDrawer("");
