@@ -2277,22 +2277,12 @@ export const api = {
     request<any>("/api/v1/ops-center/self-heal", { method: "POST", body: JSON.stringify(body) }),
   opsSelfHealUpdate: (id: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
-  opsSelfHealApply: (id: string) =>
-    request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}/apply`, { method: "POST" }),
   opsSelfHealEvaluate: (body: { signals?: Record<string, unknown>; persist?: boolean }) =>
     request<any>("/api/v1/ops-center/self-heal/evaluate", { method: "POST", body: JSON.stringify(body) }),
   opsSelfHealEvaluations: (limit = 30) =>
     request<any>(`/api/v1/ops-center/self-heal/evaluations?limit=${encodeURIComponent(String(limit))}`),
   opsSelfHealActions: (state = "", limit = 50) =>
     request<any>(`/api/v1/ops-center/self-heal/actions?state=${encodeURIComponent(state)}&limit=${encodeURIComponent(String(limit))}`),
-  opsSelfHealActionApprove: (id: string, body: { approver?: string; note?: string }) =>
-    request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/approve`, { method: "POST", body: JSON.stringify(body) }),
-  opsSelfHealActionApply: (id: string, body: { operator?: string; result?: Record<string, unknown> }) =>
-    request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/apply`, { method: "POST", body: JSON.stringify(body) }),
-  opsSelfHealActionVerify: (id: string, body: { verifier?: string; verification?: Record<string, unknown> }) =>
-    request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(body) }),
-  opsSelfHealActionRollback: (id: string, body: { operator?: string; evidence?: Record<string, unknown> }) =>
-    request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/rollback`, { method: "POST", body: JSON.stringify(body) }),
   opsSelfHealTasks: (body: { signals?: Record<string, unknown>; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/ops-center/self-heal/tasks", { method: "POST", body: JSON.stringify(body) }),
   opsCenterImBriefing: (body: { channels?: string[]; dry_run?: boolean }) =>

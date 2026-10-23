@@ -183,28 +183,19 @@ describe("OpsCenter workbench UX contract", () => {
     expect(selfHealSource).toContain("createSh.mutate()");
     expect(selfHealSource).toContain("evaluateSh.mutate()");
     expect(selfHealSource).toContain("createHealTasks.mutate(true)");
-    expect(selfHealSource).toContain("createHealTasks.mutate(false)");
+    expect(selfHealSource).not.toContain("createHealTasks.mutate(false)");
     expect(selfHealSource).not.toContain("<input className=\"input-base w-full\" placeholder=\"触发条件 * (如 cpu > 90)\"");
     expect(selfHealSource).not.toContain("<textarea\n                  className=\"input-base min-h-32 w-full font-mono text-xs\"");
   });
 
-  it("keeps self-heal guarded action handling in a focused drawer flow", () => {
-    expect(source).toContain("selfHealActionDrawerOpen");
+  it("uses the fixed-source canonical intake instead of manual execution success", () => {
     expect(source).toContain("selectedHealActionId");
-    expect(source).toContain("selectedHealAction");
-    expect(source).toContain("OpsCenterSelfHealPanel");
-    expect(source).not.toContain("selfHealActionFocusedDrawer");
-    expect(selfHealSource).toContain("selfHealActionFocusedDrawer");
-    expect(selfHealSource).toContain("处置自愈护栏动作");
-    expect(selfHealSource).toContain("处理动作");
-    expect(selfHealSource).toContain("actionStepIndex");
-    expect(selfHealSource).toContain("approveAction.mutate(selectedHealAction.id)");
-    expect(selfHealSource).toContain("applyAction.mutate(selectedHealAction.id)");
-    expect(selfHealSource).toContain("verifyAction.mutate(selectedHealAction.id)");
-    expect(selfHealSource).toContain("rollbackAction.mutate(selectedHealAction.id)");
-    expect(selfHealSource).not.toContain("onClick={() => approveAction.mutate(item.id)}");
-    expect(selfHealSource).not.toContain("onClick={() => applyAction.mutate(item.id)}");
-    expect(selfHealSource).not.toContain("onClick={() => verifyAction.mutate(item.id)}");
-    expect(selfHealSource).not.toContain("onClick={() => rollbackAction.mutate(item.id)}");
+    expect(selfHealSource).toContain("OpsRemediationIntake");
+    expect(selfHealSource).toContain("copy.reported");
+    expect(selfHealSource).toContain('"#/dev-flow?view=releases"');
+    for (const retired of ["opsSelfHealApply", "opsSelfHealActionApply", "opsSelfHealActionVerify", "opsSelfHealActionRollback"]) expect(source).not.toContain(retired);
+    expect(selfHealSource).not.toContain("actionStepIndex");
+    expect(selfHealSource).not.toContain("verifyAction.mutate");
+    expect(selfHealSource).not.toContain("rollbackAction.mutate");
   });
 });

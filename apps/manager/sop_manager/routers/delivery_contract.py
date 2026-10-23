@@ -36,6 +36,7 @@ from .delivery_scheduling_contract import (
 from .delivery_source_contract import SOURCE_ACTIONS, DiscussionSourceReference
 from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
 from .project_lifecycle_contract import ProjectLifecycleCommand
+from .ops_remediation_contract import OpsIntakeInput
 
 STAGES = [
     {"id": "intake", "artifact": "", "route": "#/requirements/intake"},
@@ -109,6 +110,7 @@ class Command(Input):
         "stage.advance",
         "stage.reopen",
         "issue.create",
+        "issue.ops.intake",
         "sync.record.apply",
         "issue.promote",
         "issue.diagnosis.adopt",
@@ -750,6 +752,7 @@ class SyncRecordApply(Input):
 
 
 PAYLOADS = {
+    "issue.ops.intake": OpsIntakeInput,
     "issue.create": IssueCreateCommand,
     "sync.record.apply": SyncRecordApply,
     "project.lifecycle": ProjectLifecycleCommand,

@@ -56,6 +56,7 @@ from .delivery_execution_runtime_contract import (
 )
 from .delivery_issue_contract import DiagnosisHistory, DiagnosisView, IssueDetail, IssueDiagnosisGenerate
 from .delivery_issue_origin_contract import IssueOriginDetail, IssueOrigins
+from .ops_remediation_contract import OpsIntakeInput, OpsIntakeView
 from .delivery_progress_contract import (
     ComparisonKind,
     ProgressBaselineMetadataResponse,
@@ -1320,6 +1321,20 @@ def team_runtime_bindings(
     )
 
 
+@router.get("/ops-actions/{source_id}/intake", response_model=OpsIntakeView)
+def ops_action_intake(
+    source_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .ops_remediation import intake_view
+
+    project = _project(db, user, project_id)
+    version = db.scalar(select(DeliveryWorkspace.version).where(DeliveryWorkspace.project_id == project.id, DeliveryWorkspace.tenant_id == project.tenant_id)) or 0
+    return intake_view(db, project, {}, source_id, version=version, can_write=_permissions(db, user, project)["write"])
+
+
 @router.get("/execution-targets", response_model=ExecutionTargetsResponse)
 def execution_targets(
     request: Request,
@@ -1863,6 +1878,9 @@ def project_lifecycle_preview(
     "x-delivery-command-contracts": {
         **command_openapi_contracts()["x-delivery-command-contracts"],
         **submission_openapi_contracts()["x-delivery-command-contracts"],
+        "issue.ops.intake": {"payload": OpsIntakeInput.model_json_schema(),
+            "result_semantics": "one_canonical_issue_with_fixed_reported_source",
+            "source_path": "/api/v1/delivery/ops-actions/{source_id}/intake"},
     },
 })
 def execute(
@@ -2177,6 +2195,10 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
 
 
 def _apply(db, project, user, data, action, payload, request, *, command_key="", design_prepared=None):
+    if action == "issue.ops.intake":
+        from .ops_remediation import apply_intake
+
+        return apply_intake(db, project, user, data, payload)
     if action.startswith("work_order."):
         from .delivery_external_work_order_service import apply_work_order
 

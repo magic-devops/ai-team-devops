@@ -81,7 +81,7 @@ class EvidenceFact(IssueContract):
 
 class EvidenceItem(IssueContract):
     id: Identity
-    kind: Literal["issue", "task", "submission", "execution", "deployment", "node", "probe", "event"]
+    kind: Literal["issue", "task", "submission", "execution", "deployment", "node", "probe", "event", "ops"]
     label: str
     status: str | None = None
     summary: str

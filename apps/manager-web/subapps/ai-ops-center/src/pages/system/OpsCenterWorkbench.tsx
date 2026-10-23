@@ -198,7 +198,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
   const [selfHealSignalDrawerOpen, setSelfHealSignalDrawerOpen] = useState(false);
   const [healResult, setHealResult] = useState<any>(null);
   const [healTasksResult, setHealTasksResult] = useState<any>(null);
-  const [healActionResult, setHealActionResult] = useState<any>(null);
   const [selfHealActionDrawerOpen, setSelfHealActionDrawerOpen] = useState(false);
   const [selectedHealActionId, setSelectedHealActionId] = useState("");
   const [imResult, setImResult] = useState<any>(null);
@@ -229,9 +228,9 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
     queryFn: () => api.opsRunbookEvidence({ runbook_id: selectedRunbookId || undefined, limit: 100 }),
     enabled: authed && tab === "runbooks",
   });
-  const shQ = useQuery({ queryKey: ["opsSelfHeal"], queryFn: api.opsSelfHeal, enabled: authed && tab === "self-heal" });
-  const evalQ = useQuery({ queryKey: ["opsSelfHealEvaluations"], queryFn: () => api.opsSelfHealEvaluations(20), enabled: authed && tab === "self-heal" });
-  const actionsQ = useQuery({ queryKey: ["opsSelfHealActions"], queryFn: () => api.opsSelfHealActions("", 50), enabled: authed && tab === "self-heal" });
+  const shQ = useQuery({ queryKey: ["opsSelfHeal", projectId, getSessionRevision()], queryFn: api.opsSelfHeal, enabled: authed && Boolean(projectId) && tab === "self-heal" });
+  const evalQ = useQuery({ queryKey: ["opsSelfHealEvaluations", projectId, getSessionRevision()], queryFn: () => api.opsSelfHealEvaluations(20), enabled: authed && Boolean(projectId) && tab === "self-heal" });
+  const actionsQ = useQuery({ queryKey: ["opsSelfHealActions", projectId, getSessionRevision()], queryFn: () => api.opsSelfHealActions("", 50), enabled: authed && Boolean(projectId) && tab === "self-heal" });
   const channelsQ = useQuery({ queryKey: ["notifyChannels"], queryFn: api.notifyChannels, enabled: authed });
   const enabledChannels = useMemo(() => (channelsQ.data ?? []).filter((ch: any) => ch.enabled), [channelsQ.data]);
   const latestStrategyCompare = alertStrategyCompareResult ?? alertStrategyCompareRunsQ.data?.items?.[0] ?? null;
@@ -670,16 +669,12 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
       setShForm({ trigger_condition: "", action: "", enabled: true });
     },
   });
-  const applySh = useMutation({
-    mutationFn: (id: string) => api.opsSelfHealApply(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["opsSelfHeal"] }),
-  });
+
   const evaluateSh = useMutation({
     mutationFn: () => api.opsSelfHealEvaluate({ signals: parseSignals(signalText), persist: true }),
     onSuccess: (data) => {
       setHealResult(data);
       setHealTasksResult(null);
-      setHealActionResult(null);
       void qc.invalidateQueries({ queryKey: ["opsSelfHealEvaluations"] });
       void qc.invalidateQueries({ queryKey: ["opsSelfHealActions"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
@@ -706,39 +701,10 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
     mutationFn: (id: string) => api.opsSelfHealDelete(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["opsSelfHeal"] }),
   });
-  const approveAction = useMutation({
-    mutationFn: (id: string) => api.opsSelfHealActionApprove(id, { approver: "Ops Lead", note: "控制台审批通过" }),
-    onSuccess: (data) => {
-      setHealActionResult(data);
-      void qc.invalidateQueries({ queryKey: ["opsSelfHealActions"] });
-      void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
-    },
-  });
-  const applyAction = useMutation({
-    mutationFn: (id: string) => api.opsSelfHealActionApply(id, { operator: "Ops Agent", result: { command_exit_code: 0, source: "ops-center-workbench" } }),
-    onSuccess: (data) => {
-      setHealActionResult(data);
-      void qc.invalidateQueries({ queryKey: ["opsSelfHealActions"] });
-      void qc.invalidateQueries({ queryKey: ["opsSelfHeal"] });
-      void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
-    },
-  });
-  const verifyAction = useMutation({
-    mutationFn: (id: string) => api.opsSelfHealActionVerify(id, { verifier: "SRE", verification: { status: "healthy", source: "ops-center-workbench" } }),
-    onSuccess: (data) => {
-      setHealActionResult(data);
-      void qc.invalidateQueries({ queryKey: ["opsSelfHealActions"] });
-      void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
-    },
-  });
-  const rollbackAction = useMutation({
-    mutationFn: (id: string) => api.opsSelfHealActionRollback(id, { operator: "Ops Lead", evidence: { reason: "人工回滚演练", command_exit_code: 0, source: "ops-center-workbench" } }),
-    onSuccess: (data) => {
-      setHealActionResult(data);
-      void qc.invalidateQueries({ queryKey: ["opsSelfHealActions"] });
-      void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
-    },
-  });
+
+
+
+
   const imBriefing = useMutation({
     mutationFn: (dryRun: boolean) => api.opsCenterImBriefing({ dry_run: dryRun, channels: imChannels }),
     onSuccess: (data, dryRun) => {
@@ -751,10 +717,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
   });
 
   const selfHealActions = useMemo(() => actionsQ.data?.items ?? [], [actionsQ.data?.items]);
-  const selectedHealAction = useMemo(
-    () => selfHealActions.find((item: any) => String(item.id) === selectedHealActionId) ?? null,
-    [selectedHealActionId, selfHealActions],
-  );
+
 
   if (!authed) return <NeedLogin />;
 
@@ -1035,6 +998,8 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
         {tab === "self-heal" && (
           <Suspense fallback={<div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">加载自愈治理...</div>}>
             <OpsCenterSelfHealPanel
+              selectedHealActionId={selectedHealActionId}
+              projectId={projectId || ""}
               shQ={shQ}
               evalQ={evalQ}
               actionsQ={actionsQ}
@@ -1048,22 +1013,15 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
               setSelfHealSignalDrawerOpen={setSelfHealSignalDrawerOpen}
               healResult={healResult}
               healTasksResult={healTasksResult}
-              healActionResult={healActionResult}
               selfHealActionDrawerOpen={selfHealActionDrawerOpen}
               setSelfHealActionDrawerOpen={setSelfHealActionDrawerOpen}
               setSelectedHealActionId={setSelectedHealActionId}
               createSh={createSh}
               evaluateSh={evaluateSh}
               createHealTasks={createHealTasks}
-              applySh={applySh}
               toggleSh={toggleSh}
               deleteSh={deleteSh}
-              approveAction={approveAction}
-              applyAction={applyAction}
-              verifyAction={verifyAction}
-              rollbackAction={rollbackAction}
               selfHealActions={selfHealActions}
-              selectedHealAction={selectedHealAction}
             />
           </Suspense>
         )}

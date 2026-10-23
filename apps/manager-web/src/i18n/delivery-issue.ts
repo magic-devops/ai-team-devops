@@ -810,6 +810,7 @@ const reasonRows = [
   ],
 ];
 const stateRows = [
+  ["reported_only", "Reported only", "仅来源自报", "報告情報のみ"],
   [
     "processed",
     "Business operation processed",
@@ -1005,6 +1006,7 @@ function withDetails(base: typeof en, language: 0 | 1 | 2) {
     kinds: {
       ...base.kinds,
       event: ["Tool event", "工具事件", "ツールイベント"][language],
+      ops: ["Operational suggestion", "运维建议", "運用提案"][language],
     },
     sources: {
       ...base.sources,
@@ -1023,6 +1025,7 @@ function withDetails(base: typeof en, language: 0 | 1 | 2) {
     },
     summaries: {
       ...base.summaries,
+      ops_suggestion_not_execution_proof: ["Fixed reported operational suggestion; execution and health are not verified by this record.", "固定的运维建议与自报信息，此记录不证明执行或健康验证通过。", "固定した運用提案と報告情報です。この記録は実行や正常性検証の証明にはなりません。"][language],
       event_business_effect: [
         "Verified historical business operation. Processing does not mean acceptance or problem closure.",
         "已核验的历史业务操作，已处理不等于验收或问题关闭。",
@@ -1033,6 +1036,10 @@ function withDetails(base: typeof en, language: 0 | 1 | 2) {
       ...base.facts,
       ...Object.fromEntries(
         [
+          ["source_id", "Operational source ID", "运维来源标识", "運用の出所 ID"],
+          ["source_digest", "Fixed source digest", "固定来源摘要", "固定した出所のダイジェスト"],
+          ["recorded_state", "Reported state", "来源自报状态", "報告された状態"],
+          ["created_by", "Recorded by", "记录人", "記録者"],
           ["operation", "Actual operation", "实际操作", "実際の操作"],
           [
             "effect_kind",

@@ -50,7 +50,8 @@ export type IssueEvidence = {
     | "deployment"
     | "node"
     | "probe"
-    | "event";
+    | "event"
+    | "ops";
   label: string;
   status: string | null;
   summary: string;

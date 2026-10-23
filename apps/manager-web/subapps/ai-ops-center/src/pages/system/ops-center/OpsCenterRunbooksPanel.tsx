@@ -52,7 +52,7 @@ export function OpsCenterRunbooksPanel({
                 disabled={backfillRunbookEvidence.isPending}
                 className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm hover:bg-[var(--surface-muted)] disabled:opacity-50"
               >
-                {backfillRunbookEvidence.isPending ? "回填中..." : "自动回填证据"}
+                {backfillRunbookEvidence.isPending ? "归集中..." : "归集处置记录"}
               </button>
               <button
                 onClick={() => { setRbForm({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" }); setRunbookEditorDrawerOpen(true); }}
@@ -68,8 +68,8 @@ export function OpsCenterRunbooksPanel({
                 ["版本数", rbQ.data?.summary?.versions ?? 0],
                 ["激活版本", rbQ.data?.summary?.active_versions ?? 0],
                 ["治理健康", rbQ.data?.summary?.health_score ?? 100],
-                ["执行证据", rbEvidenceQ.data?.summary?.records ?? 0],
-                ["证据覆盖", `${rbEvidenceQ.data?.summary?.coverage_score ?? 100}%`],
+                ["处置记录", rbEvidenceQ.data?.summary?.records ?? 0],
+                ["记录覆盖", `${rbEvidenceQ.data?.summary?.coverage_score ?? 0}%`],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                   <p className="text-[11px] uppercase text-[var(--muted)]">{label}</p>
@@ -170,7 +170,7 @@ export function OpsCenterRunbooksPanel({
                     {r.tags?.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{r.tags.map((t: string) => <span key={t} className="rounded bg-[var(--surface)] px-1.5 py-0.5 text-xs text-[var(--brand)]">{t}</span>)}</div>}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button onClick={() => { setSelectedRunbookId(r.id); setRunbookDiffResult(null); }} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs">版本治理</button>
-                      <button onClick={() => backfillRunbookEvidence.mutate(r.id)} disabled={backfillRunbookEvidence.isPending} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs disabled:opacity-50">回填证据</button>
+                      <button onClick={() => backfillRunbookEvidence.mutate(r.id)} disabled={backfillRunbookEvidence.isPending} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs disabled:opacity-50">归集记录</button>
                       <button
                         onClick={() => {
                           setRbForm({ id: r.id, name: r.name || "", steps: (r.steps || []).join("\n"), tags: (r.tags || []).join(", "), owner: r.owner || "Ops Lead", change_note: "" });
@@ -251,36 +251,36 @@ export function OpsCenterRunbooksPanel({
                     <div className="rounded-lg bg-[var(--surface-muted)] p-3 text-xs">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="font-semibold">执行证据回填</p>
-                          <p className="mt-1 text-[var(--muted)]">自动关联 RCA 验证、自愈执行和流水线恢复记录。</p>
+                          <p className="font-semibold">处置记录归集</p>
+                          <p className="mt-1 text-[var(--muted)]">关联 RCA、流水线与自愈建议记录。记录覆盖率不代表执行或验收通过，实际结果请在项目交付与发布中核验。</p>
                         </div>
                         <span className="rounded-full bg-[var(--surface)] px-2 py-1">{rbEvidenceQ.data?.summary?.missing_evidence ?? 0} 项缺口</span>
                       </div>
                       {runbookEvidenceResult?.summary ? (
                         <p className="mt-2 rounded bg-[var(--surface)] p-2 text-[var(--muted-strong)]">
-                          最近回填：{runbookEvidenceResult.summary.records ?? 0} 条，覆盖率 {runbookEvidenceResult.summary.coverage_score ?? 100}%，已保存 {runbookEvidenceResult.persisted ?? 0} 条。
+                          最近归集：{runbookEvidenceResult.summary.records ?? 0} 条，记录覆盖率 {runbookEvidenceResult.summary.coverage_score ?? 0}%，已保存 {runbookEvidenceResult.persisted ?? 0} 条。
                         </p>
                       ) : null}
                       <div className="mt-3 max-h-64 overflow-auto space-y-2">
                         {(rbEvidenceQ.data?.items ?? []).length === 0 ? (
-                          <p className="py-4 text-center text-[var(--muted)]">暂无执行证据，点击自动回填从 RCA 与自愈记录中归集。</p>
+                          <p className="py-4 text-center text-[var(--muted)]">暂无处置记录，可从 RCA 与自愈建议中归集来源。</p>
                         ) : (rbEvidenceQ.data?.items ?? []).slice(0, 8).map((record: any) => (
                           <div key={record.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <p className="font-semibold">{record.runbook_name || record.runbook_id} · v{record.version_no ?? 1}</p>
-                                <p className="mt-1 text-[var(--muted)]">覆盖率 {record.coverage_score ?? 0}% / 来源 {(record.sources ?? []).length} / {record.review_status || "open"}</p>
+                                <p className="mt-1 text-[var(--muted)]">记录覆盖率 {record.coverage_score ?? 0}% / 来源 {(record.sources ?? []).length} / {record.review_status === "archived" ? "记录已归档" : record.review_status === "acknowledged" ? "记录已确认" : "待核对"}</p>
                               </div>
-                              <span className={`rounded-full px-2 py-1 ${record.status === "complete" ? "bg-green-50 text-green-700" : record.status === "partial" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{record.status}</span>
+                              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[var(--muted-strong)]">{record.status === "complete" ? "来源已归集" : record.status === "partial" ? "记录有缺口" : "待补充来源"}</span>
                             </div>
                             {(record.missing_evidence ?? []).length > 0 ? (
                               <p className="mt-2 text-[var(--muted)]">缺口：{record.missing_evidence.map((item: any) => item.title || item.id).join("、")}</p>
                             ) : (
-                              <p className="mt-2 text-green-700">证据链已完整，可作为执行审计归档。</p>
+                              <p className="mt-2 text-[var(--muted)]">来源记录已归集，执行与验收仍需正式交付证据。</p>
                             )}
                             <div className="mt-2 flex flex-wrap gap-1">
                               {(record.collected_evidence ?? []).slice(0, 5).map((item: any) => (
-                                <span key={`${record.id}-${item.id}`} className="rounded bg-[var(--surface-muted)] px-2 py-1">{item.title || item.id}</span>
+                                <span key={`${record.id}-${item.id}`} className="rounded bg-[var(--surface-muted)] px-2 py-1">{item.title || item.id}{item.status === "reported_only" ? " · 仅来源自报" : ""}</span>
                               ))}
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -289,14 +289,14 @@ export function OpsCenterRunbooksPanel({
                                 disabled={updateRunbookEvidence.isPending || record.review_status === "acknowledged"}
                                 className="rounded-lg border border-[var(--border)] px-3 py-1 disabled:opacity-50"
                               >
-                                确认
+                                确认记录
                               </button>
                               <button
                                 onClick={() => updateRunbookEvidence.mutate({ id: record.id, action: record.review_status === "archived" ? "reopen" : "archive" })}
                                 disabled={updateRunbookEvidence.isPending}
                                 className="rounded-lg border border-[var(--border)] px-3 py-1 disabled:opacity-50"
                               >
-                                {record.review_status === "archived" ? "重新打开" : "归档"}
+                                {record.review_status === "archived" ? "重新打开记录" : "归档记录"}
                               </button>
                             </div>
                           </div>

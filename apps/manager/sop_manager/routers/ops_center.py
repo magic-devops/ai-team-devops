@@ -10,8 +10,6 @@ from pydantic import BaseModel, Field
 from sop_manager.path_config import resolved_ai_memory_root, resolved_tenant_code, resolved_business_code, resolved_project_id
 from sop_manager.routers.im_integration_core import build_im_briefing, build_im_delivery_plan
 from sop_manager.routers.ops_center_core import (
-    apply_self_heal_guarded_action,
-    approve_self_heal_guarded_action,
     build_self_heal_guarded_actions,
     build_self_heal_tasks,
     build_alert_slo_escalation,
@@ -26,8 +24,8 @@ from sop_manager.routers.ops_center_core import (
     evaluate_alert_noise,
     evaluate_self_heal,
     normalize_alerts_from_source,
+    report_runbook_evidence,
     recommend_alert_noise_strategy,
-    rollback_self_heal_guarded_action,
     summarize_alert_sources,
     summarize_alert_noise_evaluations,
     summarize_alert_slo_predictions,
@@ -41,7 +39,6 @@ from sop_manager.routers.ops_center_core import (
     summarize_runbook_versions,
     predict_alert_source_slo,
     verify_ops_rca_item,
-    verify_self_heal_guarded_action,
 )
 from sop_manager.routers.scope_guard import attach_scope, scope_matches
 
@@ -407,23 +404,6 @@ class SelfHealTasksIn(TaskOwnerInput):
 class ImBriefingIn(BaseModel):
     channels: list[str] = Field(default_factory=list)
     dry_run: bool = True
-
-class SelfHealApproveIn(BaseModel):
-    approver: str = "Ops Lead"
-    note: str = ""
-
-class SelfHealApplyIn(BaseModel):
-    operator: str = "Ops Agent"
-    result: dict = Field(default_factory=dict)
-
-class SelfHealVerifyIn(BaseModel):
-    verifier: str = "SRE"
-    verification: dict = Field(default_factory=dict)
-
-class SelfHealRollbackIn(BaseModel):
-    operator: str = "Ops Lead"
-    evidence: dict = Field(default_factory=dict)
-
 
 @router.get("/pipelines")
 def list_pipelines():
@@ -1627,7 +1607,7 @@ def _persist_runbook_evidence(payload: dict, *, actor: str, note: str) -> list[d
 
 @router.get("/runbooks/evidence")
 def list_runbook_evidence(runbook_id: str = "", status: str = "", limit: int = 100):
-    items = _load_all("runbook_evidence")
+    items = [report_runbook_evidence(item) for item in _load_all("runbook_evidence")]
     if runbook_id:
         items = [item for item in items if item.get("runbook_id") == runbook_id]
     if status:
@@ -1649,7 +1629,7 @@ def backfill_runbook_evidence(body: RunbookEvidenceBackfillIn):
 
 @router.post("/runbooks/evidence/{record_id}/action")
 def runbook_evidence_action(record_id: str, body: RunbookEvidenceActionIn):
-    item = _load_scoped_item("runbook_evidence", record_id, "runbook evidence not found")
+    item = report_runbook_evidence(_load_scoped_item("runbook_evidence", record_id, "runbook evidence not found"))
     if body.action == "archive":
         item["review_status"] = "archived"
     elif body.action == "reopen":
@@ -1688,13 +1668,6 @@ def update_self_heal(policy_id: str, body: SelfHealCreate):
     _save("self_heal", item)
     return item
 
-@router.post("/self-heal/{policy_id}/apply")
-def apply_self_heal(policy_id: str):
-    item = _load_scoped_item("self_heal", policy_id, "policy not found")
-    item["last_applied_at"] = _now()
-    _save("self_heal", item)
-    return {**_scope(), "policy_id": policy_id, "applied_at": item["last_applied_at"], "action": item.get("action")}
-
 def _persist_guarded_actions(evaluation: dict, created_by: str) -> list[dict]:
     actions = build_self_heal_guarded_actions(evaluation, created_by=created_by)
     for action in actions:
@@ -1726,54 +1699,7 @@ def list_self_heal_actions(state: str = "", limit: int = 50):
     if state:
         items = [item for item in items if item.get("state") == state]
     items = items[: max(1, min(limit, 100))]
-    return {**_scope(), "items": items, "total": len(items)}
-
-@router.post("/self-heal/actions/{action_id}/approve")
-def approve_self_heal_action(action_id: str, body: SelfHealApproveIn):
-    item = _load_scoped_item("self_heal_actions", action_id, "self-heal action not found")
-    try:
-        updated = approve_self_heal_guarded_action(item, approver=body.approver, note=body.note)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    _save("self_heal_actions", updated)
-    return {**_scope(), "action": updated}
-
-@router.post("/self-heal/actions/{action_id}/apply")
-def apply_self_heal_action(action_id: str, body: SelfHealApplyIn):
-    item = _load_scoped_item("self_heal_actions", action_id, "self-heal action not found")
-    try:
-        updated = apply_self_heal_guarded_action(item, operator=body.operator, result=body.result)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    _save("self_heal_actions", updated)
-    if updated.get("policy_id"):
-        try:
-            policy = _load_scoped_item("self_heal", str(updated.get("policy_id")), "policy not found")
-            policy["last_applied_at"] = updated.get("applied_at") or _now()
-            _save("self_heal", policy)
-        except HTTPException:
-            pass
-    return {**_scope(), "action": updated}
-
-@router.post("/self-heal/actions/{action_id}/verify")
-def verify_self_heal_action(action_id: str, body: SelfHealVerifyIn):
-    item = _load_scoped_item("self_heal_actions", action_id, "self-heal action not found")
-    try:
-        updated = verify_self_heal_guarded_action(item, verifier=body.verifier, verification=body.verification)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    _save("self_heal_actions", updated)
-    return {**_scope(), "action": updated}
-
-@router.post("/self-heal/actions/{action_id}/rollback")
-def rollback_self_heal_action(action_id: str, body: SelfHealRollbackIn):
-    item = _load_scoped_item("self_heal_actions", action_id, "self-heal action not found")
-    try:
-        updated = rollback_self_heal_guarded_action(item, operator=body.operator, evidence=body.evidence)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    _save("self_heal_actions", updated)
-    return {**_scope(), "action": updated}
+    return {**_scope(), "items": items, "total": len(items), "reported_only": True, "execution_evidence": False}
 
 @router.post("/self-heal/tasks")
 def self_heal_tasks(body: SelfHealTasksIn):
@@ -1791,15 +1717,8 @@ def self_heal_tasks(body: SelfHealTasksIn):
     )
     if body.dry_run:
         return {**_scope(), "evaluation": evaluation, **planned}
-    from sop_manager.routers.tasks import TaskCreate, create_task
-
-    created = []
-    for task in planned.get("tasks") or []:
-        created.append(create_task(TaskCreate(**task)))
-    out = {**planned, "dry_run": False, "summary": {**planned.get("summary", {}), "created": len(created)}, "items": created, "tasks": created}
-    history = {**_scope(), "id": str(uuid4()), "evaluation": evaluation, "created_task_ids": [x.get("id") for x in created if x.get("id")], "created_at": _now()}
-    _save("self_heal_task_runs", history)
-    return {**_scope(), **out, "evaluation": evaluation}
+    raise HTTPException(410, {"code": "ops_canonical_intake_required",
+        "message": "Review the fixed operational suggestion and use issue.ops.intake before creating remediation work"})
 
 @router.delete("/self-heal/{policy_id}")
 def delete_self_heal(policy_id: str):

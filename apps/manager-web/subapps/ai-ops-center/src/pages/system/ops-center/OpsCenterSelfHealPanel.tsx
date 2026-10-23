@@ -1,8 +1,14 @@
-import { Button, Drawer, Form, Input, Space, Steps, Switch } from "antd";
+import { Alert, Button, Drawer, Form, Input, Skeleton, Space, Steps, Switch } from "antd";
+import { useTranslation } from "react-i18next";
+import { opsRemediationCopy } from "@/i18n/ops-remediation";
+import { projectWorkspaceHash } from "@/lib/projectPortfolioRoute";
+import { OpsRemediationIntake } from "./OpsRemediationIntake";
 import { RefreshButton } from "@/components/PageStates";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
 type OpsCenterSelfHealPanelProps = {
+  projectId: string;
+  selectedHealActionId: string;
   shQ: any;
   evalQ: any;
   actionsQ: any;
@@ -16,22 +22,15 @@ type OpsCenterSelfHealPanelProps = {
   setSelfHealSignalDrawerOpen: any;
   healResult: any;
   healTasksResult: any;
-  healActionResult: any;
   selfHealActionDrawerOpen: any;
   setSelfHealActionDrawerOpen: any;
   setSelectedHealActionId: any;
   createSh: any;
   evaluateSh: any;
   createHealTasks: any;
-  applySh: any;
   toggleSh: any;
   deleteSh: any;
-  approveAction: any;
-  applyAction: any;
-  verifyAction: any;
-  rollbackAction: any;
   selfHealActions: any;
-  selectedHealAction: any;
 };
 
 function parseSignals(value: string) {
@@ -54,21 +53,9 @@ function severityClass(level?: string) {
   return "bg-green-50 text-green-700";
 }
 
-function actionStateClass(state?: string) {
-  if (state === "approval_required" || state === "rolled_back") return "bg-red-50 text-red-700";
-  if (state === "approved" || state === "applied") return "bg-amber-50 text-amber-700";
-  if (state === "verified") return "bg-green-50 text-green-700";
-  return "bg-slate-50 text-slate-700";
-}
-
-function actionStepIndex(state?: string) {
-  if (state === "verified" || state === "rolled_back") return 3;
-  if (state === "applied") return 2;
-  if (state === "approved") return 1;
-  return 0;
-}
-
 export function OpsCenterSelfHealPanel({
+  projectId,
+  selectedHealActionId,
   shQ,
   evalQ,
   actionsQ,
@@ -82,23 +69,17 @@ export function OpsCenterSelfHealPanel({
   setSelfHealSignalDrawerOpen,
   healResult,
   healTasksResult,
-  healActionResult,
   selfHealActionDrawerOpen,
   setSelfHealActionDrawerOpen,
   setSelectedHealActionId,
   createSh,
   evaluateSh,
   createHealTasks,
-  applySh,
   toggleSh,
   deleteSh,
-  approveAction,
-  applyAction,
-  verifyAction,
-  rollbackAction,
   selfHealActions,
-  selectedHealAction,
 }: OpsCenterSelfHealPanelProps) {
+  const { i18n } = useTranslation(), copy = opsRemediationCopy(i18n?.language);
   return (
           <div className="grid gap-4 xl:grid-cols-[minmax(420px,1fr)_minmax(420px,1fr)]">
             <WorkbenchPanel title="策略目录与信号评估" actions={
@@ -198,7 +179,7 @@ export function OpsCenterSelfHealPanel({
                   />
                   <Form layout="vertical" requiredMark={false} onFinish={() => evaluateSh.mutate()}>
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                      <p className="text-sm font-semibold">运行信号</p>
+                      <p className="text-sm font-semibold">人工输入的评估信号</p>
                       <p className="mt-1 text-xs text-[var(--muted)]">每行一个 key=value，支持 cpu、error_rate、latency_ms、environment、service 等字段。</p>
                       <Form.Item className="mt-3" label="信号输入" required>
                         <Input.TextArea
@@ -223,7 +204,7 @@ export function OpsCenterSelfHealPanel({
                           <p className="text-sm font-semibold">{healResult?.summary?.matched ?? 0}</p>
                         </div>
                         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
-                          <p className="text-xs text-[var(--muted)]">待审批</p>
+                          <p className="text-xs text-[var(--muted)]">建议需审批</p>
                           <p className="text-sm font-semibold">{healResult?.summary?.needs_approval ?? 0}</p>
                         </div>
                         <div className="rounded-lg bg-[var(--surface-muted)] p-3">
@@ -240,9 +221,7 @@ export function OpsCenterSelfHealPanel({
                       <Button onClick={() => createHealTasks.mutate(true)} loading={createHealTasks.isPending}>
                         预览治理任务
                       </Button>
-                      <Button danger onClick={() => createHealTasks.mutate(false)} loading={createHealTasks.isPending}>
-                        生成治理任务
-                      </Button>
+
                       <Button onClick={() => setSelfHealSignalDrawerOpen(false)}>取消</Button>
                     </Space>
                     {evaluateSh.isError ? <p className="mt-3 text-xs text-red-600">{(evaluateSh.error as Error).message}</p> : null}
@@ -271,9 +250,7 @@ export function OpsCenterSelfHealPanel({
                   <Button onClick={() => createHealTasks.mutate(true)} loading={createHealTasks.isPending}>
                     预览治理任务
                   </Button>
-                  <Button onClick={() => createHealTasks.mutate(false)} loading={createHealTasks.isPending}>
-                    生成治理任务
-                  </Button>
+
                 </div>
                 {evaluateSh.isError ? <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">{(evaluateSh.error as Error).message}</p> : null}
               </div>
@@ -290,7 +267,7 @@ export function OpsCenterSelfHealPanel({
                       <span className={`rounded-full px-2 py-0.5 text-xs ${s.enabled ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{s.enabled ? "启用" : "禁用"}</span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button onClick={() => applySh.mutate(s.id)} className="text-xs text-[var(--brand)] hover:underline">手动应用</button>
+
                       <button onClick={() => toggleSh.mutate(s)} className="text-xs text-[var(--brand)] hover:underline">{s.enabled ? "停用" : "启用"}</button>
                       <button onClick={() => deleteSh.mutate(s.id)} className="text-xs text-red-500 hover:underline">删除</button>
                     </div>
@@ -304,7 +281,7 @@ export function OpsCenterSelfHealPanel({
                 {healResult ? (
                   <div className="grid gap-2 sm:grid-cols-4">
                     <div className="rounded-lg bg-[var(--surface-muted)] p-3"><p className="text-xs text-[var(--muted)]">命中</p><p className="text-lg font-semibold">{healResult.summary?.matched ?? 0}</p></div>
-                    <div className="rounded-lg bg-[var(--surface-muted)] p-3"><p className="text-xs text-[var(--muted)]">待审批</p><p className="text-lg font-semibold">{healResult.summary?.needs_approval ?? 0}</p></div>
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3"><p className="text-xs text-[var(--muted)]">建议需审批</p><p className="text-lg font-semibold">{healResult.summary?.needs_approval ?? 0}</p></div>
                     <div className="rounded-lg bg-[var(--surface-muted)] p-3"><p className="text-xs text-[var(--muted)]">高风险</p><p className="text-lg font-semibold">{(healResult.summary?.critical ?? 0) + (healResult.summary?.high ?? 0)}</p></div>
                     <div className="rounded-lg bg-[var(--surface-muted)] p-3"><p className="text-xs text-[var(--muted)]">策略数</p><p className="text-lg font-semibold">{healResult.summary?.policies ?? 0}</p></div>
                   </div>
@@ -331,7 +308,7 @@ export function OpsCenterSelfHealPanel({
 
                 {healTasksResult ? (
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <p className="text-sm font-semibold">{healTasksResult.dry_run ? "治理任务预览" : "治理任务已生成"} · {healTasksResult.items?.length ?? 0}</p>
+                    <p className="text-sm font-semibold">治理任务预览 · {healTasksResult.items?.length ?? 0}</p>
                     <div className="mt-3 space-y-2">
                       {(healTasksResult.items ?? []).slice(0, 5).map((item: any) => (
                         <div key={item.id ?? item.title} className="rounded-lg bg-[var(--surface-muted)] p-3">
@@ -357,138 +334,23 @@ export function OpsCenterSelfHealPanel({
               </div>
             </WorkbenchPanel>
 
-            <WorkbenchPanel title="生产护栏动作队列">
+            <WorkbenchPanel title={copy.history}>
               <div className="space-y-3">
-                <Drawer
-                  title="处置自愈护栏动作"
-                  open={selfHealActionDrawerOpen}
-                  onClose={() => setSelfHealActionDrawerOpen(false)}
-                  width="min(720px, 100vw)"
-                >
-                  {selectedHealAction ? (
-                    <div className="selfHealActionFocusedDrawer space-y-5">
-                      <Steps
-                        size="small"
-                        current={actionStepIndex(selectedHealAction.state)}
-                        items={[
-                          { title: "审批" },
-                          { title: "应用" },
-                          { title: "验证" },
-                          { title: "证据" },
-                        ]}
-                      />
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold">{selectedHealAction.trigger_condition}</p>
-                            <p className="mt-1 break-all text-xs text-[var(--muted)]">{selectedHealAction.action}</p>
-                          </div>
-                          <span className={`rounded px-2 py-0.5 text-xs ${actionStateClass(selectedHealAction.state)}`}>
-                            {selectedHealAction.state} · {selectedHealAction.risk_level}
-                          </span>
-                        </div>
-                        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                          <div className="rounded-lg bg-[var(--surface)] px-3 py-2">审批：{selectedHealAction.requires_approval ? selectedHealAction.approved_by || "待审批" : "无需审批"}</div>
-                          <div className="rounded-lg bg-[var(--surface)] px-3 py-2">回滚：{selectedHealAction.rollback_required ? selectedHealAction.rollback_command || "需人工回滚" : "无需回滚"}</div>
-                          <div className="rounded-lg bg-[var(--surface)] px-3 py-2">验证：{selectedHealAction.verified_by || "待验证"}</div>
-                          <div className="rounded-lg bg-[var(--surface)] px-3 py-2">审计：{selectedHealAction.audit_payload?.state || selectedHealAction.state}</div>
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                        <p className="text-sm font-semibold">下一步动作</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {selectedHealAction.state === "approval_required" ? (
-                            <Button type="primary" loading={approveAction.isPending} onClick={() => approveAction.mutate(selectedHealAction.id)}>
-                              审批通过
-                            </Button>
-                          ) : null}
-                          {selectedHealAction.state === "preview" || selectedHealAction.state === "approved" ? (
-                            <Button loading={applyAction.isPending} onClick={() => applyAction.mutate(selectedHealAction.id)}>
-                              应用动作
-                            </Button>
-                          ) : null}
-                          {selectedHealAction.state === "applied" ? (
-                            <Button loading={verifyAction.isPending} onClick={() => verifyAction.mutate(selectedHealAction.id)}>
-                              验证通过
-                            </Button>
-                          ) : null}
-                          {(selectedHealAction.state === "applied" || selectedHealAction.state === "verified") && selectedHealAction.rollback_required ? (
-                            <Button danger loading={rollbackAction.isPending} onClick={() => rollbackAction.mutate(selectedHealAction.id)}>
-                              回滚并留证
-                            </Button>
-                          ) : null}
-                          <Button onClick={() => setSelfHealActionDrawerOpen(false)}>关闭</Button>
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                        <p className="text-sm font-semibold">审计载荷</p>
-                        <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5">
-                          {JSON.stringify(healActionResult?.action?.audit_payload ?? selectedHealAction.audit_payload ?? selectedHealAction, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-6 text-center text-sm text-[var(--muted)]">
-                      请选择一个护栏动作。
-                    </div>
-                  )}
-                </Drawer>
-
-                {selfHealActions.length ? (
-                  <div className="grid gap-3 sm:grid-cols-4">
-                    {[
-                      ["动作数", selfHealActions.length],
-                      ["待审批", selfHealActions.filter((item: any) => item.state === "approval_required").length],
-                      ["已应用", selfHealActions.filter((item: any) => item.state === "applied").length],
-                      ["已验证", selfHealActions.filter((item: any) => item.state === "verified").length],
-                    ].map(([label, value]) => (
-                      <div key={String(label)} className="rounded-lg bg-[var(--surface-muted)] p-3">
-                        <p className="text-[11px] uppercase text-[var(--muted)]">{label}</p>
-                        <p className="mt-1 text-lg font-semibold">{String(value)}</p>
-                      </div>
-                    ))}
+                <Alert type="info" title={copy.reported} description={copy.hint} />
+                <p className="text-xs text-[var(--muted)]">{copy.flow}</p>
+                <Button href={projectId ? projectWorkspaceHash(projectId, "#/dev-flow?view=releases") : "#/dev-flow?view=releases"}>{copy.releases}</Button>
+                {projectId && <OpsRemediationIntake projectId={projectId} sourceId={selectedHealActionId} open={selfHealActionDrawerOpen} onClose={() => setSelfHealActionDrawerOpen(false)} />}
+                {actionsQ.isPending && <Skeleton active paragraph={{ rows: 2 }} />}
+                {actionsQ.error && <Alert type="warning" title={copy.failed} description={(actionsQ.error as Error).message} action={<Button onClick={() => void actionsQ.refetch()}>{copy.retry}</Button>} />}
+                {!actionsQ.error && !actionsQ.isPending && !selfHealActions.length && <p className="text-sm text-[var(--muted)]">{copy.empty}</p>}
+                {!actionsQ.error && selfHealActions.map((item: any) => <article key={item.id} className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0"><strong className="text-sm">{item.trigger_condition}</strong><p className="break-words text-xs text-[var(--muted)]">{item.action}</p></div>
+                    <span className={`rounded px-2 py-0.5 text-xs ${severityClass(item.risk_level)}`}>{item.risk_level}</span>
                   </div>
-                ) : null}
-
-                {selfHealActions.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-6 text-center text-sm text-[var(--muted)]">
-                    暂无自愈动作。执行评估后会生成 preview 或 approval_required 状态的动作。
-                  </div>
-                ) : null}
-                {selfHealActions.map((item: any) => (
-                  <div key={item.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold">{item.trigger_condition}</p>
-                        <p className="mt-1 text-xs text-[var(--muted)]">{item.action}</p>
-                      </div>
-                      <span className={`rounded px-2 py-0.5 text-xs ${actionStateClass(item.state)}`}>{item.state} · {item.risk_level}</span>
-                    </div>
-                    <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                      <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">审批：{item.requires_approval ? item.approved_by || "待审批" : "无需审批"}</div>
-                      <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">回滚：{item.rollback_required ? item.rollback_command || "需人工回滚" : "无需回滚"}</div>
-                      <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">验证：{item.verified_by || "待验证"}</div>
-                      <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">审计：{item.audit_payload?.state || item.state}</div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          setSelectedHealActionId(String(item.id));
-                          setSelfHealActionDrawerOpen(true);
-                        }}
-                      >
-                        处理动作
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                {healActionResult?.action ? (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <p className="text-sm font-semibold">最新审计载荷</p>
-                    <pre className="mt-2 max-h-56 overflow-auto rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5">{JSON.stringify(healActionResult.action.audit_payload ?? healActionResult.action, null, 2)}</pre>
-                  </div>
-                ) : null}
+                  <p className="text-xs text-[var(--muted)]">{copy.recorded}: {item.state} · {item.created_at}</p>
+                  <Button size="small" onClick={() => { setSelectedHealActionId(String(item.id)); setSelfHealActionDrawerOpen(true); }}>{copy.handle}</Button>
+                </article>)}
               </div>
             </WorkbenchPanel>
           </div>

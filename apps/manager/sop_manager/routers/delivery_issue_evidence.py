@@ -484,6 +484,9 @@ def issue_snapshot(db, project, data, user, issue_id, *, store=None, execution=N
         raw=raw_issue,
     )
     evidence.items[-1]["redacted"] |= issue_redacted
+    from .ops_remediation import add_issue_sources
+
+    ops_sources = add_issue_sources(evidence, db, project, data, issue)
     executions = sorted(
         (row for row in data.get("executions", []) if row.get("issue_id") == issue.id),
         key=lambda row: row["id"],
@@ -564,6 +567,7 @@ def issue_snapshot(db, project, data, user, issue_id, *, store=None, execution=N
                 "executions": [_execution_semantic(row) for row in executions],
                 "deployments": [_deployment_semantic(row) for row in deployments],
                 **({"submissions": submission_basis} if submission_basis else {}),
+                **({"ops_sources": ops_sources} if ops_sources else {}),
                 "candidates": [
                     row
                     for row in data.get("release_candidates", [])

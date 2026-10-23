@@ -1,6 +1,4 @@
 from sop_manager.routers.ops_center_core import (
-    apply_self_heal_guarded_action,
-    approve_self_heal_guarded_action,
     build_alert_slo_escalation,
     build_alert_strategy_canary_audit,
     build_ops_strategy_linkage,
@@ -15,9 +13,9 @@ from sop_manager.routers.ops_center_core import (
     evaluate_alert_noise,
     evaluate_self_heal,
     normalize_alerts_from_source,
+    report_runbook_evidence,
     predict_alert_source_slo,
     recommend_alert_noise_strategy,
-    rollback_self_heal_guarded_action,
     summarize_alert_sources,
     summarize_alert_noise_evaluations,
     summarize_alert_strategy_recommendations,
@@ -26,7 +24,6 @@ from sop_manager.routers.ops_center_core import (
     summarize_ops_health,
     recommend_runbooks_for_candidate,
     verify_ops_rca_item,
-    verify_self_heal_guarded_action,
 )
 
 
@@ -598,6 +595,34 @@ def test_runbook_execution_evidence_helper_collects_rca_verification():
     assert summarize_runbook_execution_evidence(payload["items"])["needs_backfill"] == 0
 
 
+def test_self_reported_action_cannot_complete_runbook_execution_coverage():
+    payload = build_runbook_execution_evidence(
+        runbooks=[{"id": "rb-1", "name": "Recovery", "active_version_id": "v1"}],
+        versions=[{"id": "v1", "runbook_id": "rb-1", "status": "active"}],
+        rca=[], pipelines=[],
+        self_heal_actions=[{"id": "legacy-one", "runbook_ids": ["rb-1"], "state": "verified",
+                            "apply_result": {"command_exit_code": 0}, "verification_result": {"status": "healthy"}}],
+    )
+    record = payload["items"][0]
+    assert record["execution_evidence"] is False and record["coverage_kind"] == "reported_records"
+    assert record["status"] != "complete" and record["recommended_action"] != "archive_as_execution_evidence"
+    assert "self_heal_action" in {row["id"] for row in record["missing_evidence"]}
+    assert next(row for row in record["collected_evidence"] if row["id"] == "self_heal_action")["status"] == "reported_only"
+
+
+def test_saved_runbook_success_is_projected_as_reported_without_mutating_the_record():
+    legacy = {"status": "complete", "coverage_score": 100, "recommended_action": "archive_as_execution_evidence",
+        "required_evidence": [{"id": "self_heal_action", "title": "自愈动作执行"}], "missing_evidence": [],
+        "collected_evidence": [{"id": "self_heal_action", "title": "自愈动作执行", "status": "collected", "value": {"state": "verified"}}],
+        "sources": [{"type": "self_heal", "id": "old", "status": "verified"}]}
+    projected = report_runbook_evidence(legacy)
+    assert legacy["status"] == "complete" and legacy["sources"][0]["status"] == "verified"
+    assert projected["status"] == "missing" and projected["coverage_score"] == 0
+    assert projected["sources"][0]["status"] == "reported_only" and projected["sources"][0]["recorded_state"] == "verified"
+    assert projected["recommended_action"] == "backfill_missing_evidence" and projected["execution_evidence"] is False
+    assert summarize_runbook_execution_evidence([legacy])["needs_backfill"] == 1
+
+
 def test_runbook_evidence_backfill_route_persists_records(tmp_path):
     from sop_manager.path_config import reset_request_scope, set_request_scope
     from sop_manager.routers import ops_center
@@ -1147,41 +1172,3 @@ def test_build_self_heal_guarded_actions_requires_approval_for_critical_rollback
     assert action["rollback_command"]
     assert action["audit_payload"]["risk_level"] == "critical"
     assert action["audit_payload"]["state"] == "approval_required"
-
-
-def test_self_heal_guarded_action_lifecycle_approval_apply_verify_rollback():
-    action = build_self_heal_guarded_actions(
-        {
-            "signals": {"error_rate": 9, "environment": "production"},
-            "decisions": [
-                {
-                    "policy_id": "policy-prod",
-                    "trigger_condition": "error_rate >= 5",
-                    "action": "rollback production",
-                    "decision": "needs_approval",
-                    "risk_level": "critical",
-                    "evidence": {"actual": 9, "expected": "5", "environment": "production"},
-                    "steps": [{"id": "verify", "title": "执行后验证", "type": "verify"}],
-                }
-            ],
-        },
-        created_by="ops-bot",
-    )[0]
-
-    approved = approve_self_heal_guarded_action(action, approver="ops-lead", note="变更窗口已确认")
-    assert approved["state"] == "approved"
-    assert approved["approved_by"] == "ops-lead"
-
-    applied = apply_self_heal_guarded_action(approved, operator="ops-bot", result={"command_exit_code": 0})
-    assert applied["state"] == "applied"
-    assert applied["applied_by"] == "ops-bot"
-    assert applied["audit_payload"]["state"] == "applied"
-
-    verified = verify_self_heal_guarded_action(applied, verifier="sre", verification={"error_rate": 0.4, "status": "healthy"})
-    assert verified["state"] == "verified"
-    assert verified["verification_result"]["status"] == "healthy"
-
-    rolled_back = rollback_self_heal_guarded_action(verified, operator="ops-lead", evidence={"reason": "post-check regression", "command_exit_code": 0})
-    assert rolled_back["state"] == "rolled_back"
-    assert rolled_back["rollback_evidence"]["reason"] == "post-check regression"
-    assert rolled_back["audit_payload"]["state"] == "rolled_back"

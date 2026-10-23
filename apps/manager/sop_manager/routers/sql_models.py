@@ -718,6 +718,11 @@ from .delivery_external_work_order_model import register_work_order_model  # noq
 DeliveryExternalWorkOrder = register_work_order_model(Base)
 
 
+from .ops_remediation_model import register_ops_source_model  # noqa: E402
+
+OpsIssueSource = register_ops_source_model(Base)
+
+
 def create_all():
     from sop_manager.schema_upgrade import require_current_schema
 

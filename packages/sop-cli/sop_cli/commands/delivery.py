@@ -14,7 +14,7 @@ from sop_sdk.design_original import load_design_original, load_design_selection
 from sop_sdk.work_order_original import load_work_order_original
 
 app = typer.Typer(
-    help="项目交付：context / requirements / requirement / requirement-definition / requirement-records / requirement-record / requirement-impact / requirement-impact-items / requirement-impact-item / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / progress-freeze-proof / baselines / baseline / baseline-items / baseline-item / baseline-comparison / baseline-comparison-items / baseline-comparison-item / observation / observation-items / observation-item / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：ops-intake-source / ops-intake / context / requirements / requirement / requirement-definition / requirement-records / requirement-record / requirement-impact / requirement-impact-items / requirement-impact-item / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / progress-freeze-proof / baselines / baseline / baseline-items / baseline-item / baseline-comparison / baseline-comparison-items / baseline-comparison-item / observation / observation-items / observation-item / activity / requirement-history / requirement-change-preview / issue / issue-origins / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
 
 app.add_typer(delivery_discussion.app, name="discussion")
@@ -39,6 +39,27 @@ def _query_output(method, *args, **selection):
     try:
         with get_client() as client:
             console.print_json(data=getattr(client, method)(*args, **selection))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("ops-intake-source")
+def ops_intake_source(source_id: Annotated[str, typer.Option("--source-id")]):
+    """读取固定运维建议、已纳入问题与当前权限，不执行任何处置。"""
+    _query_output("delivery_ops_intake_source", source_id)
+
+
+@app.command("ops-intake")
+def ops_intake(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False)]):
+    """提交保存的完整原请求；未知结果重放同一文件，禁止自动换版本或键。"""
+    from sop_sdk.delivery_ack import strict_json
+    from sop_sdk.ops_intake import intake_command
+    try:
+        with file.open("rb") as stream:
+            body = intake_command(strict_json(stream.read(64 * 1024 + 1), 64 * 1024))
+        with get_client() as client:
+            console.print_json(data=client.delivery_ops_intake(body))
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc

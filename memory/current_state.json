@@ -1,11 +1,11 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-23T05:10:14.888999+00:00",
+  "updated_at": "2026-10-23T06:08:08.553237+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-23T05:10:14.888999+00:00",
+    "updated_at": "2026-10-23T06:08:08.553237+00:00",
     "status": "source_implemented_runtime_validation_deferred_by_user",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
@@ -15,9 +15,9 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/task-detail-navigation/",
+    "evidence": ".sop-runtime/delivery-evidence/ops-remediation-intake/",
     "verification_status": "current_source_runtime_types_build_and_browser_unverified",
-    "next_step": "source_review_and_exact_phase_commit_then_progress_quality_and_full_lifecycle",
+    "next_step": "source_review_and_exact_phase_commit_then_RCA_real_verification_automatic_ops_and_full_lifecycle",
     "production_integration_complete": false,
     "commit_after_verified_stage": false,
     "progress_design": "docs/DELIVERY_BOUNDED_PROGRESS_DESIGN.md",
@@ -652,7 +652,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "任务详情阅读目录与双状态摘要已落源码，准备独立源码审查及精确阶段提交；测试、类型、构建与浏览器按用户要求后置，完整目标继续推进。",
+  "current": "运维建议已接入固定来源纳入真实问题的源码链路，旧假成功自愈入口退出；准备独立源码审查与精确阶段提交。用户验证窗口仍未恢复，应用测试、类型、构建、浏览器与真实运维动作均后置，完整目标继续 active。",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -1042,7 +1042,7 @@
     "task_id": "T-task-detail-navigation",
     "base_commit": "6a56a6db307d60ae4328493e7d65b6fc3716b15e",
     "updated_at": "2026-10-23T05:10:14.888999+00:00",
-    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "status": "source_committed_runtime_validation_deferred_by_user",
     "design": "docs/TASK_DETAIL_NAVIGATION_DESIGN.md",
     "guide": "docs/TASK_DETAIL_NAVIGATION_GUIDE.md",
     "record": "memory/task-detail-navigation-progress.md",
@@ -1056,6 +1056,33 @@
     "implementation_scope": "source_only_not_runtime_verified",
     "full_lifecycle_complete": false,
     "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
-    "next_step": "validate_fixed_source_when_human_restores_window_then_progress_quality_and_full_lifecycle"
+    "next_step": "validate_fixed_source_when_human_restores_window_then_progress_quality_and_full_lifecycle",
+    "source_commit": "fb6ff3d934f3e21660a457b1579ed266f81c9e87"
+  },
+  "ops_remediation_intake": {
+    "task_id": "T-ops-remediation-intake",
+    "base_commit": "fb6ff3d934f3e21660a457b1579ed266f81c9e87",
+    "updated_at": "2026-10-23T06:08:08.553237+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/OPS_REMEDIATION_INTAKE_DESIGN.md",
+    "guide": "docs/OPS_REMEDIATION_INTAKE_GUIDE.md",
+    "record": "memory/ops-remediation-intake-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/ops-remediation-intake/",
+    "source_review": ".sop-runtime/delivery-evidence/ops-remediation-intake/independent-review/",
+    "commit_receipt": ".sop-runtime/delivery-evidence/ops-remediation-intake/commit-receipt.json",
+    "runtime_tests_executed": false,
+    "typescript_checked": false,
+    "build_executed": false,
+    "browser_verified": false,
+    "real_operational_actions_executed": false,
+    "production_integration_complete": false,
+    "full_lifecycle_complete": false,
+    "legacy_RCA_self_report_verification_replaced": false,
+    "automatic_ops_orchestration_complete": false,
+    "implementation_scope": "source_only_not_runtime_verified",
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "next_step": "validate_pinned_source_after_human_restores_window_then_RCA_real_verification_automatic_ops_and_full_lifecycle",
+    "runbook_records_not_execution_proof": true,
+    "source_rejects_non_finite_and_invalid_unicode": true
   }
 }

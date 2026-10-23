@@ -565,6 +565,17 @@ class ManagerClient:
         """Record a human decision for the fixed report/digest and original version."""
         return self.delivery_command({"action": "task.delivery.review", **submission_command_body(body)})
 
+    def delivery_ops_intake_source(self, source_id: str) -> dict[str, Any]:
+        """Read one fixed reported suggestion; this does not execute remediation."""
+        from .ops_intake import source_id as validate_source_id
+        return self._request("GET", f"/api/v1/delivery/ops-actions/{validate_source_id(source_id)}/intake")
+
+    def delivery_ops_intake(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Submit only the original version/digest/key; a lost receipt reuses this body."""
+        from .ops_intake import intake_command, intake_ack
+        original = intake_command(body)
+        return intake_ack(original, self.delivery_command(original), self.project_id)
+
     def delivery_issues(
         self,
         *,

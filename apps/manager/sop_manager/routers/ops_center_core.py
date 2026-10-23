@@ -1725,18 +1725,48 @@ def _checks_from_verification(verification: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def report_runbook_evidence(record: dict[str, Any]) -> dict[str, Any]:
+    """Project collected records honestly, including JSON saved before intake existed.
+
+    This is a pure read projection. Record coverage never proves execution or
+    acceptance; legacy self-heal reports cannot satisfy execution requirements.
+    """
+    result = dict(record, execution_evidence=False, coverage_kind="reported_records")
+    evidence = [dict(item, status="reported_only", title="自愈建议记录")
+                if item.get("id") == "self_heal_action" else dict(item)
+                for item in record.get("collected_evidence") or [] if isinstance(item, dict)]
+    sources = [dict(item, status="reported_only", recorded_state=item.get("recorded_state", item.get("status", "")))
+               if item.get("type") == "self_heal" else dict(item)
+               for item in record.get("sources") or [] if isinstance(item, dict)]
+    required = {str(item["id"]): dict(item) for item in record.get("required_evidence") or []
+                if isinstance(item, dict) and item.get("id")}
+    if any(item.get("id") == "self_heal_action" for item in evidence) or any(item.get("type") == "self_heal" for item in sources):
+        required["self_heal_action"] = {"id": "self_heal_action", "title": "正式自愈执行与验证证据"}
+    collected = {str(item.get("id") or "") for item in evidence
+                 if item.get("status") == "collected" and item.get("value") not in ({}, [], "", None)}
+    missing = [item for key, item in required.items() if key not in collected]
+    result.update(collected_evidence=evidence, sources=sources, required_evidence=list(required.values()),
+                  missing_evidence=missing, coverage_score=round((len(required)-len(missing))*100/len(required)) if required else 0,
+                  status="complete" if required and not missing else "partial" if collected else "missing",
+                  recommended_action="backfill_missing_evidence" if missing or not required else "review_collected_records")
+    return result
+
+
 def summarize_runbook_execution_evidence(records: list[dict[str, Any]]) -> dict[str, Any]:
+    records = [report_runbook_evidence(item) for item in records]
     scores = [int(item.get("coverage_score") or 0) for item in records]
     missing = sum(len(item.get("missing_evidence") or []) for item in records)
     complete = sum(1 for item in records if item.get("status") == "complete")
     partial = sum(1 for item in records if item.get("status") == "partial")
     return {
         "records": len(records),
+        "execution_evidence": False,
+        "coverage_kind": "reported_records",
         "complete": complete,
         "partial": partial,
         "missing": sum(1 for item in records if item.get("status") == "missing"),
         "missing_evidence": missing,
-        "coverage_score": round(sum(scores) / max(len(scores), 1)) if scores else 100,
+        "coverage_score": round(sum(scores) / len(scores)) if scores else 0,
         "needs_backfill": sum(1 for item in records if item.get("status") != "complete"),
     }
 
@@ -1836,16 +1866,17 @@ def build_runbook_execution_evidence(
             ], "collected" if linked_pipelines else "missing")
 
         if bound_actions:
-            required["self_heal_action"] = "自愈动作执行"
+            required["self_heal_action"] = "正式自愈执行与验证证据"
         for action in bound_actions:
             sources.append({
                 "type": "self_heal",
                 "id": action.get("id", ""),
                 "title": action.get("action") or action.get("trigger_condition") or action.get("id"),
-                "status": action.get("state", ""),
+                "status": "reported_only",
+                "recorded_state": action.get("state", ""),
                 "risk_level": action.get("risk_level", ""),
             })
-            _record_evidence(evidence, "self_heal_action", "自愈动作执行", {
+            _record_evidence(evidence, "self_heal_action", "自愈建议记录", {
                 "state": action.get("state", ""),
                 "applied_by": action.get("applied_by", ""),
                 "applied_at": action.get("applied_at", ""),
@@ -1853,29 +1884,21 @@ def build_runbook_execution_evidence(
                 "verified_by": action.get("verified_by", ""),
                 "verified_at": action.get("verified_at", ""),
                 "verification_result": action.get("verification_result") or {},
-            })
+            }, "reported_only")
 
-        collected_ids = {str(item.get("id") or "") for item in evidence if item.get("status") != "missing" and item.get("value") not in ({}, [], "", None)}
-        missing = [{"id": key, "title": title} for key, title in required.items() if key not in collected_ids]
-        coverage_score = round(len(required) and (len(required) - len(missing)) * 100 / len(required))
-        status = "complete" if not missing else "partial" if collected_ids else "missing"
         source_key = ":".join(sorted(str(item.get("id") or "") for item in sources)) or runbook_id
         record_id = "runbook-evidence-" + hashlib.sha1(f"{runbook_id}:{version.get('id') or ''}:{source_key}".encode("utf-8")).hexdigest()[:14]
-        records.append({
+        records.append(report_runbook_evidence({
             "id": record_id,
             "runbook_id": runbook_id,
             "runbook_name": runbook.get("name", ""),
             "version_id": version.get("id") or runbook.get("active_version_id") or "",
             "version_no": version.get("version_no") or runbook.get("active_version_no") or 1,
-            "status": status,
-            "coverage_score": coverage_score,
             "required_evidence": [{"id": key, "title": title} for key, title in required.items()],
             "collected_evidence": evidence,
-            "missing_evidence": missing,
             "sources": sources[:20],
-            "recommended_action": "archive_as_execution_evidence" if not missing else "backfill_missing_evidence",
             "generated_at": now_value,
-        })
+        }))
 
     records.sort(key=lambda item: (int(item.get("coverage_score") or 0), item.get("runbook_name") or ""))
     records = records[: max(1, min(limit, 500))]
@@ -1887,7 +1910,7 @@ def build_runbook_execution_evidence(
         "agent_consumption": {
             "api": "/api/v1/ops-center/runbooks/evidence/backfill",
             "safe_for_agents": True,
-            "purpose": "从 RCA 验证、自愈动作和流水线恢复记录自动回填 Runbook 执行证据。",
+            "purpose": "归集 RCA、流水线及自愈建议记录；来源覆盖率不证明执行或验收通过。",
         },
     }
 
@@ -2347,43 +2370,6 @@ def build_self_heal_guarded_actions(evaluation: dict[str, Any], *, created_by: s
         }
         actions.append(_with_audit(item))
     return actions
-
-
-def approve_self_heal_guarded_action(action: dict[str, Any], *, approver: str, note: str = "") -> dict[str, Any]:
-    if action.get("state") not in {"approval_required", "preview"}:
-        raise ValueError("self-heal action is not approvable")
-    updated = dict(action)
-    updated.update({"state": "approved", "approved_by": approver, "approval_note": note, "approved_at": _now()})
-    return _with_audit(updated)
-
-
-def apply_self_heal_guarded_action(action: dict[str, Any], *, operator: str, result: dict[str, Any] | None = None) -> dict[str, Any]:
-    state = str(action.get("state") or "")
-    if action.get("requires_approval") and state != "approved":
-        raise ValueError("approval required before applying self-heal action")
-    if state not in {"preview", "approved"}:
-        raise ValueError("self-heal action is not applyable")
-    updated = dict(action)
-    updated.update({"state": "applied", "applied_by": operator, "applied_at": _now(), "apply_result": result or {}})
-    return _with_audit(updated)
-
-
-def verify_self_heal_guarded_action(action: dict[str, Any], *, verifier: str, verification: dict[str, Any]) -> dict[str, Any]:
-    if action.get("state") != "applied":
-        raise ValueError("self-heal action must be applied before verification")
-    updated = dict(action)
-    updated.update({"state": "verified", "verified_by": verifier, "verified_at": _now(), "verification_result": verification or {}})
-    return _with_audit(updated)
-
-
-def rollback_self_heal_guarded_action(action: dict[str, Any], *, operator: str, evidence: dict[str, Any]) -> dict[str, Any]:
-    if action.get("state") not in {"applied", "verified"}:
-        raise ValueError("self-heal action must be applied or verified before rollback")
-    if action.get("rollback_required") and not evidence:
-        raise ValueError("rollback evidence is required")
-    updated = dict(action)
-    updated.update({"state": "rolled_back", "rolled_back_by": operator, "rolled_back_at": _now(), "rollback_evidence": evidence or {}})
-    return _with_audit(updated)
 
 
 def summarize_ops_health(
