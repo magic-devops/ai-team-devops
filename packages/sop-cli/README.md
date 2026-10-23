@@ -259,7 +259,7 @@ sop delivery issue-diagnoses --id ISS-example --diagnosis-id "原diagnosis_id"
 
 `sop delivery release-preview --file candidate.json` 仅预览当前文件。保存使用现有 `sop delivery command --file command.json`，显式提供原 `expected_version`、`preview_basis` 和 `idempotency_key`；网络结果未知重试原文件，冲突后核对再重新预览。新命令为 `release.policy.save`、`release.ci.import`、`release.candidate.create`、`release.candidate.review`、`release.candidate.revoke`；旧人工 `release.save` 已退出。
 
-CI使用 `scripts/delivery-ci-attest.py --help`，从实际干净checkout构建/测试新制品，再签DSSE证明。导入命令的 `payload.envelope` 保留文件原始JSON文本，私钥不进入API或命令文件。批准候选不等于已部署；详见 `docs/DELIVERY_RELEASE_DESIGN.md`。
+先用 `sop delivery release-source-packet --file associations.json --out source-packet.json` 准备逐任务源码提案。CI 使用 `scripts/delivery-ci-attest.py --source-packet source-packet.json` 及其他必填参数，检查完整干净 checkout 中验收代码的精确树项，再构建/测试并签名。输出完整文件可直接作为 `release.ci.import` 的 payload，其中 envelope 保持原始 DSSE JSON 字符串，source_packet 固定关联；私钥不进入 API 或命令文件。候选批准一并确认源码关联，批准不等于已部署。新源码当前待实际验证，详见 `docs/DELIVERY_RELEASE_SOURCE_TRACE_GUIDE.md`。
 
 `sop delivery deployments` 读取当前项目的受控环境和部署意图；`--id <id>` 读取精确部署详情、实际运行、健康证据及失败问题。`sop delivery deployment-preview --file deployment.json` 预览明确的 `candidate_id`、`environment_id`、`reason`，回滚则只提交 `rollback_of` 和 `reason`。保存继续使用 `sop delivery command --file command.json`，携带预览原版本、`preview_basis` 及固定幂等键。
 

@@ -94,6 +94,7 @@ from .delivery_release_contract import (
     ReleasePreviewInput,
     ReleasePreviewResponse,
 )
+from .delivery_release_sources_contract import ReleaseSourcePacketInput, ReleaseSourcePacketResponse
 from .delivery_requirement_contract import (
     RecordCollection,
     RequirementChangePreview,
@@ -895,6 +896,31 @@ def delivery_release_detail(
     from .delivery_release_query import candidate_detail
 
     return candidate_detail(db, _project(db, user, project_id), user, release_id)
+
+
+@router.post("/releases/source-packet", response_model=ReleaseSourcePacketResponse)
+def delivery_release_source_packet(
+    body: ReleaseSourcePacketInput,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_release_query import quality_scope
+    from .delivery_release_sources import prepare_source_packet
+    from .delivery_query_read import _stamp, _unchanged, workspace_path
+
+    project = _progress_project(db, user, project_id)
+    if not _role_permissions(db, user, project)["write"]:
+        raise HTTPException(403, "Project write permission required")
+    _require_writable_state(project)
+    with db.no_autoflush:
+        stamp = _stamp(db, project)
+        current = quality_scope(db, project, requirement_ids=body.requirement_ids, task_ids=body.task_ids)
+        packet = prepare_source_packet(db, project, {"release_policy": workspace_path(db, project, "release_policy")},
+            body, current=current)
+        _unchanged(db, project, stamp)
+        return {"project_id": project.id, "version": current["version"],
+            "query_generation": current["query_generation"], "packet": packet}
 
 
 @router.post("/release-preview", response_model=ReleasePreviewResponse)
@@ -1913,10 +1939,6 @@ def execute(
     needed = _command_permission(body.action, body.payload)
     if not permissions[needed]:
         raise HTTPException(403, f"Project {needed} permission required")
-    try:
-        payload = PAYLOADS[body.action].model_validate(body.payload)
-    except ValidationError as exc:
-        raise HTTPException(422, json.loads(exc.json(include_context=False))) from exc
     key = hashlib.sha256(
         json.dumps([project.tenant_id, project.id, user.id, body.idempotency_key]).encode()
     ).hexdigest()
@@ -1935,6 +1957,13 @@ def execute(
             user=user,
             store=getattr(request.app.state, "hermes_store", None) if request else None,
         )
+    # An exact committed original is recovered under its original request hash,
+    # before a tightened current payload contract can reject that old original.
+    # A missing receipt still requires the full current contract before writing.
+    try:
+        payload = PAYLOADS[body.action].model_validate(body.payload)
+    except ValidationError as exc:
+        raise HTTPException(422, json.loads(exc.json(include_context=False))) from exc
     from ..project_write_guard import lifecycle_scope, require_project_operation
 
     scope = (

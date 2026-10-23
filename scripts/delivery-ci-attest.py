@@ -26,6 +26,9 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from sop_manager.routers.delivery_ci import pae, policy_value, strict_json, verify_envelope
 from sop_manager.routers.delivery_ci_contract import PAYLOAD_TYPE, PREDICATE_TYPE, STATEMENT_TYPE, CiStatement
+from sop_manager.routers.delivery_release_sources_contract import ReleaseSourcePacket
+from sop_manager.routers.delivery_release_sources import source_packet_digest
+from sop_manager.routers.delivery_ci_source_tree import SourceTreeError, verify_source_tree, require_complete_checkout, _git as _source_git, _batches as _source_batches
 
 
 class ProducerError(Exception):
@@ -33,29 +36,10 @@ class ProducerError(Exception):
 
 
 def _git(root, *args):
-    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
     try:
-        result = subprocess.run(
-            [
-                "git",
-                "--no-optional-locks",
-                "-c",
-                "core.hooksPath=" + os.devnull,
-                "-c",
-                "core.fsmonitor=false",
-                *args,
-            ],
-            cwd=root,
-            env=env,
-            capture_output=True,
-            timeout=30,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+        return _source_git(root, *args, limit=8 * 1024 * 1024)
+    except SourceTreeError as exc:
         raise ProducerError("Git inspection is unavailable") from exc
-    if result.returncode:
-        raise ProducerError("Git inspection failed; use a complete checkout with a committed HEAD")
-    return result.stdout
 
 
 def _project_path(root, value, *, directory=False):
@@ -130,12 +114,25 @@ def _artifact_digest(path):
 
 
 def _source_snapshot(root, allowed_outputs=()):
+    require_complete_checkout(root)
+    if Path(os.fsdecode(_git(root, "rev-parse", "--show-toplevel")).strip()).resolve() != root:
+        raise ProducerError("Every submodule must have its own initialized complete checkout")
     head = _git(root, "rev-parse", "--verify", "HEAD").decode("ascii").strip()
     # A clean status cannot establish committed input when these flags hide
     # existing edits. Reject them in every checkout, including submodules.
     # Hash working bytes separately so Git's normal CRLF conversion is valid.
     result = {"head": head, "files": {}}
-    for entry in _git(root, "ls-files", "-v", "--stage", "-z").split(b"\0"):
+    entries = [entry for entry in _git(root, "ls-files", "-v", "--stage", "-z").split(b"\0") if entry]
+    paths = [os.fsdecode(entry.split(b"\t", 1)[1]) for entry in entries]
+    for batch in _source_batches(paths):
+        # Custom checkout filters can hide changed working bytes behind a clean
+        # status. CRLF/text normalization remains supported; opaque transforms do not.
+        values = _git(root, "check-attr", "-z", "filter", "working-tree-encoding", "ident", "--", *batch).split(b"\0")
+        if values[-1:] != [b""] or (len(values) - 1) % 3:
+            raise ProducerError("Source attribute inspection is incomplete")
+        if any(value not in {b"unspecified", b"unset"} for value in values[2:-1:3]):
+            raise ProducerError("Controlled source cannot use custom checkout filters, encoding or ident transforms")
+    for entry in entries:
         if not entry:
             continue
         metadata, encoded_path = entry.split(b"\t", 1)
@@ -149,7 +146,7 @@ def _source_snapshot(root, allowed_outputs=()):
         if mode == "160000":
             value = _source_snapshot(path)
         elif mode in {"100644", "100755"}:
-            value = hashlib.sha256(_read_file(path)).hexdigest()
+            value = _artifact_digest(path)
         else:
             raise ProducerError("Controlled source cannot contain symbolic-link entries")
         result["files"][relative] = [mode, object_id, value]
@@ -248,15 +245,25 @@ def attest(args):
     top = Path(os.fsdecode(_git(root, "rev-parse", "--show-toplevel")).strip()).resolve()
     if top != root:
         raise ProducerError("Select the checkout root explicitly")
+    require_complete_checkout(root)
     cwd = _project_path(root, args.cwd, directory=True)
     paths = [_project_path(root, value) for value in (args.artifact, args.junit, args.out)]
     if len(set(paths)) != len(paths) or any(path.exists() or path.is_symlink() for path in paths):
         raise ProducerError("Artifact, JUnit report and output must be distinct new paths")
     artifact, report, output = paths
     build_command, test_command = _commands(args.build_command), _commands(args.test_command)
+    before = _source_snapshot(root)
     if _git(root, "status", "--porcelain=v1", "--untracked-files=normal", "--ignore-submodules=none").strip():
         raise ProducerError("The checkout must have clean controlled source")
-    before = _source_snapshot(root)
+    packet_path = Path(args.source_packet)
+    packet_raw = _read_file(packet_path, limit=1048576)
+    packet = ReleaseSourcePacket.model_validate(strict_json(packet_raw.decode("utf-8"))).model_dump(mode="json")
+    for key, expected in (("tenant_id", args.tenant_id), ("project_id", args.project_id),
+            ("repository", args.repository), ("workflow", args.workflow),
+            ("policy_generation", args.policy_generation), ("scope_basis", args.scope_basis)):
+        if packet[key] != expected:
+            raise ProducerError("The fixed source packet does not match this CI scope and policy")
+    source_trace = {"packet_digest": source_packet_digest(packet), **verify_source_tree(root, packet, before["head"])}
     key_bytes = _read_file(Path(args.private_key), limit=16384, private=True)
     try:
         key = (
@@ -283,6 +290,8 @@ def attest(args):
     artifact_sha256 = _artifact_digest(artifact)
     if before != _source_snapshot(root, allowed_outputs=paths):
         raise ProducerError("HEAD, index or controlled source changed during build or tests")
+    if packet_raw != _read_file(packet_path, limit=1048576):
+        raise ProducerError("The fixed source packet changed during build or tests")
     statement = {
         "_type": STATEMENT_TYPE,
         "subject": [{"name": args.subject_name or artifact.name, "digest": {"sha256": artifact_sha256}}],
@@ -298,6 +307,7 @@ def attest(args):
             "run_number": args.run_number,
             "run_attempt": args.run_attempt,
             "scope_basis": args.scope_basis,
+            "source_trace": source_trace,
             "build_result": "passed" if build_exit == test_exit == 0 else "failed",
             "tests": tests,
             "finished_at": datetime.now(timezone.utc).isoformat(),
@@ -320,8 +330,10 @@ def attest(args):
         text, policy, tenant_id=args.tenant_id, project_id=args.project_id, scope_basis=args.scope_basis
     )
     output.parent.mkdir(parents=True, exist_ok=True)
+    receipt = {"envelope": text, "source_packet": packet,
+        "requirement_ids": packet["requirement_ids"], "task_ids": packet["task_ids"]}
     with output.open("x", encoding="utf-8", newline="\n") as stream:
-        stream.write(text + "\n")
+        stream.write(json.dumps(receipt, ensure_ascii=False, separators=(",", ":")) + "\n")
     return verified["passed"]
 
 
@@ -342,6 +354,7 @@ def parser():
         "project-id",
         "run-uri",
         "scope-basis",
+        "source-packet",
         "build-command",
         "test-command",
     ):
@@ -360,7 +373,12 @@ def main(argv=None):
         return 2
     try:
         passed = attest(args)
-    except (ProducerError, HTTPException, ValidationError, OSError, UnicodeError, ValueError):
+    except (ProducerError, SourceTreeError) as exc:
+        # These producer-owned messages contain no user paths, child output,
+        # command text or key material; they explain the actionable refusal.
+        print("CI evidence error: " + str(exc), file=sys.stderr)
+        return 2
+    except (HTTPException, ValidationError, OSError, UnicodeError, ValueError):
         # Do not print command text, captured child output, private material or
         # crypto/parser diagnostics. The producer's inputs remain local to CI.
         print(

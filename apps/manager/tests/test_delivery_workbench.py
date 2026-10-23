@@ -78,6 +78,25 @@ def env():
     engine.dispose()
 
 
+def test_exact_receipt_recovery_precedes_a_tightened_payload_contract(env, monkeypatch):
+    from pydantic import BaseModel
+    from sop_manager.routers.delivery import PAYLOADS
+
+    client, _, _ = env
+    original = {"action": "task.create", "expected_version": 0, "idempotency_key": "fixed-old-contract",
+        "payload": {"title": "Original task", "acceptance_criteria": ["Accepted condition"]}}
+    first = client.post("/api/v1/delivery/commands", json=original)
+    assert first.status_code == 200, first.text
+    class TightenedContract(BaseModel):
+        required_new_field: str
+    monkeypatch.setitem(PAYLOADS, "task.create", TightenedContract)
+    replay = client.post("/api/v1/delivery/commands", json=original)
+    assert replay.status_code == 200 and replay.json()["replayed"] is True
+    assert replay.json()["resource"] == first.json()["resource"]
+    changed = {**original, "idempotency_key": "new-request"}
+    assert client.post("/api/v1/delivery/commands", json=changed).status_code == 422
+
+
 def command(client, action, payload, key=None, version=None):
     state = client.get("/api/v1/delivery/workspace").json()
     if action == "requirement.update" and {"title", "description", "acceptance_criteria"} & payload.keys() and not {"requirement_basis", "change_preview_basis"} & payload.keys():

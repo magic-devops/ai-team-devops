@@ -14,6 +14,7 @@ import {
   releaseAck,
   releaseIndex,
   releaseQuality,
+  releaseSourcePacket,
 } from "./deliveryReleaseFixtures";
 const hooks = vi.hoisted(() => ({
   state: [] as unknown[],
@@ -87,6 +88,7 @@ function find(
   );
 }
 const close = vi.fn();
+const receipt = (envelope: string) => JSON.stringify({ envelope, source_packet: releaseSourcePacket, ...releaseQuality.selected });
 const render = (mode: "policy" | "ci" = "ci") => {
   hooks.next = 0;
   return DeliveryReleaseEvidenceEditor({
@@ -122,22 +124,22 @@ describe("signed CI input keeps original text and explicit trust", () => {
       await readEnvelopeFile({ size: raw.length, text: async () => raw }),
     ).toBe(raw);
     await expect(
-      readEnvelopeFile({ size: 131073, text: async () => "unread" }),
+      readEnvelopeFile({ size: 1572865, text: async () => "unread" }),
     ).rejects.toThrow();
     find(render(), Input.TextArea, "envelope")!.onChange({
-      target: { value: raw },
+      target: { value: receipt(raw) },
     });
     await button("import").onClick();
     expect(vi.mocked(submitReleaseCommand).mock.calls[0]).toEqual([
       "P",
       "release.ci.import",
-      { envelope: raw, requirement_ids: ["R-1"], task_ids: ["T-one"] },
+      { envelope: raw, source_packet: releaseSourcePacket, requirement_ids: ["R-1"], task_ids: ["T-one"] },
       expect.objectContaining({ version: 7 }),
     ]);
   });
   it("retains envelope and retry identity after a failed import and requires explicit adoption after conflict", async () => {
     find(render(), Input.TextArea, "envelope")!.onChange({
-      target: { value: '{"original":true}' },
+      target: { value: receipt('{"original":true}') },
     });
     vi.mocked(submitReleaseCommand).mockRejectedValueOnce(
       new Error(
@@ -150,7 +152,7 @@ describe("signed CI input keeps original text and explicit trust", () => {
     await button("readLatest").onClick();
     expect(submitReleaseCommand).toHaveBeenCalledOnce();
     expect(find(render(), Input.TextArea, "envelope")!.value).toBe(
-      '{"original":true}',
+      receipt('{"original":true}'),
     );
     button("adopt").onClick();
     await button("import").onClick();

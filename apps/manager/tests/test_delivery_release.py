@@ -212,6 +212,15 @@ def signed_ci(
     selected = selected or {"requirement_ids": ["R-release"], "task_ids": []}
     current = quality(db, project, data, **selected)
     policy = data["release_policy"]
+    from sop_manager.routers.delivery_release_sources import prepare_source_packet, source_packet_digest
+    from sop_manager.routers.delivery_release_sources_contract import ReleaseSourcePacketInput
+
+    included = set(current["selected"]["task_ids"]) | {tid for row in current["requirements"]
+        if row["id"] in selected["requirement_ids"] for tid in row["task_ids"]}
+    packet = prepare_source_packet(db, project, data, ReleaseSourcePacketInput(**selected,
+        scope_basis=current["scope_basis"], policy_generation=policy["generation"], mappings=[
+            {"task_id": row["id"], "kind": "no_code_change", "comment": "Explicit non-code acceptance fixture"}
+            for row in current["tasks"] if row["id"] in included]))
     statement = {
         "_type": "https://in-toto.io/Statement/v1",
         "subject": [{"name": "release.tar.gz", "digest": {"sha256": artifact}}],
@@ -227,6 +236,8 @@ def signed_ci(
             "run_number": run,
             "run_attempt": attempt,
             "scope_basis": current["scope_basis"],
+            "source_trace": {"packet_digest": source_packet_digest(packet), "verified_bindings": len(packet["bindings"]),
+                "checked_paths": 0, "tree_digest": hashlib.sha256(b"fixture CI tree result").hexdigest()},
             "build_result": "passed" if passed else "failed",
             "tests": {"total": 3, "failed": 0 if passed else 1, "errors": 0, "skipped": 0},
             "finished_at": datetime.now(timezone.utc).isoformat(),
@@ -246,7 +257,7 @@ def signed_ci(
             ],
         }
     )
-    return ReleaseCiImport(envelope=envelope, **selected)
+    return ReleaseCiImport(envelope=envelope, source_packet=packet, **selected)
 
 
 def import_ci(db, project, user, data, key, **options):

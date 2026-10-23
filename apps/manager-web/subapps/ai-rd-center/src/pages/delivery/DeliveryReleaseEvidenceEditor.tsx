@@ -8,6 +8,8 @@ import {
   fetchDeliveryQuality,
   fetchDeliveryReleases,
   releaseProblem,
+  readReleaseCiReceipt,
+  RELEASE_RECEIPT_MAX_BYTES,
   type DeliveryQuality,
   type DeliveryReleases,
 } from "@/lib/deliveryRelease";
@@ -15,9 +17,9 @@ import { ReleaseDigest } from "./DeliveryReleaseFacts";
 import { useReleaseCommand } from "@/lib/deliveryReleaseCommand";
 
 export async function readEnvelopeFile(file: Pick<File, "size" | "text">) {
-  if (file.size > 131072) throw new Error("fileTooLarge");
+  if (file.size > RELEASE_RECEIPT_MAX_BYTES) throw new Error("fileTooLarge");
   const raw = await file.text();
-  if (raw.length > 131072) throw new Error("fileTooLarge");
+  if (new TextEncoder().encode(raw).length > RELEASE_RECEIPT_MAX_BYTES) throw new Error("fileTooLarge");
   return raw;
 }
 function publicKeys(text: string) {
@@ -62,6 +64,7 @@ export function DeliveryReleaseEvidenceEditor({
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryRelease.${key}`);
   const origin = useRef(projectSessionKey());
+  const fileRead = useRef(0);
   const command = useReleaseCommand(projectId, mode, onPending);
   const restored = command.state.original?.payload;
   const [repository, setRepository] = useState(
@@ -80,7 +83,7 @@ export function DeliveryReleaseEvidenceEditor({
       : initial.policy?.keys.map((key) => key.public_key).join("\n") || "",
   );
   const [envelope, setEnvelope] = useState(
-    typeof restored?.envelope === "string" ? restored.envelope : "",
+    typeof restored?.envelope === "string" ? JSON.stringify(restored, null, 2) : "",
   );
   const [captured, setCaptured] = useState(() => ({
     selected: structuredClone(
@@ -130,6 +133,7 @@ export function DeliveryReleaseEvidenceEditor({
   const save = async () => {
     if (busy || command.state.phase !== "idle" || conflict || !allowed) return;
     setBusy("save");
+    fileRead.current += 1;
     setError("");
     try {
       check();
@@ -152,14 +156,14 @@ export function DeliveryReleaseEvidenceEditor({
         };
       } else {
         if (!envelope.trim()) throw new Error("rawRequired");
-        if (envelope.length > 131072) throw new Error("fileTooLarge");
+        if (new TextEncoder().encode(envelope).length > RELEASE_RECEIPT_MAX_BYTES) throw new Error("fileTooLarge");
         if (
           !captured.basis ||
           (!captured.selected.requirement_ids.length &&
             !captured.selected.task_ids.length)
         )
           throw new Error("scopeRequired");
-        payload = { envelope, ...captured.selected };
+        payload = readReleaseCiReceipt(envelope, captured.selected, projectId, captured.basis);
       }
       const pinned = prepareDeliveryIntent(intent, action, payload);
       setIntent(pinned);
@@ -346,16 +350,19 @@ export function DeliveryReleaseEvidenceEditor({
                 onChange={async (event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
+                  const sequence = ++fileRead.current;
+                  const input = event.target;
+                  input.value = "";
                   try {
                     check();
                     const raw = await readEnvelopeFile(file);
+                    if (sequence !== fileRead.current || !command.current() || command.locked) return;
                     check();
                     setEnvelope(raw);
                     setError("");
                   } catch (problem) {
-                    failure(problem);
+                    if (sequence === fileRead.current && command.current()) failure(problem);
                   }
-                  event.target.value = "";
                 }}
               />
             </label>
@@ -366,8 +373,8 @@ export function DeliveryReleaseEvidenceEditor({
                 value={envelope}
                 disabled={locked}
                 rows={10}
-                maxLength={131072}
-                onChange={(event) => setEnvelope(event.target.value)}
+                maxLength={RELEASE_RECEIPT_MAX_BYTES}
+                onChange={(event) => { fileRead.current += 1; setEnvelope(event.target.value); }}
               />
             </label>
           </>

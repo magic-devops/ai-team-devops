@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from .delivery_ci_contract import CiStatement, HexDigest, Identity, safe_https
+from .delivery_release_sources_contract import ReleaseSourcePacket
 
 ScopeIds = Annotated[list[Identity], Field(max_length=200)]
 NonemptyText = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1)]
@@ -204,6 +205,7 @@ class ReleaseCiEvidence(ReleaseContract):
     reasons: list[ReleaseReason]
     selected: SelectedReleaseScope
     statement: CiStatement
+    source_packet: ReleaseSourcePacket | None = None
 
 
 class ReleaseCiEvidenceSnapshot(ReleaseContract):
@@ -219,6 +221,7 @@ class ReleaseCiEvidenceSnapshot(ReleaseContract):
     run_attempt: int
     artifact_name: str
     artifact_sha256: str
+    source_packet: ReleaseSourcePacket | None = None
 
 
 class ReleaseQualitySnapshot(ReleaseContract):

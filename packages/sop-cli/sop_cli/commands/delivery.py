@@ -753,6 +753,34 @@ def release_preview(file: Annotated[Path, typer.Option("--file", exists=True, di
         raise typer.Exit(1) from exc
 
 
+@app.command("release-source-packet")
+def release_source_packet(
+    file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)],
+    out: Annotated[Path | None, typer.Option("--out", help="将原始 UTF-8 核对包写入一个不存在的文件")] = None,
+):
+    """从逐任务关联文件准备只读源码核对包；结果不是候选批准或部署证明。"""
+    try:
+        if file.stat().st_size > 1048576:
+            raise ValueError("Source association input exceeds 1 MiB")
+        body = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(body, dict):
+            raise ValueError("Expected an explicit JSON object")
+        with get_client() as client:
+            result = client.delivery_release_source_packet(body)
+        # Direct redirection produces exactly the local CI input, without a
+        # manual metadata-wrapper extraction or JSON reformatting step.
+        text = json.dumps(result["packet"], ensure_ascii=False, separators=(",", ":"))
+        if out is None:
+            typer.echo(text)
+        else:
+            with out.open("x", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+            console.print("源码核对包已写入指定文件；CI 核对及候选批准仍待完成", markup=False)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
 @app.command("lifecycle-preview")
 def lifecycle_preview(
     target: Annotated[ProjectState, typer.Option("--target")],

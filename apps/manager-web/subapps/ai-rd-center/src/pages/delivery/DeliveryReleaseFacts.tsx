@@ -185,7 +185,7 @@ export function CiEvidenceFacts({ evidence }: { evidence: ReleaseCiEvidence }) {
     <section className="delivery-release-ci-facts">
       <div className="delivery-release-inline">
         <Tag color={evidence.passed ? "success" : "error"}>
-          {tr(evidence.passed ? "ready" : "blocked")}
+          {tr(evidence.passed ? "ciChecksPassed" : "ciChecksFailed")}
         </Tag>
         <Tag>
           {tr(
@@ -254,6 +254,10 @@ export function CiEvidenceFacts({ evidence }: { evidence: ReleaseCiEvidence }) {
       <ReleaseDigest title={tr("keyId")} value={evidence.key_id} />
       <ReleaseDigest title={tr("scopeBasis")} value={p.scope_basis} />
       <ReleaseReasons reasons={evidence.reasons} />
+      <ReleaseSourceFacts packet={evidence.source_packet || null} />
+      {p.source_trace && <p className="delivery-release-meta">{t("deliveryRelease.sourceChecked", {
+        bindings: p.source_trace.verified_bindings, paths: p.source_trace.checked_paths,
+      })}</p>}
     </section>
   );
 }
@@ -286,6 +290,7 @@ export function ReleaseSnapshotFacts({
         </Tag>
       </div>
       <ReleaseDigest title={tr("commit")} value={snapshot.ci.commit_sha} />
+      <ReleaseSourceFacts packet={snapshot.ci.source_packet || null} />
       <ReleaseDigest
         title={tr("artifactDigest")}
         value={snapshot.ci.artifact_sha256}
@@ -351,4 +356,23 @@ export function ReleaseSnapshotFacts({
       ))}
     </section>
   );
+}
+
+export function ReleaseSourceFacts({ packet }: { packet: import("@/lib/deliveryRelease").ReleaseSourcePacket | null }) {
+  const { t } = useTranslation(), tr = (key: string) => t(`deliveryRelease.${key}`);
+  if (!packet) return <Alert type="warning" showIcon title={tr("sourceMissing")} />;
+  return <section aria-label={tr("sourceAssociations")}>
+    <h4>{tr("sourceAssociations")}</h4>
+    <p className="delivery-release-meta">{tr("sourceApprovalIncluded")}</p>
+    {packet.bindings.map((row) => <details className="delivery-release-captured" key={row.task_id}>
+      <summary>{row.task_id} · {tr(row.kind === "change" ? "sourceCodeChange" : "sourceNoCode")}</summary>
+      <p className="delivery-release-content">{row.comment}</p>
+      {row.kind === "change" && <>
+        <ReleaseDigest title={tr("sourceBaseCommit")} value={row.base_commit} />
+        <ReleaseDigest title={tr("sourceAcceptedCommit")} value={row.accepted_commit} />
+      </>}
+      <ReleaseDigest title={tr("sourceTaskBasis")} value={row.task_basis} />
+      <ReleaseDigest title={tr("sourceProofBasis")} value={row.proof_basis} />
+    </details>)}
+  </section>;
 }

@@ -36,6 +36,26 @@ def query_api():
     return importlib.import_module(name)
 
 
+def test_source_packet_http_uses_complete_scope_and_never_writes(indexed):
+    client, sessions, actor, _ = indexed
+    current = client.get('/api/v1/delivery/quality', params={'requirement_ids': ['R-release']}).json()
+    policy = client.get('/api/v1/delivery/releases').json()['policy']
+    body = {**current['selected'], 'scope_basis': current['scope_basis'], 'policy_generation': policy['generation'],
+        'mappings': [{'task_id': row['id'], 'kind': 'no_code_change', 'comment': 'Explicit non-code scope'} for row in current['tasks']]}
+    before = table_values(sessions)
+    response = client.post('/api/v1/delivery/releases/source-packet', json=body)
+    assert response.status_code == 200, response.text
+    assert {row['task_id'] for row in response.json()['packet']['bindings']} == {'T-release'}
+    assert response.json()['query_generation'] == current['query_generation']
+    assert before == table_values(sessions)
+    stale = client.post('/api/v1/delivery/releases/source-packet', json={**body, 'scope_basis': 'f' * 64})
+    assert stale.status_code == 409
+    actor['id'] = 'reader'
+    denied = client.post('/api/v1/delivery/releases/source-packet', json=body)
+    assert denied.status_code == 403
+    assert before == table_values(sessions)
+
+
 @pytest.fixture
 def indexed(env, trusted):
     client, sessions, actor = env
@@ -317,14 +337,15 @@ def test_grown_scope_keeps_original_and_allows_control_but_not_approval(indexed,
 
 
 @pytest.mark.parametrize('initial_decision', ['pending', 'approved'])
-def test_budget_only_incomplete_is_unverified_and_never_latched(trusted, env, initial_decision):
+def test_budget_only_incomplete_is_unverified_and_never_latched(trusted, env, initial_decision, monkeypatch):
+    from sop_manager.routers import delivery_quality_scope
     from sop_manager.routers.delivery_release import _candidate_view
     from sop_manager.routers.delivery_service import remember_basis
 
     client, sessions, _ = env
     _, data, key = trusted
     with sessions() as db:
-        db.add_all([Task(id=f'original-{i}', tenant_id='tenant', project_id='project', req_id='R-release', title=f'Original task {i}', status='completed', owner_id='user:lead', acceptance_criteria=['Checked']) for i in range(500)])
+        db.add_all([Task(id=f'original-{i}', tenant_id='tenant', project_id='project', req_id='R-release', title=f'Original task {i}', status='completed', owner_id='user:lead', acceptance_criteria=['Checked']) for i in range(2)])
         db.commit()
         project, user = db.get(Project, 'project'), db.get(User, 'lead')
         remember_basis(db, project, data)
@@ -341,6 +362,15 @@ def test_budget_only_incomplete_is_unverified_and_never_latched(trusted, env, in
             assert canonical['valid']
         db.add(DeliveryWorkspace(project_id='project', tenant_id='tenant', version=0, data=data))
         db.commit()
+    # Create a legal source packet first, then exercise the real bounded reader
+    # under a smaller budget without changing the candidate's accepted scope.
+    original_budget = delivery_quality_scope._Scope.budget
+
+    def reduced_budget(scope, count):
+        scope.limit = min(scope.limit, 2)
+        return original_budget(scope, count)
+
+    monkeypatch.setattr(delivery_quality_scope._Scope, 'budget', reduced_budget)
     before = table_values(sessions)
     detail = client.get('/api/v1/delivery/releases/' + release_id)
     assert detail.status_code == 200, detail.text

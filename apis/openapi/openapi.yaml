@@ -6448,6 +6448,42 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       description: Read the exact immutable candidate and signed original, rechecking current complete scope and permissions
         through narrow canonical paths. Missing IDs never fall back to the first release.
+  /api/v1/delivery/releases/source-packet:
+    post:
+      tags:
+      - delivery
+      summary: Delivery Release Source Packet
+      operationId: deliveryReleaseSourcePacket
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseSourcePacketInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseSourcePacketResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Read-only preparation of exactly one proposed code range or explicit no-code rationale per accepted task. Fixes the current repository, policy, scope and acceptance proof. Does not sign, approve, build or deploy. CI must verify the resulting local packet; candidate approval explicitly confirms its fixed associations.
   /api/v1/delivery/release-preview:
     post:
       tags:
@@ -20526,6 +20562,11 @@ components:
           minLength: 1
           title: Finished At
           type: string
+        source_trace:
+          anyOf:
+          - $ref: '#/components/schemas/CiSourceTrace'
+          - type: 'null'
+          default: null
       required:
       - tenant_id
       - project_id
@@ -20638,8 +20679,11 @@ components:
           maxItems: 200
           title: Task Ids
           type: array
+        source_packet:
+          $ref: '#/components/schemas/ReleaseSourcePacket'
       required:
       - envelope
+      - source_packet
       title: ReleaseCiImport
       type: object
     ReleasePolicySave:
@@ -21277,6 +21321,11 @@ components:
           $ref: '#/components/schemas/SelectedReleaseScope'
         statement:
           $ref: '#/components/schemas/CiStatement'
+        source_packet:
+          anyOf:
+          - $ref: '#/components/schemas/ReleaseSourcePacket'
+          - type: 'null'
+          default: null
       required:
       - id
       - imported_at
@@ -21329,6 +21378,11 @@ components:
         artifact_sha256:
           title: Artifact Sha256
           type: string
+        source_packet:
+          anyOf:
+          - $ref: '#/components/schemas/ReleaseSourcePacket'
+          - type: 'null'
+          default: null
       required:
       - id
       - envelope_digest
@@ -29541,3 +29595,342 @@ components:
       - counts
       - invalidates_current_acceptance
       title: RequirementPreviewImpact
+    ReleaseSourceMapping:
+      {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "enum": [
+              "change",
+              "no_code_change"
+            ]
+          },
+          "base_commit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Commit",
+            "default": null
+          },
+          "accepted_commit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Commit",
+            "default": null
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "task_id",
+          "kind",
+          "comment"
+        ],
+        "title": "ReleaseSourceMapping"
+      }
+    ReleaseSourceBinding:
+      {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "enum": [
+              "change",
+              "no_code_change"
+            ]
+          },
+          "base_commit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Commit",
+            "default": null
+          },
+          "accepted_commit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Commit",
+            "default": null
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "task_basis": {
+            "type": "string",
+            "title": "Task Basis",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "proof_basis": {
+            "type": "string",
+            "title": "Proof Basis",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "task_id",
+          "kind",
+          "comment",
+          "task_basis",
+          "proof_basis"
+        ],
+        "title": "ReleaseSourceBinding"
+      }
+    ReleaseSourcePacketInput:
+      {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "requirement_ids": {
+            "type": "array",
+            "title": "Requirement Ids",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 200
+          },
+          "task_ids": {
+            "type": "array",
+            "title": "Task Ids",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 200
+          },
+          "scope_basis": {
+            "type": "string",
+            "title": "Scope Basis",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "policy_generation": {
+            "type": "integer",
+            "title": "Policy Generation",
+            "minimum": 1
+          },
+          "mappings": {
+            "type": "array",
+            "title": "Mappings",
+            "items": {
+              "$ref": "#/components/schemas/ReleaseSourceMapping"
+            },
+            "minItems": 1,
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "scope_basis",
+          "policy_generation",
+          "mappings"
+        ],
+        "title": "ReleaseSourcePacketInput"
+      }
+    CiSourceTrace:
+      {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "packet_digest": {
+            "type": "string",
+            "title": "Packet Digest",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "verified_bindings": {
+            "type": "integer",
+            "title": "Verified Bindings",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "checked_paths": {
+            "type": "integer",
+            "title": "Checked Paths",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "tree_digest": {
+            "type": "string",
+            "title": "Tree Digest",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "packet_digest",
+          "verified_bindings",
+          "checked_paths",
+          "tree_digest"
+        ],
+        "title": "CiSourceTrace"
+      }
+    ReleaseSourcePacket:
+      {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "title": "Schema Version",
+            "const": 1
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "repository": {
+            "type": "string",
+            "title": "Repository",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "workflow": {
+            "type": "string",
+            "title": "Workflow",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "policy_generation": {
+            "type": "integer",
+            "title": "Policy Generation",
+            "minimum": 1
+          },
+          "scope_basis": {
+            "type": "string",
+            "title": "Scope Basis",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "requirement_ids": {
+            "type": "array",
+            "title": "Requirement Ids",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 200
+          },
+          "task_ids": {
+            "type": "array",
+            "title": "Task Ids",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "maxItems": 200
+          },
+          "bindings": {
+            "type": "array",
+            "title": "Bindings",
+            "items": {
+              "$ref": "#/components/schemas/ReleaseSourceBinding"
+            },
+            "minItems": 1,
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "schema_version",
+          "tenant_id",
+          "project_id",
+          "repository",
+          "workflow",
+          "policy_generation",
+          "scope_basis",
+          "requirement_ids",
+          "task_ids",
+          "bindings"
+        ],
+        "title": "ReleaseSourcePacket"
+      }
+    ReleaseSourcePacketResponse:
+      {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "minimum": 0
+          },
+          "query_generation": {
+            "type": "integer",
+            "title": "Query Generation",
+            "minimum": 0
+          },
+          "packet": {
+            "$ref": "#/components/schemas/ReleaseSourcePacket"
+          }
+        },
+        "required": [
+          "project_id",
+          "version",
+          "query_generation",
+          "packet"
+        ],
+        "title": "ReleaseSourcePacketResponse"
+      }

@@ -8,6 +8,7 @@ import type {
   ReleasePreview,
   ReleaseSnapshot,
   ReleaseCommand,
+  ReleaseSourcePacket,
 } from "./deliveryRelease";
 import type { DeliveryCommandAck, DeliveryIntent } from "./delivery";
 export function releaseAck(
@@ -135,7 +136,15 @@ export const releaseQuality: DeliveryQuality = {
     critical_issues: 0,
   },
 };
+export const releaseSourcePacket: ReleaseSourcePacket = {
+  schema_version: 1, tenant_id: "team", project_id: "P", repository: "https://git.example/team/search",
+  workflow: "release-ci", policy_generation: 1, scope_basis: digest,
+  ...releaseQuality.selected,
+  bindings: [{ task_id: "T-one", kind: "no_code_change", base_commit: null, accepted_commit: null,
+    comment: "Explicit non-code source fixture", task_basis: digest, proof_basis: digest }],
+};
 export const ciEvidence: ReleaseCiEvidence = {
+  source_packet: releaseSourcePacket,
   id: "CI-one",
   imported_at: "2026-10-17T10:00:00Z",
   imported_by: { id: "user:lead", name: "Lead" },
@@ -160,6 +169,7 @@ export const ciEvidence: ReleaseCiEvidence = {
       run_number: 21,
       run_attempt: 1,
       scope_basis: digest,
+      source_trace: { packet_digest: digest, verified_bindings: 1, checked_paths: 0, tree_digest: digest },
       build_result: "passed",
       tests: { total: 12, failed: 0, errors: 0, skipped: 0 },
       finished_at: "2026-10-17T09:50:00Z",
@@ -174,6 +184,7 @@ export const releaseSnapshot: ReleaseSnapshot = {
   release_notes: releaseForm.release_notes,
   rollback_plan: releaseForm.rollback_plan,
   ci: {
+    source_packet: releaseSourcePacket,
     id: "CI-one",
     envelope_digest: digest,
     key_id: ciEvidence.key_id,

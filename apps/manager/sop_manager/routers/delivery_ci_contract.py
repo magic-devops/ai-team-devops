@@ -1,55 +1,16 @@
 """Strict, provider-independent signed CI input. No delivery module dependencies."""
 
 from datetime import datetime
-from typing import Annotated, Literal
-from urllib.parse import urlsplit
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .delivery_ci_types import CiInput, CommitSha, Count, HexDigest, Identity, safe_https
+from .delivery_release_sources_contract import ReleaseSourcePacket
 
 PAYLOAD_TYPE = "application/vnd.in-toto+json"
 STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
 PREDICATE_TYPE = "urn:sop:delivery:ci-evidence:v1"
-HexDigest = Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{64}$")]
-CommitSha = Annotated[str, StringConstraints(strict=True, pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")]
-Identity = Annotated[str, StringConstraints(strict=True, min_length=1, max_length=200)]
-Count = Annotated[int, Field(strict=True, ge=0, le=10_000_000)]
-
-
-def safe_https(value: str, *, repository=False) -> str:
-    """Locations are identifiers; the verifier never fetches them."""
-    try:
-        value.encode("utf-8")
-        parsed = urlsplit(value)
-        port = parsed.port
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.fragment
-            or "#" in value
-            or "?" in value
-            or port == 0
-            or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value)
-            or "\\" in value
-        ):
-            raise ValueError
-    except (ValueError, UnicodeError) as exc:
-        raise ValueError("Use an HTTPS URI without credentials or a fragment") from exc
-    return value
-
-
-class CiInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=False)
-
-    @field_validator("*", mode="after")
-    @classmethod
-    def string_is_text(cls, value):
-        if isinstance(value, str):
-            value.encode("utf-8")
-            if not value.strip() or any(ord(char) < 32 or ord(char) == 127 for char in value):
-                raise ValueError("Expected nonempty text without control characters")
-        return value
 
 
 class ReleasePolicySave(CiInput):
@@ -68,6 +29,7 @@ class ReleaseCiImport(BaseModel):
     envelope: str = Field(min_length=1, max_length=131072)
     requirement_ids: list[Identity] = Field(default_factory=list, max_length=200)
     task_ids: list[Identity] = Field(default_factory=list, max_length=200)
+    source_packet: ReleaseSourcePacket
 
     @field_validator("requirement_ids", "task_ids")
     @classmethod
@@ -117,6 +79,13 @@ class CiSubject(CiInput):
     digest: CiDigest
 
 
+class CiSourceTrace(CiInput):
+    packet_digest: HexDigest
+    verified_bindings: int = Field(strict=True, ge=1, le=500)
+    checked_paths: int = Field(strict=True, ge=0, le=10000)
+    tree_digest: HexDigest
+
+
 class CiPredicate(CiInput):
     tenant_id: Identity
     project_id: Identity
@@ -128,6 +97,8 @@ class CiPredicate(CiInput):
     run_number: int = Field(strict=True, ge=1)
     run_attempt: int = Field(strict=True, ge=1)
     scope_basis: HexDigest
+    # Historical signed originals remain readable; release admission requires it.
+    source_trace: CiSourceTrace | None = None
     build_result: Literal["passed", "failed"]
     tests: CiTests
     finished_at: str = Field(min_length=1, max_length=100)

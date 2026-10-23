@@ -36,6 +36,22 @@ def test_quality_rejects_ambiguous_ids_before_network():
                 client.delivery_quality(task_ids=ids)
 
 
+def test_source_packet_preparation_preserves_exact_explicit_proposal():
+    seen = []
+    body = {"requirement_ids": ["R"], "task_ids": [], "scope_basis": "a" * 64,
+        "policy_generation": 1, "mappings": [{"task_id": "T", "kind": "no_code_change", "comment": "Documentation only"}]}
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json={"project_id": "project", "packet": {"scope_basis": "a" * 64}})
+    with ManagerClient("https://manager.example", project_id="project", max_retries=0) as client:
+        client._client.close()
+        client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url=client.base_url)
+        client.delivery_release_source_packet(body)
+    assert seen[0].url.path == "/api/v1/delivery/releases/source-packet"
+    assert seen[0].headers["X-Project-Id"] == "project"
+    assert json.loads(seen[0].content) == body
+
+
 def test_paged_quality_and_release_catalogues_preserve_filters_and_explicit_detail():
     seen = []
 

@@ -44,6 +44,8 @@ import {
 import { DeliveryReleaseEditor } from "./DeliveryReleaseEditor";
 import { DeliveryReleaseEvidenceEditor } from "./DeliveryReleaseEvidenceEditor";
 import { DeliveryReleaseDetail } from "./DeliveryReleaseDetail";
+import { DeliveryReleaseSourceEditor } from "./DeliveryReleaseSourceEditor";
+import type { DeliveryQuality, ReleasePolicy } from "@/lib/deliveryRelease";
 import { DeliveryDeploymentWorkbench } from "./DeliveryDeploymentWorkbench";
 import "./delivery-release.css";
 
@@ -74,6 +76,7 @@ export function DeliveryReleaseWorkbench({
   const [editor, setEditor] = useState<"candidate" | "policy" | "ci" | null>(
     null,
   );
+  const [sourceEditor, setSourceEditor] = useState<{ quality: DeliveryQuality; policy: ReleasePolicy } | null>(null);
   const [deploymentPreparation, setDeploymentPreparation] = useState<{
     candidateId: string;
     rollbackOf: string;
@@ -126,9 +129,7 @@ export function DeliveryReleaseWorkbench({
     retry: false,
     gcTime: 0,
   });
-  const scopeEnabled =
-    selectedCount > 0 &&
-    (view === "quality" || editor === "candidate" || editor === "ci");
+  const scopeEnabled = selectedCount > 0;
   const selectedQuality = useQuery({
     queryKey: [
       "delivery-quality-scope",
@@ -442,6 +443,17 @@ export function DeliveryReleaseWorkbench({
         <p className="delivery-release-meta">{tr("crossPageSelection")}</p>
         {selectedCount > 0 && (
           <>
+            <ol className="delivery-release-preparation" aria-label={tr("sourcePreparationSteps")}>
+              <li><strong>1 · {tr("sourceAcceptanceStep")}</strong><span>{tr(selectedQuality.data?.eligible ? "ready" : "notVerified")}</span></li>
+              <li><strong>2 · {tr("sourceAssociationStep")}</strong><Button size="small"
+                disabled={!writable || !context.data?.permissions.can_import || !context.data.policy || !selectedQuality.data?.eligible}
+                onClick={() => {
+                  if (context.data?.policy && selectedQuality.data?.eligible) setSourceEditor({
+                    policy: structuredClone(context.data.policy), quality: structuredClone(selectedQuality.data) });
+                }}>{tr("sourcePrepare")}</Button></li>
+              <li><strong>3 · {tr("sourceCiStep")}</strong><span>{tr("sourceCiStepHint")}</span></li>
+              <li><strong>4 · {tr("sourceApprovalStep")}</strong><span>{tr("sourceApprovalStepHint")}</span></li>
+            </ol>
             <div className="delivery-release-selected">
               {route.requirementIds.map((id) => (
                 <Tag
@@ -770,6 +782,9 @@ export function DeliveryReleaseWorkbench({
           }}
         />
       )}
+      {sourceEditor && <DeliveryReleaseSourceEditor key={projectId + sessionId + ":sources"}
+        projectId={projectId} quality={sourceEditor.quality} policy={sourceEditor.policy}
+        readOnly={!writable} onClose={() => setSourceEditor(null)} />}
       {(editor === "policy" || (editor === "ci" && selectedQuality.data)) &&
         context.data && (
           <DeliveryReleaseEvidenceEditor

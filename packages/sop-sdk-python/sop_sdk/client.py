@@ -851,6 +851,12 @@ class ManagerClient:
         """Preview a fixed candidate; this never approves or deploys it."""
         return self._request("POST", "/api/v1/delivery/release-preview", json_body=dict(body))
 
+    def delivery_release_source_packet(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Prepare explicit task source associations; this neither writes nor approves a release."""
+        if not isinstance(body, Mapping):
+            raise ValueError("Source packet preparation requires an explicit JSON object")
+        return self._request("POST", "/api/v1/delivery/releases/source-packet", json_body=dict(body))
+
     def delivery_deployments(self) -> dict[str, Any]:
         """Read controlled environments and actual deployment evidence in this project."""
         return self._request("GET", "/api/v1/delivery/deployments")

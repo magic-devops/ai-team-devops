@@ -55,6 +55,12 @@ def producer(tmp_path):
         )
     )
     private.chmod(0o600)
+    packet = tmp_path / "source-packet.json"
+    packet.write_text(json.dumps({"schema_version": 1, "tenant_id": "tenant", "project_id": "project",
+        "repository": "https://example.test/team/repo", "workflow": "build", "policy_generation": 1,
+        "scope_basis": "a" * 64, "requirement_ids": [], "task_ids": ["T-fixture"], "bindings": [{
+            "task_id": "T-fixture", "task_basis": "b" * 64, "proof_basis": "c" * 64,
+            "kind": "no_code_change", "comment": "Non-code acceptance fixture", "base_commit": None, "accepted_commit": None}]}), encoding="utf-8")
     arguments = [
         sys.executable,
         str(SCRIPT),
@@ -88,6 +94,8 @@ def producer(tmp_path):
         "1",
         "--scope-basis",
         "a" * 64,
+        "--source-packet",
+        str(packet),
     ]
     return root, key, private, arguments
 
@@ -119,7 +127,8 @@ def run(producer, *, build=None, tests=None, extra=()):
 
 def proof(producer):
     root, key, _, _ = producer
-    text = (root / "build/ci.json").read_text(encoding="utf-8")
+    receipt = json.loads((root / "build/ci.json").read_text(encoding="utf-8"))
+    text = receipt["envelope"]
     policy = policy_value(
         {
             "repository": "https://example.test/team/repo",
@@ -147,6 +156,128 @@ def test_actual_clean_checkout_build_test_artifact_and_signature(producer):
     assert facts["statement"]["subject"][0]["digest"]["sha256"] == hashlib.sha256(b"new artifact").hexdigest()
     assert facts["statement"]["predicate"]["tests"] == {"total": 2, "failed": 0, "errors": 0, "skipped": 0}
     assert "PRIVATE KEY" not in result.stdout + result.stderr
+
+
+def _commit(root, message):
+    git(root, "add", "-A")
+    git(root, "-c", "user.name=CI test", "-c", "user.email=ci@example.test", "commit", "-qm", message)
+    return git(root, "rev-parse", "HEAD")
+
+
+def _code_packet(producer, base, accepted):
+    args = producer[3]
+    path = Path(args[args.index("--source-packet") + 1])
+    packet = json.loads(path.read_text(encoding="utf-8"))
+    packet["bindings"][0].update(kind="change", base_commit=base, accepted_commit=accepted, comment="Explicitly accepted source range")
+    path.write_text(json.dumps(packet), encoding="utf-8")
+    return path
+
+
+def test_source_trace_allows_unrelated_later_work_and_checks_literal_rename(producer):
+    root = producer[0]
+    base = git(root, "rev-parse", "HEAD")
+    (root / "source.txt").rename(root / "literal[1].txt")
+    accepted = _commit(root, "Accepted rename")
+    (root / "unrelated.txt").write_text("Unrelated work", encoding="utf-8")
+    _commit(root, "Unrelated later work")
+    _code_packet(producer, base, accepted)
+    result = run(producer)
+    assert result.returncode == 0, result.stderr
+    trace = proof(producer)["statement"]["predicate"]["source_trace"]
+    assert trace["verified_bindings"] == 1 and trace["checked_paths"] == 2
+
+
+@pytest.mark.parametrize("change", ["revert", "modify", "restore_deleted", "mode"])
+def test_source_trace_rejects_later_changes_even_when_accepted_is_an_ancestor(producer, change):
+    root = producer[0]
+    base = git(root, "rev-parse", "HEAD")
+    if change == "restore_deleted":
+        (root / "source.txt").unlink()
+    else:
+        (root / "source.txt").write_text("Accepted code", encoding="utf-8")
+    accepted = _commit(root, "Accepted code")
+    if change == "mode":
+        git(root, "update-index", "--chmod=+x", "source.txt")
+        git(root, "-c", "user.name=CI test", "-c", "user.email=ci@example.test", "commit", "-qm", "Change mode")
+    else:
+        (root / "source.txt").write_text("Controlled source" if change != "modify" else "Changed after acceptance", encoding="utf-8")
+        _commit(root, "Later change")
+    _code_packet(producer, base, accepted)
+    result = run(producer)
+    assert result.returncode != 0
+    assert not (root / "build").exists()
+
+
+def test_source_trace_rejects_an_empty_net_range_before_build(producer):
+    root = producer[0]
+    base = git(root, "rev-parse", "HEAD")
+    git(root, "-c", "user.name=CI test", "-c", "user.email=ci@example.test", "commit", "--allow-empty", "-qm", "No net source change")
+    _code_packet(producer, base, git(root, "rev-parse", "HEAD"))
+    assert run(producer).returncode != 0
+    assert not (root / "build").exists()
+
+
+def test_source_packet_identity_and_duplicate_keys_are_rejected_before_build(producer):
+    args = producer[3]
+    path = Path(args[args.index("--source-packet") + 1])
+    original = path.read_text(encoding="utf-8")
+    path.write_text(original.replace('"tenant_id": "tenant"', '"tenant_id": "foreign"'), encoding="utf-8")
+    assert run(producer).returncode != 0
+    path.write_text(original.replace('"schema_version": 1', '"schema_version": 1, "schema_version": 1'), encoding="utf-8")
+    assert run(producer).returncode != 0
+    assert not (producer[0] / "build").exists()
+
+
+def test_partial_clone_metadata_is_rejected_without_build_or_fetch(producer):
+    git(producer[0], "config", "remote.origin.promisor", "true")
+    assert run(producer).returncode != 0
+    assert not (producer[0] / "build").exists()
+
+
+def test_directory_replacement_is_checked_by_its_exact_tree(producer):
+    root = producer[0]
+    base = git(root, "rev-parse", "HEAD")
+    (root / "source.txt").unlink()
+    (root / "source.txt").mkdir()
+    (root / "source.txt" / "child.txt").write_text("Accepted child", encoding="utf-8")
+    accepted = _commit(root, "Replace file with a directory")
+    _code_packet(producer, base, accepted)
+    result = run(producer)
+    assert result.returncode == 0, result.stderr
+
+
+def test_custom_checkout_filter_is_rejected_before_status_can_execute_it(producer, tmp_path):
+    root = producer[0]
+    (root / ".gitattributes").write_text("source.txt filter=opaque\n", encoding="utf-8")
+    _commit(root, "Declare checkout transformation")
+    marker = tmp_path / "filter-called.txt"
+    script = tmp_path / "filter.py"
+    script.write_text("from pathlib import Path\nimport sys\nPath(" + repr(str(marker)) + ").write_text('called')\nsys.stdout.write(sys.stdin.read())\n", encoding="utf-8")
+    git(root, "config", "filter.opaque.clean", '"' + Path(sys.executable).as_posix() + '" "' + script.as_posix() + '"')
+    assert run(producer).returncode != 0
+    assert not marker.exists()
+    assert not (root / "build").exists()
+
+
+def test_replacement_ref_cannot_substitute_build_source_for_a_commit(producer):
+    root = producer[0]
+    original = git(root, "rev-parse", "HEAD")
+    (root / "source.txt").write_text("Substituted source", encoding="utf-8")
+    _commit(root, "Different source tree")
+    tree = git(root, "rev-parse", "HEAD^{tree}")
+    replacement = git(root, "-c", "user.name=CI test", "-c", "user.email=ci@example.test", "commit-tree", tree, "-m", "Independent replacement tree")
+    git(root, "update-ref", "HEAD", original)
+    git(root, "replace", original, replacement)
+    assert run(producer).returncode != 0
+    assert not (root / "build").exists()
+
+
+def test_packet_change_during_build_cannot_receive_a_signature(producer):
+    args = producer[3]
+    packet = Path(args[args.index("--source-packet") + 1])
+    code = "from pathlib import Path; Path('build').mkdir(exist_ok=True); Path('build/app.bin').write_bytes(b'new artifact'); Path(" + repr(str(packet)) + ").write_text('{}')"
+    assert run(producer, build=code).returncode != 0
+    assert not (producer[0] / "build/ci.json").exists()
 
 
 @pytest.mark.parametrize("flag", ["assume-unchanged", "skip-worktree"])

@@ -22,6 +22,8 @@ INVALIDATION_CODES = frozenset(
         "release_ci_superseded",
         "release_ci_failed",
         "release_approver_unavailable",
+        "release_source_trace_missing",
+        "release_source_trace_mismatch",
     }
 )
 
@@ -389,7 +391,9 @@ def _sequence(evidence):
 
 
 def _ci_reasons(db, project, data, evidence, current_quality=None, *, verification=None):
-    reasons = []
+    from .delivery_release_sources import source_trace_reasons
+
+    reasons = source_trace_reasons(evidence["statement"], evidence.get("source_packet"))
     policy = data.get("release_policy")
     predicate = evidence["statement"]["predicate"]
     if not policy or predicate["policy_generation"] != policy["generation"]:
@@ -420,7 +424,7 @@ def _evidence_view(db, project, data, evidence, *, verification=None):
             "selected",
             "statement",
         )
-    } | {"current": not reasons, "reasons": reasons}
+    } | {"current": not reasons, "reasons": reasons, "source_packet": deepcopy(evidence.get("source_packet"))}
 
 
 def _approver_available(db, project, actor_id):
@@ -562,6 +566,7 @@ def _ci_snapshot(evidence):
     predicate = evidence["statement"]["predicate"]
     subject = evidence["statement"]["subject"][0]
     return {
+        "source_packet": deepcopy(evidence.get("source_packet")),
         "id": evidence["id"],
         "envelope_digest": evidence["envelope_digest"],
         "key_id": evidence["key_id"],
@@ -651,12 +656,15 @@ def _save_policy(project, user, data, body):
 
 
 def _import_ci(db, project, user, data, body):
+    from .delivery_release_sources import source_trace_reasons, validate_source_packet
+
     current = quality(db, project, data, requirement_ids=body.requirement_ids, task_ids=body.task_ids)
     if current["scope_basis"] is None:
         _deny(422, "release_scope_missing", "Select an explicit CI quality scope.")
     policy = data.get("release_policy")
     if not policy:
         _deny(422, "release_policy_missing", "Configure a trusted CI public key before importing evidence.")
+    packet = validate_source_packet(body.source_packet.model_dump(mode="json"), current, policy, project)
     verified = verify_envelope(
         body.envelope,
         policy,
@@ -664,11 +672,15 @@ def _import_ci(db, project, user, data, body):
         project_id=project.id,
         scope_basis=current["scope_basis"],
     )
+    reasons = source_trace_reasons(verified["statement"], packet)
+    if reasons:
+        _deny(422, reasons[0]["code"], reasons[0]["message"])
     for row in data.get("ci_evidence", []):
         if row["envelope_digest"] == verified["envelope_digest"]:
             return row["id"], None, {"evidence_id": row["id"], "replayed": True}
     row = {
         **verified,
+        "source_packet": packet,
         "id": _id("ci"),
         "imported_at": _now(),
         "imported_by": _actor(user),

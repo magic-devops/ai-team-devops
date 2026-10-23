@@ -1,5 +1,7 @@
 # 质量证据与固定发布候选
 
+2026-10-23 源码补充：当前新增逐任务源码核对包、CI 精确树项核对和候选批准中的固定源码关联。最新合同和操作见 `DELIVERY_RELEASE_SOURCE_TRACE_DESIGN.md`、`DELIVERY_RELEASE_SOURCE_TRACE_GUIDE.md`。当前用户要求延后运行，新增能力尚未通过实际测试/类型/构建/浏览器验证。
+
 ## 目的与范围
 
 继续用户已确认的全链路研发协作目标和紧凑协作工作台。当前阶段把真实任务/需求验收、CI 签名证明、代码提交、制品与发布评审连为一条可操作链路。项目、Requirement、Task 继续是既有实体，发布候选是跨需求的项目级不可变交付包。真实部署/灰度/回滚仍是下一独立执行边界；审批完成称“候选已批准”，不称“已部署”。
@@ -35,7 +37,7 @@ CI 的 scope_basis 必须与明确范围当前质量一致；质量快照本身�
 沿用通用 DeliveryCommand、expected_version、idempotency_key：
 
 - release.policy.save（configure）：repository/workflow/public_keys；保存新 generation，旧候选永久失效。
-- release.ci.import（write）：envelope 原始 JSON 字符串（最多 131072 字符）+ requirement_ids/task_ids；保留原文后严格解析，拒绝对象双形态和重复 JSON key；保存不可变原始信封、声明、验签身份、输入散列及当前质量快照。
+- release.ci.import（write）：envelope 原始 JSON 字符串（最多 131072 字符）+ source_packet + requirement_ids/task_ids；保留信封原文后严格解析，拒绝对象双形态和重复 JSON key；重建并核对当前验收包与签名 source_trace，保存不可变原始信封、源码包、声明、验签身份、输入散列及当前质量快照。
 - release.candidate.create（write）：version（1..80）、environment（1..80）、requirement_ids/task_ids、ci_evidence_id、artifact_url、release_notes（1..10000）、rollback_plan（1..10000）、preview_basis。所有字段与服务端预览完全一致；同项目 version+environment 不复用，失效/拒绝版本仍保留，需新版本。
 - release.candidate.review（approve）：id、decision=approve|reject、comment（1..4000）、review_basis（64hex）。只评审 pending、当前有效且完整候选；拒绝允许说明。记录真实 User/时间/固定 basis，审批不执行部署。
 - release.candidate.revoke（approve）：id、comment、review_basis；pending/approved 可撤回，终态不再改写。

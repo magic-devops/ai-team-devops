@@ -5,11 +5,13 @@ import {
   CiEvidenceFacts,
   ReleaseSnapshotFacts,
   QualityTaskFacts,
+  ReleaseSourceFacts,
 } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryReleaseFacts";
 import {
   ciEvidence,
   releaseSnapshot,
   releaseQuality,
+  releaseSourcePacket,
 } from "./deliveryReleaseFixtures";
 import {
   releaseTranslations,
@@ -30,6 +32,14 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 describe("release evidence and fixed provenance", () => {
+  it("includes every fixed source association and explicit non-code reason in approval facts", () => {
+    language = "en-US";
+    const html = renderToStaticMarkup(createElement(ReleaseSourceFacts, { packet: releaseSourcePacket }));
+    expect(html).toContain(releaseSourcePacket.bindings[0].comment);
+    expect(html).toContain("Candidate approval also confirms");
+    expect(html).toContain("No code change");
+    expect(renderToStaticMarkup(createElement(ReleaseSourceFacts, { packet: null }))).toContain("lacks source inclusion");
+  });
   it("shows actual signed CI commit, artifact digest and failed or zero checks distinctly", () => {
     const html = renderToStaticMarkup(
       createElement(CiEvidenceFacts, { evidence: ciEvidence }),

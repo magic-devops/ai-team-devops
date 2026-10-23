@@ -8,6 +8,52 @@ import { projectHeaders } from "./projectPortfolio";
 import type { DeploymentStatus } from "./deliveryDeployment";
 
 export type ReleaseScope = { requirement_ids: string[]; task_ids: string[] };
+export type ReleaseSourceMapping = {
+  task_id: string;
+  kind: "change" | "no_code_change";
+  base_commit: string | null;
+  accepted_commit: string | null;
+  comment: string;
+};
+export type ReleaseSourcePacket = ReleaseScope & {
+  schema_version: 1;
+  tenant_id: string;
+  project_id: string;
+  repository: string;
+  workflow: string;
+  policy_generation: number;
+  scope_basis: string;
+  bindings: (ReleaseSourceMapping & { task_basis: string; proof_basis: string })[];
+};
+export type ReleaseCiImportBody = ReleaseScope & { envelope: string; source_packet: ReleaseSourcePacket };
+export const RELEASE_RECEIPT_MAX_BYTES = 1572864;
+export function readReleaseCiReceipt(raw: string, selected: ReleaseScope, projectId: string, basis: string): ReleaseCiImportBody {
+  if (new TextEncoder().encode(raw).length > RELEASE_RECEIPT_MAX_BYTES) throw new Error("fileTooLarge");
+  const value = JSON.parse(raw) as ReleaseCiImportBody;
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      Object.keys(value).sort().join(",") !== "envelope,requirement_ids,source_packet,task_ids" ||
+      typeof value.envelope !== "string" || value.envelope.length > 131072 || !value.envelope.trim() ||
+      !value.source_packet || value.source_packet.project_id !== projectId || value.source_packet.scope_basis !== basis)
+    throw new Error("sourceReceiptInvalid");
+  for (const key of ["requirement_ids", "task_ids"] as const) {
+    if (!Array.isArray(value[key]) || value[key].some((id) => typeof id !== "string") ||
+        value[key].length !== new Set(value[key]).size ||
+        JSON.stringify([...value[key]].sort()) !== JSON.stringify([...selected[key]].sort())) throw new Error("sourceReceiptInvalid");
+  }
+  return value;
+}
+export function prepareReleaseSourcePacket(projectId: string, input: ReleaseScope & {
+  scope_basis: string; policy_generation: number; mappings: ReleaseSourceMapping[];
+}, signal?: AbortSignal, generation?: number | null) {
+  return request<{ project_id: string; version: number; query_generation: number; packet: ReleaseSourcePacket }>(
+    "/api/v1/delivery/releases/source-packet", { method: "POST", body: JSON.stringify(input), headers: scope(projectId), signal },
+  ).then((value) => {
+    assertReleaseRead(projectId, value, generation);
+    if (value.packet.project_id !== projectId || value.packet.scope_basis !== input.scope_basis ||
+        value.packet.policy_generation !== input.policy_generation) throw new Error("scopeChanged");
+    return value;
+  });
+}
 export type ReleaseTarget = {
   project_id: string;
   kind: "requirement" | "task" | "issue";
@@ -128,6 +174,7 @@ export type CiStatement = {
     run_number: number;
     run_attempt: number;
     scope_basis: string;
+    source_trace?: { packet_digest: string; verified_bindings: number; checked_paths: number; tree_digest: string } | null;
     build_result: "passed" | "failed";
     tests: { total: number; failed: number; errors: number; skipped: number };
     finished_at: string;
@@ -144,6 +191,7 @@ export type ReleaseCiEvidence = {
   reasons: ReleaseReason[];
   selected: ReleaseScope;
   statement: CiStatement;
+  source_packet?: ReleaseSourcePacket | null;
 };
 export type ReleaseCiSnapshot = {
   id: string;
@@ -158,6 +206,7 @@ export type ReleaseCiSnapshot = {
   run_attempt: number;
   artifact_name: string;
   artifact_sha256: string;
+  source_packet?: ReleaseSourcePacket | null;
 };
 export type ReleaseQualitySnapshot = {
   scope_basis: string;
