@@ -15,6 +15,7 @@ import { DeliveryTaskSubmissionPanel } from "../../subapps/ai-rd-center/src/page
 import { DeliveryManualReviewPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryManualReviewPanel";
 import { ExternalWorkOrderPanel } from "../components/ExternalWorkOrderPanel";
 import { TaskDispatchHost } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDispatchHost";
+import { TaskDetailWorkspace } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDetailWorkspace";
 import { closeTaskDispatchRoute, taskDispatchRouteEvent } from "./taskDispatchRoute";
 import { closeTaskDefinitionRoute, taskDefinitionRouteClosedEvent } from "./taskDefinitionRoute";
 import { useDeliveryDraftState } from "./useDeliveryDraftState";
@@ -86,6 +87,21 @@ beforeEach(() => {
 afterEach(() => { Object.keys(h.hooks).forEach(unmount); vi.unstubAllGlobals(); });
 
 describe("task draft navigation protection", () => {
+  it("keeps all independent recovery owners mounted under the reading directory when task facts fail", () => {
+    const first = host(), workspace = find(first, TaskDetailWorkspace);
+    expect(workspace.props.task.id).toBe("T");
+    const owners = [DeliveryTaskDefinitionHost, TaskDispatchHost, ExternalWorkOrderPanel, DeliveryDesignContextPanel, DeliveryTaskSubmissionPanel, DeliveryManualReviewPanel];
+    for (const owner of owners) expect(nodes(workspace.props.children).filter((node) => node.type === owner)).toHaveLength(1);
+    expect(nodes(first).findIndex((node) => node.type === TaskDetailContent)).toBeLessThan(nodes(first).findIndex((node) => node.type === ExternalWorkOrderPanel));
+    find(first, DeliveryTaskSubmissionPanel).props.onEditingChange(true);
+    expect(find(host(), TaskDetailWorkspace).props.frozen).toBe(true);
+    h.task = { ...h.task, data: undefined, error: new Error("unavailable"), isError: true };
+    const failed = host(), retained = find(failed, TaskDetailWorkspace);
+    expect(retained.props.task).toBeUndefined();
+    for (const owner of owners) expect(nodes(retained.props.children).filter((node) => node.type === owner)).toHaveLength(1);
+    expect(beforeUnload().defaultPrevented).toBe(true);
+    expect(find(failed, TaskDispatchHost).props.canSubmit()).toBe(false);
+  });
   it("lets a dispatch draft continue while blocking other editor scopes", () => {
     const first = host(), dispatch = find(first, TaskDispatchHost).props;
     expect(dispatch.canStart()).toBe(true);

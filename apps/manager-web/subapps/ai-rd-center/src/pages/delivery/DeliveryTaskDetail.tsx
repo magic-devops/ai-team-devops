@@ -44,6 +44,8 @@ import { taskDefinitionCopy } from "@/i18n/task-definition";
 import { taskEditRecoveryPending, useTaskEditCommand, validTaskEditOriginal } from "@/lib/taskEditCommand";
 import { taskDefinitionRequest, taskDefinitionRouteClosedEvent } from "@/lib/taskDefinitionRoute";
 import { DeliveryTaskDefinitionHost } from "./DeliveryTaskDefinitionHost";
+import { TaskDetailWorkspace } from "./TaskDetailWorkspace";
+import { taskDetailNavigationCopy } from "@/i18n/task-detail-navigation";
 
 type TaskDraftScope = "execution" | "planning" | "work-order" | "design" | "submission" | "manual" | "dispatch";
 type TaskPendingScope = "execution" | "planning" | "collaboration";
@@ -89,7 +91,8 @@ export function TaskDetailContent({
   shortcutBlocked = false,
   onDispatch,
 }: TaskContentProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const detailCopy = taskDetailNavigationCopy(i18n?.language);
   const executionEditingChanged = (editing: boolean) => onEditingChange("execution", editing);
   const background = typeof location === "undefined" ? "" : location.hash;
   const tr = (key: string) => t(`deliveryTaskAcceptance.${key}`);
@@ -116,6 +119,7 @@ export function TaskDetailContent({
     requirement && ["release", "operations"].includes(requirement.flow.stage),
   );
   const execution = (
+    <section data-task-section="execution" aria-label={detailCopy.sections.execution} tabIndex={-1}>
     <DeliveryExecutionPanel
       onDispatch={onDispatch}
       disabled={!editable}
@@ -131,9 +135,10 @@ export function TaskDetailContent({
       canSubmitQueue={canSubmitQueue}
       onExecutionRecovery={onExecutionRecovery}
     />
+    </section>
   );
   return (
-    <div className="task-delivery-content">
+    <div className="task-delivery-content" data-task-section="overview" role="region" aria-label={detailCopy.sections.overview} tabIndex={-1}>
       <div className="delivery-manual-heading task-delivery-heading">
         <h3>{task.title}</h3>
         <div>
@@ -216,6 +221,7 @@ export function TaskDetailContent({
       )}
       <p className="runtime-help">{tr("executionOwner")}</p>
       <TaskAcceptanceFacts acceptance={task.acceptance} />
+      <section data-task-section="discussion" aria-label={detailCopy.sections.discussion} tabIndex={-1}>
       <DeliveryCollaboration
         key={`${data.project.id}:${sessionId}:${task.id}`}
         projectId={data.project.id}
@@ -226,6 +232,8 @@ export function TaskDetailContent({
         onSaved={onSaved}
         onUnresolvedChange={(value) => onUnresolvedChange?.(value, "collaboration")}
       />
+      </section>
+      <section data-task-section="planning" aria-label={detailCopy.sections.planning} tabIndex={-1}>
       <DeliveryTaskPlanMaintenance
         task={task}
         data={data}
@@ -235,6 +243,7 @@ export function TaskDetailContent({
         canEdit={editable && !stageLocked && Boolean(onEditTask)}
         onEdit={onEditTask || (() => {})}
       />
+      </section>
       {!native && execution}
       {native && <p className="runtime-help">{tr("nativeReview")}</p>}
     </div>
@@ -266,6 +275,7 @@ export function DeliveryTaskDetail({
   isActive?: () => boolean;
 }) {
   const { t, i18n } = useTranslation();
+  const detailCopy = taskDetailNavigationCopy(i18n?.language);
   const draftCopy = deliveryDraftCopy(i18n?.language);
   const qc = useQueryClient();
   const origin = useRef(projectSessionKey());
@@ -495,8 +505,10 @@ export function DeliveryTaskDetail({
   }
   const definitionStageLocked = Boolean(query.data?.requirement && ["release", "operations"].includes(query.data.requirement.flow.stage));
   const definitionRelationChanged = Boolean(expectedRequirementId && query.data && query.data.task.req_id !== expectedRequirementId);
+  const navigationData = query.error || displayedOperationRecovery ? undefined : executionPinnedWorkspace || pinnedWorkspace || query.data;
+  const navigationTask = navigationData?.project.id === projectId && navigationData.task.id === taskId ? navigationData.task : undefined;
   return (
-    <div className="delivery-task-detail">
+    <TaskDetailWorkspace scope={identity} task={navigationTask} frozen={Boolean(executionPinnedWorkspace || pinnedWorkspace)} isActive={isActive}>
       <ExecutionQueueRecovery command={queueCommand} projectId={projectId} taskId={taskId} onSaved={saved} isActive={isActive} />
       {query.error && !queueLocked && !displayedOperationRecovery && !(knownExecution.current && executionOperationPending(projectId, knownExecution.current)) && <TaskExecutionHandoffRecovery
         key={`${projectId}:${sessionId}:${taskId}`} projectId={projectId} taskId={taskId} sessionId={sessionId} isActive={() => isActive() && taskAccess.current.error}
@@ -569,12 +581,6 @@ export function DeliveryTaskDetail({
         isActive={isActive} canSubmit={() => !taskAccess.current.error && taskAccess.current.write && canWriteExternal()} canStart={() => [...draftScopes.current.scopes].every((scope) => scope === "dispatch")} onSaved={saved} onEditingChange={draftCallbacks.dispatch}
         onUnresolvedChange={(value) => { notifyTaskPending(setTaskPending(`execution:${taskId}`, value)); }}
         onExternal={(request) => { if (!canWriteExternal()) return false; editingChanged("work-order", true); const next = { ...request, token: (externalDispatchLive.current?.token || 0) + 1 }; externalDispatchLive.current = next; setExternalDispatch(next); return true; }} />
-      <ExternalWorkOrderPanel key={`${projectId}:${sessionId}:${taskId}:work-orders`} projectId={projectId} taskId={taskId} sessionId={sessionId} requestCreate={externalDispatch} onComposeSettled={(token, started) => { if (token === externalDispatchLive.current?.token && !started) editingChanged("work-order", false); }} onComposeClosed={(token) => { if (token === externalDispatchLive.current?.token && canWriteExternal() && !draftActive.current) closeTaskDispatchRoute(projectId, taskId); }} onDispatch={() => { if (canWriteExternal() && !draftActive.current) { setDispatchFeedback(undefined); setDispatchRequest((value) => value + 1); } }} selectedOrderId={selectedWorkOrderId} invalidSelection={invalidWorkOrderSelection}
-        disabled={executionExit.pending || hasExternalPending() || hasDesignPending() || queueLocked || Boolean(displayedOperationRecovery) || busy}
-        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.workOrder}
-        onSelect={(orderId) => { if (!canWriteExternal() || draftActive.current) return; const href = taskDispatchOrderHref(location.hash, projectId, taskId, orderId); if (href && href !== location.hash) location.hash = href; }}
-        onWriteReport={(order) => { if (isActive() && !hasWorkOrderPending() && !hasExternalPending() && !queueLocked) { setReportOrder(order); setReportRequest((value) => value + 1); } }}
-        onUnresolvedChange={(value) => { workOrderPending.current = value || workOrderRecoveryPending(projectId, taskId); if (origin.current === projectSessionKey() && activeIdentity.current === identity) onExternalPending?.("work-order", workOrderPending.current); notifyTaskPending(setTaskPending(`work-order:${taskId}`, workOrderPending.current)); }} />
       <TaskDetailContent
         detail={query.error || displayedOperationRecovery ? undefined : query.data}
         pinnedDetail={query.error || displayedOperationRecovery ? undefined : executionPinnedWorkspace || pinnedWorkspace}
@@ -611,10 +617,21 @@ export function DeliveryTaskDetail({
           notifyTaskPending(pending);
         }}
       />
+      <section data-task-section="work-order" aria-label={detailCopy.sections["work-order"]} tabIndex={-1}>
+      <ExternalWorkOrderPanel key={`${projectId}:${sessionId}:${taskId}:work-orders`} projectId={projectId} taskId={taskId} sessionId={sessionId} requestCreate={externalDispatch} onComposeSettled={(token, started) => { if (token === externalDispatchLive.current?.token && !started) editingChanged("work-order", false); }} onComposeClosed={(token) => { if (token === externalDispatchLive.current?.token && canWriteExternal() && !draftActive.current) closeTaskDispatchRoute(projectId, taskId); }} onDispatch={() => { if (canWriteExternal() && !draftActive.current) { setDispatchFeedback(undefined); setDispatchRequest((value) => value + 1); } }} selectedOrderId={selectedWorkOrderId} invalidSelection={invalidWorkOrderSelection}
+        disabled={executionExit.pending || hasExternalPending() || hasDesignPending() || queueLocked || Boolean(displayedOperationRecovery) || busy}
+        isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.workOrder}
+        onSelect={(orderId) => { if (!canWriteExternal() || draftActive.current) return; const href = taskDispatchOrderHref(location.hash, projectId, taskId, orderId); if (href && href !== location.hash) location.hash = href; }}
+        onWriteReport={(order) => { if (isActive() && !hasWorkOrderPending() && !hasExternalPending() && !queueLocked) { setReportOrder(order); setReportRequest((value) => value + 1); } }}
+        onUnresolvedChange={(value) => { workOrderPending.current = value || workOrderRecoveryPending(projectId, taskId); if (origin.current === projectSessionKey() && activeIdentity.current === identity) onExternalPending?.("work-order", workOrderPending.current); notifyTaskPending(setTaskPending(`work-order:${taskId}`, workOrderPending.current)); }} />
+      </section>
+      <section data-task-section="design" aria-label={detailCopy.sections.design} tabIndex={-1}>
       <DeliveryDesignContextPanel key={`${projectId}:${sessionId}:${taskId}:design`} projectId={projectId} target={{ kind: "task", id: taskId }} sessionId={sessionId}
         disabled={executionExit.pending || hasExternalPending() || hasWorkOrderPending() || queueLocked || Boolean(displayedOperationRecovery) || busy}
         isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} onSaved={saved} onEditingChange={draftCallbacks.design}
         onUnresolvedChange={(value) => { designPending.current = value || designRecoveryPending(projectId, { kind: "task", id: taskId }); notifyTaskPending(setTaskPending(`design:${taskId}`, designPending.current)); }} />
+      </section>
+      <section data-task-section="delivery" aria-label={detailCopy.sections.delivery} tabIndex={-1}>
       <DeliveryTaskSubmissionPanel key={`${projectId}:${sessionId}:${taskId}:external`} projectId={projectId} taskId={taskId} sessionId={sessionId}
         disabled={executionExit.pending || hasWorkOrderPending() || queueLocked || Boolean(displayedOperationRecovery) || busy} requestCreate={reportRequest} requestWorkOrder={reportOrder}
         isActive={() => isActive() && !writePending.current} canSubmit={canWriteExternal} canStart={() => [...draftScopes.current.scopes].every((scope) => scope === "submission")} onSaved={saved} onEditingChange={draftCallbacks.submission}
@@ -644,6 +661,7 @@ export function DeliveryTaskDetail({
           notifyTaskPending(pending);
         }}
       />
-    </div>
+      </section>
+    </TaskDetailWorkspace>
   );
 }

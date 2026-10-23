@@ -1,0 +1,47 @@
+.task-detail-workspace { min-width: 0; }
+.task-detail-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 10px 0;
+  margin-bottom: 14px;
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #dce3ec);
+}
+.task-detail-navigation { display: flex; flex-wrap: wrap; gap: 6px; }
+.task-detail-navigation button, .task-detail-next button {
+  appearance: none;
+  border: 1px solid var(--border, #dce3ec);
+  border-radius: 6px;
+  padding: 5px 9px;
+  min-height: 30px;
+  background: var(--surface, #fff);
+  color: var(--text, #1e293b);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.task-detail-navigation button:hover:enabled, .task-detail-next button:hover { border-color: var(--primary, #2563eb); color: var(--primary, #2563eb); }
+.task-detail-navigation button:disabled { opacity: .5; cursor: default; }
+.task-detail-workspace button:focus-visible, .task-detail-workspace [data-task-section]:focus {
+  outline: 2px solid var(--primary, #2563eb);
+  outline-offset: 3px;
+}
+.task-detail-status-facts { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 10px 0 0; font-size: 12px; }
+.task-detail-status-facts > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.task-detail-status-facts dt, .task-detail-read-notice { color: var(--muted, #64748b); }
+.task-detail-status-facts dd { margin: 0; font-weight: 600; }
+.task-detail-status-facts [data-accepted="true"] dd { color: var(--success, #16803c); }
+.task-detail-next { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 8px; font-size: 12px; }
+.task-detail-next:empty { display: none; }
+.task-detail-next button { color: var(--primary, #2563eb); }
+.task-detail-read-notice { margin: 8px 0 0; font-size: 12px; }
+.task-detail-workspace [data-task-section] { min-width: 0; scroll-margin-top: 170px; border-radius: 6px; }
+.task-detail-workspace > [data-task-section] { margin-bottom: 18px; }
+.task-detail-workspace [data-task-section="execution"] { margin: 12px 0 18px; }
+.task-detail-workspace [data-task-section="delivery"] > * + * { margin-top: 16px; }
+@media (max-width: 520px) {
+  .task-detail-toolbar { position: static; }
+  .task-detail-workspace [data-task-section] { scroll-margin-top: 16px; }
+  .task-detail-navigation button { min-height: 36px; flex: 1 0 auto; }
+}
