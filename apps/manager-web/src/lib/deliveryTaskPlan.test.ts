@@ -9,6 +9,7 @@ import type { DeliveryTask, DeliveryTaskData } from "./delivery";
 import {
   remapPlanCriteria,
   selectedPlanItems,
+  assignSelectedPlanRows,
   taskPlanProblems,
   previewTaskPlan,
   planError,
@@ -37,6 +38,18 @@ const row = (
 });
 
 describe("editable task plans", () => {
+  it("assigns only selected unassigned drafts by default and supports explicit replace or clear", () => {
+    const rows = [row("open", { owner_id: "" }), row("owned"), row("skip", { selected: false, owner_id: "" })];
+    const filled = assignSelectedPlanRows(rows, "agent:worker", "unassigned");
+    expect(filled.map((item) => item.owner_id)).toEqual(["agent:worker", "user:lead", ""]);
+    expect(assignSelectedPlanRows(rows, "agent:worker", "replace").map((item) => item.owner_id))
+      .toEqual(["agent:worker", "agent:worker", ""]);
+    expect(assignSelectedPlanRows(rows, "", "clear").map((item) => item.owner_id)).toEqual(["", "", ""]);
+    expect(assignSelectedPlanRows(rows, "", "replace")).toBe(rows);
+    expect(filled[1]).toBe(rows[1]); expect(filled[2]).toBe(rows[2]);
+    expect(rows[0].owner_id).toBe("");
+    expect(selectedPlanItems(filled)[0]).toMatchObject({ key: "open", owner_id: "agent:worker" });
+  });
   it("offers explicit review after a stale progress scope without retrying unrelated conflicts", () => {
     const detail =
       "Progress scope changed. Reload and review the current task scope before freezing.";

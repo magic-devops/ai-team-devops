@@ -1,4 +1,5 @@
 const zh = {
+  projectUnavailable: "当前项目不可访问或已不在项目列表中，请明确选择项目后管理成员。",
   identity: "成员身份", unassigned: "未分配", missingOwner: "负责人已离开或不可用", reassign: "需重新分配",
   kinds: { human: "人员", agent: "智能体", tool: "工具" },
   allKinds: "全部类型", allStates: "全部状态", active: "已启用", inactive: "已停用", registered: "已登记",
@@ -9,6 +10,7 @@ const zh = {
   assignedTasks: "负责的任务", noTasks: "尚无分配任务", calendar: "产能日历", calendarUnavailable: "日历暂不可用，可重试读取", calendarUnknown: "尚未设置产能日历", configureCalendar: "配置日历", viewCapacity: "查看产能", edit: "编辑登记", people: "管理项目人员", readOnly: "当前权限可查看详情；修改登记和产能日历需要项目配置权限。", inactiveHint: "停用后无法再接收分配；原任务保留此身份，需要另行重新分配。", missing: "此成员已离开或不可访问", missingHint: "不会根据同名成员替换此身份。返回团队重新选择成员。", back: "返回团队", owner: "负责人", keepOwner: "保持原负责人", clearOwner: "清除负责人", rosterFailed: "成员读取失败，请重试后再分配", retry: "重试", stableId: "稳定身份", unavailableOwner: "当前负责人不可承担任务，请重新分配。",
 };
 const en: typeof zh = {
+  projectUnavailable: "The selected project is unavailable. Select an accessible project to manage its members.",
   identity: "Member identity", unassigned: "Unassigned", missingOwner: "Owner left or unavailable", reassign: "Reassignment required",
   kinds: { human: "Person", agent: "Agent", tool: "Tool" }, allKinds: "All types", allStates: "All states", active: "Active", inactive: "Inactive", registered: "Registered",
   search: "Search name, identity or role", reset: "Reset filters", count: "{{visible}} / {{total}} members and resources",
@@ -17,6 +19,7 @@ const en: typeof zh = {
   assignedTasks: "Assigned tasks", noTasks: "No assigned tasks", calendar: "Capacity calendar", calendarUnavailable: "Calendar unavailable. Retry reading it.", calendarUnknown: "No capacity calendar configured", configureCalendar: "Configure calendar", viewCapacity: "View capacity", edit: "Edit registration", people: "Manage project people", readOnly: "You can view details. Editing registration and capacity calendars requires project configuration permission.", inactiveHint: "Inactive members cannot receive new assignments. Existing tasks retain this identity until reassigned.", missing: "Member left or is inaccessible", missingHint: "A member with the same name will not replace this identity. Return to the team and select another member.", back: "Back to team", owner: "Owner", keepOwner: "Keep current owner", clearOwner: "Clear owner", rosterFailed: "Could not read members. Retry before assigning.", retry: "Retry", stableId: "Stable identity", unavailableOwner: "The current owner cannot own this task. Reassign it.",
 };
 const ja: typeof zh = {
+  projectUnavailable: "選択したプロジェクトを利用できません。アクセス可能なプロジェクトを選んでメンバーを管理してください。",
   identity: "メンバー識別", unassigned: "未割当", missingOwner: "担当者が離脱または利用不可", reassign: "再割当が必要",
   kinds: { human: "担当者", agent: "エージェント", tool: "ツール" }, allKinds: "すべての種類", allStates: "すべての状態", active: "有効", inactive: "無効", registered: "登録済み",
   search: "名前・識別情報・役割を検索", reset: "絞り込みをリセット", count: "{{visible}} / {{total}} メンバーとリソース",

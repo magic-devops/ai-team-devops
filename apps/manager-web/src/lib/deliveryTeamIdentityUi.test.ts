@@ -12,7 +12,7 @@ let remoteMembers: DeliveryMember[] = [];
 vi.mock("@tanstack/react-query", () => ({ useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
   const search = String(queryKey[3] || ""), kind = queryKey[4], active = queryKey[5];
   const selected = queryKey[0] === "delivery-members-page" ? remoteMembers.filter((member) => (!search || `${member.id} ${member.name}`.includes(search)) && (kind === "all" || member.kind === kind) && (active === "all" || member.active === (active === "active"))) : queryKey[0] === "delivery-member-exact" ? remoteMembers.filter((member) => member.id === queryKey[3]) : [];
-  return { data: { items: selected.map((data) => ({ id: data.id, data })), total: selected.length, next_cursor: null }, isPending: false, isError: false };
+  return { data: { project_id: "project", query_generation: 3, items: selected.map((data) => ({ id: data.id, data })), total: selected.length, next_cursor: null }, isPending: false, isError: false };
 } }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en-US" } }) }));
 const members: DeliveryMember[] = [
@@ -44,7 +44,7 @@ describe("responsibility follows identity", () => {
   });
 });
 describe("team roster states", () => {
-  const workspace = { project: { id: "project" }, members, referenceTotals: { members: members.length, milestones: 0, activeResources: 0 }, permissions: { write: true, configure: false, approve: false } } as unknown as DeliveryDisplayContext;
+  const workspace = { project: { id: "project" }, query_generation: 3, members, referenceTotals: { members: members.length, milestones: 0, activeResources: 0 }, permissions: { write: true, configure: false, approve: false } } as unknown as DeliveryDisplayContext;
   function render(extra = {}, serverMembers = members) {
     remoteMembers = serverMembers;
     vi.stubGlobal("location", { hash: "#/dev-flow?view=team" });

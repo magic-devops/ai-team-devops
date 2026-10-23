@@ -69,6 +69,20 @@ export type TaskPlanPreview = {
 export const selectedPlanItems = (rows: TaskPlanRow[]): TaskPlanItem[] =>
   rows.filter((row) => row.selected).map(({ selected: _, ...item }) => item);
 
+/** Change the editable plan only; the existing atomic tasks.plan command commits it. */
+export function assignSelectedPlanRows(
+  rows: TaskPlanRow[],
+  ownerId: string,
+  mode: "unassigned" | "replace" | "clear",
+): TaskPlanRow[] {
+  if (mode !== "clear" && !ownerId) return rows;
+  return rows.map((row) =>
+    row.selected && (mode !== "unassigned" || !row.owner_id)
+      ? { ...row, owner_id: mode === "clear" ? "" : ownerId }
+      : row,
+  );
+}
+
 export function taskPlanProblems(
   rows: TaskPlanRow[],
   criteriaCount: number,

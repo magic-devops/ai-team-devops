@@ -1679,6 +1679,21 @@
   gap: 14px;
   margin: 14px 0;
 }
+.delivery-plan-assignment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted, var(--surface));
+}
+.delivery-plan-assignment > div:first-child { flex: 1 1 100%; min-width: 0; }
+.delivery-plan-assignment > .ant-select { flex: 1 1 240px; min-width: 0; }
+.delivery-plan-assignment .delivery-hint { margin: 4px 0 0; }
+.delivery-plan-assignment .delivery-actions { flex-wrap: wrap; }
 .delivery-plan-row {
   border: 1px solid var(--border, #e2e8f0);
   border-radius: 10px;

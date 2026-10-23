@@ -1,11 +1,11 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-23T10:32:22.241457+00:00",
+  "updated_at": "2026-10-23T11:10:37.588760+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-23T10:32:22.241457+00:00",
+    "updated_at": "2026-10-23T11:10:37.588760+00:00",
     "status": "source_implemented_runtime_validation_deferred_by_user",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
@@ -15,7 +15,7 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/progress-page-navigation/",
+    "evidence": ".sop-runtime/delivery-evidence/team-planning-workflow/",
     "verification_status": "current_source_runtime_types_build_and_browser_unverified",
     "next_step": "validate_fixed_source_when_human_restores_window_then_continue_full_lifecycle",
     "production_integration_complete": false,
@@ -652,7 +652,7 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-progress-page-navigation: improve exact progress paging, recovery and honest counts; runtime validation deferred",
+  "current": "T-team-planning-workflow: project-scoped people management, truthful roster reads and selected draft assignment; source implemented, runtime deferred by user.",
   "interaction_usability": {
     "task_id": "T-interaction-usability",
     "updated_at": "2026-10-20T11:46:27.689124+00:00",
@@ -1158,7 +1158,7 @@
     "task_id": "T-progress-page-navigation",
     "base_commit": "f9b4402bb9126761988ad1cdb56575ba080f7b2f",
     "updated_at": "2026-10-23T10:32:22.241457+00:00",
-    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "status": "source_committed_runtime_validation_deferred_by_user",
     "design": "docs/PROGRESS_PAGE_NAVIGATION.md",
     "record": "memory/progress-page-navigation-progress.md",
     "evidence": ".sop-runtime/delivery-evidence/progress-page-navigation/",
@@ -1168,6 +1168,23 @@
     "browser_verified": false,
     "full_lifecycle_complete": false,
     "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
-    "next_step": "validate_fixed_source_when_human_restores_window_then_continue_full_lifecycle"
+    "next_step": "validate_fixed_source_when_human_restores_window_then_continue_full_lifecycle",
+    "source_commit": "d42e4c41d776a2707e5c96785bdc6160d8ae3f06"
+  },
+  "team_planning_workflow": {
+    "task_id": "T-team-planning-workflow",
+    "base_commit": "d42e4c41d776a2707e5c96785bdc6160d8ae3f06",
+    "updated_at": "2026-10-23T11:10:37.588760+00:00",
+    "status": "source_implemented_runtime_validation_deferred_by_user",
+    "design": "docs/TEAM_PLANNING_WORKFLOW.md",
+    "record": "memory/team-planning-workflow-progress.md",
+    "evidence": ".sop-runtime/delivery-evidence/team-planning-workflow/",
+    "runtime_tests_executed": false,
+    "typescript_checked": false,
+    "build_executed": false,
+    "browser_verified": false,
+    "full_lifecycle_complete": false,
+    "commit_policy": "user_authorized_stage_commit_before_runtime_validation",
+    "next_step": "review_and_commit_fixed_source_then_validate_when_human_restores_window"
   }
 }

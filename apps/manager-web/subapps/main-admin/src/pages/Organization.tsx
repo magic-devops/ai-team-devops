@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "antd";
 import { Building2, ClipboardCheck, ShieldCheck, UserCog, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NeedLogin, RefreshButton } from "../../../../src/components/PageStates";
 import { api } from "../../../../src/lib/api";
-import { getToken } from "../../../../src/lib/authStorage";
+import { getSessionRevision, getToken } from "../../../../src/lib/authStorage";
+import { projectSessionKey } from "../../../../src/lib/projectPortfolio";
+import { projectMembersHash, requestedMemberProject } from "../../../../src/lib/projectTeamNavigation";
+import { invalidateDeliveryQueries } from "../../../../src/lib/deliveryQuery";
 import { WorkbenchShell } from "../../../../src/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "../../../../src/pages/shared/workbenchUi";
 import { AccessReviewModule } from "./organization/AccessReviewModule";
@@ -22,41 +25,102 @@ const tabs = [
   { key: "rolePolicy", icon: ShieldCheck },
   { key: "accessReview", icon: ClipboardCheck },
 ] as const;
+const emptyMemberAccess = (projectId: string) => ({
+  projectId, ready: false, candidateIds: [] as string[], memberIds: [] as string[], roles: [] as string[],
+  draft: { user_id: "", role: "developer" },
+});
 
 export function Organization({ initialTab = "users", focused = false }: { initialTab?: OrgTab; focused?: boolean }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
   const [tab, setTab] = useState<OrgTab>(initialTab);
-  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [selectedProjectId, setSelectedProjectId] = useState(() => requestedMemberProject(location.hash));
   const [newMember, setNewMember] = useState({ user_id: "", role: "developer" });
+  const memberOwner = useRef(projectSessionKey()), memberWriteBusy = useRef(false);
+  const memberMounted = useRef(true);
+  const memberAccess = useRef(emptyMemberAccess(selectedProjectId));
 
   useEffect(() => setTab(initialTab), [initialTab]);
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects, enabled: authed });
-  const businesses = useQuery({ queryKey: ["businesses"], queryFn: api.businesses, enabled: authed });
-  const users = useQuery({ queryKey: ["users"], queryFn: api.authUsers, enabled: authed });
+  const selectedProject = !projects.isError && projects.data?.find((project: ProjectRow) => project.id === selectedProjectId);
+  const businesses = useQuery({ queryKey: ["businesses"], queryFn: api.businesses, enabled: authed && (!focused || tab === "businesses") });
+  const users = useQuery({ queryKey: ["users"], queryFn: api.authUsers, enabled: authed && (!focused || tab === "users") });
   const roles = useQuery({ queryKey: ["roleConstants"], queryFn: api.roleConstants, enabled: authed });
-  const orgSummary = useQuery({ queryKey: ["organizationSummary"], queryFn: api.organizationSummary, enabled: authed });
+  const orgSummary = useQuery({ queryKey: ["organizationSummary"], queryFn: api.organizationSummary, enabled: authed && (!focused || tab !== "projectMembers") });
   const orgPolicy = useQuery({ queryKey: ["organizationPolicy"], queryFn: api.organizationPolicy, enabled: authed && tab === "rolePolicy" });
   const orgPolicyHistory = useQuery({ queryKey: ["organizationPolicyHistory"], queryFn: () => api.organizationPolicyHistory(30), enabled: authed && tab === "rolePolicy" });
   const orgAccessReview = useQuery({ queryKey: ["organizationAccessReview"], queryFn: api.organizationAccessReview, enabled: authed && tab === "accessReview" });
 
   const projectMembers = useQuery({
-    queryKey: ["projectMembers", selectedProjectId],
+    queryKey: ["projectMembers", selectedProjectId, getSessionRevision()],
     queryFn: () => api.projectMembers(selectedProjectId),
-    enabled: authed && Boolean(selectedProjectId) && tab === "projectMembers",
+    enabled: authed && Boolean(selectedProject) && tab === "projectMembers",
+    retry: false,
   });
   const memberCandidates = useQuery({
-    queryKey: ["projectMemberCandidates", selectedProjectId],
+    queryKey: ["projectMemberCandidates", selectedProjectId, getSessionRevision()],
     queryFn: () => api.projectMemberCandidates(selectedProjectId),
-    enabled: authed && Boolean(selectedProjectId) && tab === "projectMembers",
+    enabled: authed && Boolean(selectedProject) && tab === "projectMembers",
+    retry: false,
   });
 
   useEffect(() => {
-    const first = (projects.data ?? [])[0]?.id;
-    if (!selectedProjectId && first) setSelectedProjectId(first);
-  }, [projects.data, selectedProjectId]);
+    memberMounted.current = true;
+    const sync = () => {
+      if (memberWriteBusy.current) return;
+      setSelectedProjectId(requestedMemberProject(location.hash));
+      setNewMember({ user_id: "", role: "developer" });
+    };
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("popstate", sync);
+    return () => {
+      memberMounted.current = false;
+      window.removeEventListener("hashchange", sync);
+      window.removeEventListener("popstate", sync);
+    };
+  }, []);
+  memberAccess.current = { projectId: selectedProjectId,
+    ready: tab === "projectMembers" && Boolean(selectedProject) && !projectMembers.isError && !projectMembers.isFetching && Boolean(projectMembers.data) &&
+      !roles.isError && !roles.isPending && !roles.isFetching && Boolean(roles.data?.project_member_roles?.length) &&
+      !memberCandidates.isError && !memberCandidates.isFetching && Boolean(memberCandidates.data),
+    candidateIds: !memberCandidates.isError ? (memberCandidates.data ?? []).map((user: UserRow) => user.id) : [],
+    memberIds: !projectMembers.isError ? (projectMembers.data ?? []).map((member) => member.user_id) : [],
+    roles: !roles.isError ? roles.data?.project_member_roles ?? [] : [],
+    draft: { ...newMember },
+  };
+  const selectMemberProject = (projectId: string) => {
+    if (!memberMounted.current || memberWriteBusy.current || memberOwner.current !== projectSessionKey()) return;
+    memberAccess.current = emptyMemberAccess(projectId);
+    setSelectedProjectId(projectId);
+    setNewMember({ user_id: "", role: "developer" });
+    history.replaceState(history.state, "", projectMembersHash(projectId));
+  };
+  const finishMemberWrite = () => {
+    memberWriteBusy.current = false;
+    memberAccess.current.ready = false;
+    if (!memberMounted.current || memberOwner.current !== projectSessionKey()) return;
+    const requested = requestedMemberProject(location.hash);
+    if (requested !== memberAccess.current.projectId) {
+      memberAccess.current = emptyMemberAccess(requested);
+      setSelectedProjectId(requested);
+      setNewMember({ user_id: "", role: "developer" });
+    }
+  };
+  const beginMemberWrite = (projectId: string, action: () => void) => {
+    if (!memberMounted.current || memberWriteBusy.current || memberOwner.current !== projectSessionKey() ||
+      !memberAccess.current.ready || memberAccess.current.projectId !== projectId ||
+      requestedMemberProject(location.hash) !== projectId) return;
+    memberWriteBusy.current = true;
+    action();
+  };
+  const refreshMemberProject = (projectId: string) => {
+    void qc.invalidateQueries({ queryKey: ["projectMembers", projectId] });
+    void qc.invalidateQueries({ queryKey: ["projectMemberCandidates", projectId] });
+    void invalidateDeliveryQueries(qc, projectId);
+    refreshAll();
+  };
 
   const refreshAll = () => {
     void qc.invalidateQueries({ queryKey: ["projects"] });
@@ -98,19 +162,23 @@ export function Organization({ initialTab = "users", focused = false }: { initia
     onSuccess: refreshAll,
   });
   const addProjectMember = useMutation({
-    mutationFn: () => api.projectAddMember(selectedProjectId, newMember),
-    onSuccess: () => {
-      setNewMember({ user_id: "", role: "developer" });
-      refreshAll();
+    mutationFn: ({ projectId, body }: { projectId: string; body: typeof newMember }) => api.projectAddMember(projectId, body),
+    onSuccess: (_result, command) => {
+      if (memberMounted.current && memberOwner.current === projectSessionKey() && memberAccess.current.projectId === command.projectId)
+        setNewMember({ user_id: "", role: "developer" });
+      refreshMemberProject(command.projectId);
     },
+    onSettled: finishMemberWrite,
   });
   const updateProjectMember = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: string }) => api.projectUpdateMember(selectedProjectId, userId, { role }),
-    onSuccess: refreshAll,
+    mutationFn: ({ projectId, userId, role }: { projectId: string; userId: string; role: string }) => api.projectUpdateMember(projectId, userId, { role }),
+    onSuccess: (_result, command) => refreshMemberProject(command.projectId),
+    onSettled: finishMemberWrite,
   });
   const removeProjectMember = useMutation({
-    mutationFn: (userId: string) => api.projectRemoveMember(selectedProjectId, userId),
-    onSuccess: refreshAll,
+    mutationFn: ({ projectId, userId }: { projectId: string; userId: string }) => api.projectRemoveMember(projectId, userId),
+    onSuccess: (_result, command) => refreshMemberProject(command.projectId),
+    onSettled: finishMemberWrite,
   });
   const updateOrgPolicy = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.organizationPolicyUpdate(body),
@@ -132,7 +200,7 @@ export function Organization({ initialTab = "users", focused = false }: { initia
 
   const busy = projects.isFetching || businesses.isFetching || users.isFetching || roles.isFetching || orgSummary.isFetching || projectMembers.isFetching || memberCandidates.isFetching;
   const userRoles = useMemo(() => roles.data?.user_roles?.length ? roles.data.user_roles : ["developer", "devops", "project_admin", "tenant_admin"], [roles.data]);
-  const projectRoles = useMemo(() => roles.data?.project_member_roles?.length ? roles.data.project_member_roles : ["viewer", "developer", "project_admin"], [roles.data]);
+  const projectRoles = useMemo(() => !roles.isError ? roles.data?.project_member_roles ?? [] : [], [roles.data, roles.isError]);
   const activeUsers = (users.data ?? []).filter((u: UserRow) => (u.status || "active") === "active").length;
   const tenantAdmins = (users.data ?? []).filter((u: UserRow) => String(u.role || "").includes("admin")).length;
   const projectMemberCount = orgSummary.data?.project_members_total ?? (projectMembers.data ?? []).length;
@@ -141,11 +209,11 @@ export function Organization({ initialTab = "users", focused = false }: { initia
 
   return (
       <WorkbenchShell
-      title={t("page.organization.workspaceGovernance")}
+      title={t(focused && tab === "projectMembers" ? "page.organization.projectMembers" : "page.organization.workspaceGovernance")}
       description={focused ? t(`page.organization.tabHint.${tab}`) : t("page.organization.workspaceGovernanceHint")}
       actions={<RefreshButton onClick={refreshAll} pending={busy} />}
       metrics={
-        <WorkbenchStats
+        focused && tab === "projectMembers" ? undefined : <WorkbenchStats
           items={[
             { label: t("page.organization.metricUsers"), value: orgSummary.data?.users_total ?? users.data?.length ?? 0 },
             { label: t("page.organization.metricActiveUsers"), value: orgSummary.data?.users_active ?? activeUsers },
@@ -206,23 +274,36 @@ export function Organization({ initialTab = "users", focused = false }: { initia
 
       {tab === "projectMembers" ? (
         <ProjectMembersModule
-          projects={(projects.data ?? []) as ProjectRow[]}
+          projects={(!projects.isError ? projects.data ?? [] : []) as ProjectRow[]}
           selectedProjectId={selectedProjectId}
-          setSelectedProjectId={setSelectedProjectId}
-          members={projectMembers.data ?? []}
-          candidates={memberCandidates.data ?? []}
+          setSelectedProjectId={selectMemberProject}
+          members={selectedProject && !projectMembers.isError ? projectMembers.data ?? [] : []}
+          candidates={selectedProject && !memberCandidates.isError ? memberCandidates.data ?? [] : []}
           roles={projectRoles}
-          loading={projectMembers.isLoading}
+          loading={projects.isLoading || (Boolean(selectedProject) && projectMembers.isPending)}
           candidateLoading={memberCandidates.isLoading}
-          errors={[projectMembers.error as Error | null, memberCandidates.error as Error | null, addProjectMember.error as Error | null, updateProjectMember.error as Error | null, removeProjectMember.error as Error | null]}
+          readFailed={projects.isError || projectMembers.isError}
+          disabled={!memberAccess.current.ready || memberCandidates.isError}
+          errors={[projects.error as Error | null, roles.error as Error | null, projectMembers.error as Error | null, memberCandidates.error as Error | null, addProjectMember.error as Error | null, updateProjectMember.error as Error | null, removeProjectMember.error as Error | null]}
           newMember={newMember}
           setNewMember={setNewMember}
           addPending={addProjectMember.isPending}
           updatePending={updateProjectMember.isPending}
           removePending={removeProjectMember.isPending}
-          onAdd={() => addProjectMember.mutate()}
-          onUpdateRole={(userId, role) => updateProjectMember.mutate({ userId, role })}
-          onRemove={(userId) => removeProjectMember.mutate(userId)}
+          onAdd={() => {
+            const current = memberAccess.current;
+            if (!current.candidateIds.includes(current.draft.user_id) || !current.roles.includes(current.draft.role)) return;
+            beginMemberWrite(selectedProjectId, () => addProjectMember.mutate({ projectId: current.projectId, body: { ...current.draft } }));
+          }}
+          onUpdateRole={(userId, role) => {
+            const current = memberAccess.current;
+            if (!current.memberIds.includes(userId) || !current.roles.includes(role)) return;
+            beginMemberWrite(selectedProjectId, () => updateProjectMember.mutate({ projectId: selectedProjectId, userId, role }));
+          }}
+          onRemove={(userId) => {
+            if (!memberAccess.current.memberIds.includes(userId)) return;
+            beginMemberWrite(selectedProjectId, () => removeProjectMember.mutate({ projectId: selectedProjectId, userId }));
+          }}
         />
       ) : null}
 

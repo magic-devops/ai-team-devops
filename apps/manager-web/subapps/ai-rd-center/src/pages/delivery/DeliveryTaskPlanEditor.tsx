@@ -40,6 +40,7 @@ import {
 } from "@/lib/delivery";
 import {
   planError,
+  assignSelectedPlanRows,
   previewTaskPlan,
   remapPlanCriteria,
   selectedPlanItems,
@@ -88,6 +89,11 @@ export function DeliveryTaskPlanEditor({
   const origin = useRef(projectSessionKey());
   const source = useDiscussionAdoptionSource(initialSource);
   const projectId = data.project.id;
+  const identity = JSON.stringify([projectId, requirement.id]);
+  const initialIdentity = useRef(identity);
+  const access = useRef({ identity, write: data.permissions.write });
+  access.current = { identity, write: data.permissions.write };
+  const readOnly = !access.current.write || initialIdentity.current !== identity;
   const [baseline, setBaseline] = useState<Baseline>(() => ({
     version: requirementVersion ?? data.version,
     revision: requirement.flow.revision,
@@ -147,9 +153,15 @@ export function DeliveryTaskPlanEditor({
     key: crypto.randomUUID(),
   });
   const controller = useRef<AbortController>();
-  useEffect(() => () => controller.current?.abort(), []);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; controller.current?.abort(); };
+  }, []);
   const [unknown, setUnknown] = useState(false);
   const unknownRef = useRef(false);
+  const [batchOwner, setBatchOwner] = useState("");
+  const [replaceOwners, setReplaceOwners] = useState(false);
   const pending = useRef<{
     projectId: string;
     payload: Record<string, unknown>;
@@ -169,12 +181,14 @@ export function DeliveryTaskPlanEditor({
   const coverage = new Set(
     items.flatMap((item) => item.requirement_criteria_indices),
   );
-  const locked = () => busyRef.current || unknownRef.current;
+  const canEdit = () => mounted.current && origin.current === projectSessionKey() &&
+    initialIdentity.current === identity && access.current.identity === identity && access.current.write;
+  const locked = () => busyRef.current || unknownRef.current || !canEdit();
   const edit = (action: () => void) => {
     if (!locked()) action();
   };
   const close = () => {
-    if (!locked()) onClose();
+    if (mounted.current && !busyRef.current && !unknownRef.current) onClose();
   };
   const update = (key: string, value: Partial<TaskPlanRow>) =>
     edit(() =>
@@ -186,6 +200,10 @@ export function DeliveryTaskPlanEditor({
     if (busyRef.current || (unknownRef.current && !retryOriginal)) return;
     if (origin.current !== projectSessionKey()) {
       setError(common("scopeChanged"));
+      return;
+    }
+    if (!canEdit()) {
+      setError(tr("readOnly"));
       return;
     }
     busyRef.current = true;
@@ -222,7 +240,7 @@ export function DeliveryTaskPlanEditor({
         previewRequest.current,
         controller.current.signal,
       );
-      if (origin.current !== projectSessionKey()) return;
+      if (!canEdit()) return;
       setPrevious({ rows, baseline, preview });
       setRows(
         result.items.map((item) => ({
@@ -320,7 +338,7 @@ export function DeliveryTaskPlanEditor({
       unknownRef.current = false;
       setUnknown(false);
       onUnresolvedChange?.(false);
-      if (origin.current === projectSessionKey()) onSaved(result);
+      if (mounted.current && origin.current === projectSessionKey()) onSaved(result);
     }, retry);
   };
   const loadLatest = () =>
@@ -393,7 +411,7 @@ export function DeliveryTaskPlanEditor({
             type="primary"
             onClick={() => save()}
             loading={busy}
-            disabled={busy || unknown || conflict || Boolean(problems.length)}
+            disabled={busy || unknown || readOnly || conflict || Boolean(problems.length)}
           >
             {tr("create")} · {items.length}
           </Button>
@@ -410,7 +428,7 @@ export function DeliveryTaskPlanEditor({
           adopt: () => edit(source.adopt),
           remove: () => edit(source.remove),
         }}
-        disabled={busy || unknown}
+        disabled={busy || unknown || readOnly}
       />
       {unknown && (
         <Alert
@@ -424,8 +442,10 @@ export function DeliveryTaskPlanEditor({
         />
       )}
       <p className="delivery-hint">{tr("hint")}</p>
+      {readOnly && <Alert type="info" title={tr("readOnly")} />}
       <section className="delivery-plan-context">
         <div>
+          <Tag>{data.project.name}</Tag>
           <Tag>{t("delivery.revision", { number: baseline.revision })}</Tag>
           <strong>{baseline.requirement.title}</strong>
         </div>
@@ -482,7 +502,7 @@ export function DeliveryTaskPlanEditor({
           aria-label={tr("source")}
           value={generator}
           onChange={(value) => edit(() => setGenerator(value))}
-          disabled={busy || unknown}
+          disabled={busy || unknown || readOnly}
           options={["manual", "template", "ai"].map((value) => ({
             value,
             label: tr(value),
@@ -494,7 +514,7 @@ export function DeliveryTaskPlanEditor({
               aria-label={tr("mode")}
               value={mode}
               onChange={(value) => edit(() => setMode(value))}
-              disabled={busy || unknown}
+              disabled={busy || unknown || readOnly}
               options={["fullstack", "frontend", "backend", "testing"].map(
                 (value) => ({ value, label: tr(value) }),
               )}
@@ -505,12 +525,12 @@ export function DeliveryTaskPlanEditor({
               min={1}
               max={40}
               onChange={(value) => edit(() => setMaxItems(value || 1))}
-              disabled={busy || unknown}
+              disabled={busy || unknown || readOnly}
             />
             <Button
               icon={<Sparkles size={14} />}
               loading={busy}
-              disabled={busy || unknown || conflict}
+              disabled={busy || unknown || readOnly || conflict}
               onClick={() => generate(true)}
             >
               {tr(preview || generationFailed ? "regenerate" : "generate")}
@@ -519,7 +539,7 @@ export function DeliveryTaskPlanEditor({
         )}
         {generationFailed && previewRequest.current && (
           <Button
-            disabled={busy || unknown || conflict}
+            disabled={busy || unknown || readOnly || conflict}
             onClick={() => generate(false)}
           >
             {tr("retryRequest")}
@@ -528,7 +548,7 @@ export function DeliveryTaskPlanEditor({
         {previous && (
           <Button
             icon={<RotateCcw size={14} />}
-            disabled={busy || unknown}
+            disabled={busy || unknown || readOnly}
             onClick={() => {
               if (locked()) return;
               const current = { rows, baseline, preview };
@@ -573,10 +593,36 @@ export function DeliveryTaskPlanEditor({
       )}
       <div className="delivery-plan-summary">
         <strong>{tr("count", { count: items.length })}</strong>
+        <span>{tr("assignmentCount", { assigned: items.filter((item) => item.owner_id).length,
+          unassigned: items.filter((item) => !item.owner_id).length })}</span>
         <Tag color={coverage.size === criteria.length ? "success" : "warning"}>
           {tr("coverage", { covered: coverage.size, total: criteria.length })}
         </Tag>
       </div>
+      <section className="delivery-plan-assignment" aria-label={tr("batchAssignment")}>
+        <div>
+          <strong>{tr("batchAssignment")}</strong>
+          <p className="delivery-hint">{tr("batchHint")}</p>
+        </div>
+        <ProjectOwnerSelect queryGeneration={baseline.workspace.query_generation}
+          label={tr("batchOwner")} value={batchOwner}
+          onChange={(id) => edit(() => setBatchOwner(id))} disabled={busy || unknown || readOnly} />
+        <Checkbox checked={replaceOwners} disabled={busy || unknown || readOnly}
+          onChange={(event) => edit(() => setReplaceOwners(event.target.checked))}>
+          {tr("replaceOwners")}
+        </Checkbox>
+        <div className="delivery-actions">
+          <Button disabled={busy || unknown || readOnly || !batchOwner || !items.length}
+            onClick={() => edit(() => setRows((current) =>
+              assignSelectedPlanRows(current, batchOwner, replaceOwners ? "replace" : "unassigned")))}>
+            {tr("applyOwner")}
+          </Button>
+          <Button type="text" disabled={busy || unknown || readOnly || !items.some((item) => item.owner_id)}
+            onClick={() => edit(() => setRows((current) => assignSelectedPlanRows(current, "", "clear")))}>
+            {tr("clearSelectedOwners")}
+          </Button>
+        </div>
+      </section>
       {criteria.some((_, index) => !coverage.has(index)) && (
         <details className="delivery-plan-uncovered">
           <summary>{tr("uncovered")}</summary>
@@ -602,6 +648,7 @@ export function DeliveryTaskPlanEditor({
       <div className="delivery-plan-rows">
         {!rows.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />}
         {rows.map((row, index) => {
+          const rowProblems = problems.filter((problem) => problem.key === row.key);
           const label = (text: string) =>
             `${text} · ${tr("item", { number: index + 1 })}`;
           const dependencyOptions = [
@@ -628,7 +675,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(event) =>
                     update(row.key, { selected: event.target.checked })
                   }
-                  disabled={busy || unknown}
+                  disabled={busy || unknown || readOnly}
                   aria-label={tr("selected", { number: index + 1 })}
                 >
                   {tr("item", { number: index + 1 })}
@@ -645,9 +692,12 @@ export function DeliveryTaskPlanEditor({
                       ),
                     )
                   }
-                  disabled={busy || unknown}
+                  disabled={busy || unknown || readOnly}
                 />
               </header>
+              {row.selected && rowProblems.length > 0 && <Alert type="warning" showIcon
+                title={tr("itemProblems", { number: index + 1 })}
+                description={[...new Set(rowProblems.map((problem) => tr(`problems.${problem.code}`)))].join(" · ")} />}
               <label>
                 {common("titleField")}
                 <Input
@@ -657,7 +707,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(event) =>
                     update(row.key, { title: event.target.value })
                   }
-                  disabled={busy || unknown}
+                  disabled={busy || unknown || readOnly}
                 />
               </label>
               <label>
@@ -670,7 +720,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(event) =>
                     update(row.key, { description: event.target.value })
                   }
-                  disabled={busy || unknown}
+                  disabled={busy || unknown || readOnly}
                 />
               </label>
               <div className="delivery-plan-fields">
@@ -681,7 +731,7 @@ export function DeliveryTaskPlanEditor({
                     label={label(common("owner"))}
                     value={row.owner_id}
                     onChange={(value) => update(row.key, { owner_id: value })}
-                    disabled={busy || unknown}
+                    disabled={busy || unknown || readOnly}
                   />
                 </label>
                 <label>
@@ -694,7 +744,7 @@ export function DeliveryTaskPlanEditor({
                       label: value,
                     }))}
                     onChange={(value) => update(row.key, { priority: value })}
-                    disabled={busy || unknown}
+                    disabled={busy || unknown || readOnly}
                   />
                 </label>
                 <label>
@@ -707,7 +757,7 @@ export function DeliveryTaskPlanEditor({
                       label: value,
                     }))}
                     onChange={(value) => update(row.key, { estimate: value })}
-                    disabled={busy || unknown}
+                    disabled={busy || unknown || readOnly}
                   />
                 </label>
               </div>
@@ -718,7 +768,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(acceptance_criteria) =>
                     update(row.key, { acceptance_criteria })
                   }
-                  disabled={busy || unknown}
+                  disabled={busy || unknown || readOnly}
                 />
               </div>
               <div className="delivery-plan-fields is-pair">
@@ -735,7 +785,7 @@ export function DeliveryTaskPlanEditor({
                     onChange={(value) =>
                       update(row.key, { requirement_criteria_indices: value })
                     }
-                    disabled={busy || unknown}
+                    disabled={busy || unknown || readOnly}
                   />
                 </label>
                 <label>
@@ -748,7 +798,7 @@ export function DeliveryTaskPlanEditor({
                     value={row.depends_on}
                     options={dependencyOptions}
                     onChange={(value) => update(row.key, { depends_on: value })}
-                    disabled={busy || unknown}
+                    disabled={busy || unknown || readOnly}
                   />
                 </label>
               </div>
@@ -762,7 +812,7 @@ export function DeliveryTaskPlanEditor({
                     onChange={(event) =>
                       update(row.key, { starts_on: event.target.value || null })
                     }
-                    disabled={busy || unknown}
+                    disabled={busy || unknown || readOnly}
                   />
                 </label>
                 <label>
@@ -774,7 +824,7 @@ export function DeliveryTaskPlanEditor({
                     onChange={(event) =>
                       update(row.key, { ends_on: event.target.value || null })
                     }
-                    disabled={busy || unknown}
+                    disabled={busy || unknown || readOnly}
                   />
                 </label>
               </div>
@@ -787,7 +837,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(event) =>
                     update(row.key, { blocked_reason: event.target.value })
                   }
-                  disabled={busy || unknown}
+                  disabled={busy || unknown || readOnly}
                 />
               </label>
             </article>

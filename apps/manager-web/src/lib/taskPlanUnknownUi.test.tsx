@@ -41,6 +41,7 @@ vi.mock("./deliveryQuery", async () => ({
 const basis = "a".repeat(64);
 const data = {
   project_id: "P", version: 7, query_generation: 3, project: { id: "P", name: "Original project" },
+  permissions: { write: true },
 } as unknown as DeliveryContext;
 const requirement = {
   id: "R", title: "Original requirement", description: "Fixed original scope", priority: "P1", basis,
@@ -104,6 +105,7 @@ function deferred<T>() {
 }
 beforeEach(() => {
   h.hooks = []; h.next = 0; h.session = "original-session"; h.revision = "login-1";
+  data.permissions.write = true;
   vi.clearAllMocks();
   vi.mocked(request).mockReset();
   vi.mocked(fetchEditableRequirement).mockReset();
@@ -111,6 +113,33 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe("actual task-plan editor unknown command recovery", () => {
+  it("applies a batch owner to the editable selection and sends that owner through the original task-plan command", async () => {
+    const tree = manual();
+    const batch = nodes(tree).find((node) => node.props.label === "delivery.taskPlan.batchOwner");
+    batch.props.onChange("agent:worker");
+    button(renderEditor(), "delivery.taskPlan.applyOwner").onClick();
+    const owners = () => nodes(renderEditor()).filter((node) => node.props.label?.startsWith("delivery.owner")).map((node) => node.props.value);
+    expect(owners()).toEqual(["user:lead"]);
+    button(renderEditor(), "delivery.taskPlan.clearSelectedOwners").onClick();
+    button(renderEditor(), "delivery.taskPlan.applyOwner").onClick();
+    expect(owners()).toEqual(["agent:worker"]);
+    vi.mocked(request).mockResolvedValueOnce(ack);
+    button(renderEditor(), "delivery.taskPlan.create").onClick(); await settle();
+    expect(JSON.parse(originalBody()).payload.items).toMatchObject([{ owner_id: "agent:worker", title: "Manual original task" }]);
+    expect(onSaved).toHaveBeenCalledWith(ack);
+  });
+
+  it("refuses old edit and save callbacks when project write permission disappears", async () => {
+    const tree = manual(), save = button(tree, "delivery.taskPlan.create");
+    data.permissions.write = false;
+    const readonly = renderEditor();
+    expect(button(readonly, "delivery.taskPlan.create").disabled).toBe(true);
+    field(tree, "delivery.titleField").onChange({ target: { value: "Rejected edit" } });
+    button(tree, "delivery.taskPlan.clearSelectedOwners").onClick(); save.onClick(); await settle();
+    expect(field(renderEditor(), "delivery.titleField").value).toBe("Manual original task");
+    expect(commandCalls()).toHaveLength(0); expect(onSaved).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["missing response", null],
     ["empty response", {}],

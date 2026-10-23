@@ -15,7 +15,8 @@ import { api } from "../../../../src/lib/api";
 import { getProjectId, getToken } from "../../../../src/lib/authStorage";
 import { BusinessModule } from "./projects/BusinessModule";
 import { GovernanceModule, type GovernancePanelKey } from "./projects/GovernanceModule";
-import { MembersModule } from "./projects/MembersModule";
+import { Organization } from "./Organization";
+import { projectMembersHash } from "../../../../src/lib/projectTeamNavigation";
 import { OnboardingModule, type OnboardingPanelKey } from "./projects/OnboardingModule";
 import { PortfolioModule } from "./projects/PortfolioModule";
 import { ProjectHero } from "./projects/ProjectHero";
@@ -82,7 +83,6 @@ export function Projects({
     clone_knowledge: true,
     clone_rules: true,
   });
-  const [newMember, setNewMember] = useState({ user_id: "", role: "developer" });
   const [copied, setCopied] = useState("");
   const [bootstrapResult, setBootstrapResult] = useState<any>(null);
   const [clonePreviewResult, setClonePreviewResult] = useState<any>(null);
@@ -130,13 +130,7 @@ export function Projects({
   const projectMembers = useQuery({
     queryKey: ["projectMembers", selectedProjectId],
     queryFn: () => api.projectMembers(selectedProjectId),
-    enabled: authed && Boolean(selectedProjectId) && (tab === "members" || tab === "portfolio"),
-  });
-
-  const memberCandidates = useQuery({
-    queryKey: ["projectMemberCandidates", selectedProjectId],
-    queryFn: () => api.projectMemberCandidates(selectedProjectId),
-    enabled: authed && Boolean(selectedProjectId) && tab === "members",
+    enabled: authed && Boolean(selectedProjectId) && tab === "portfolio",
   });
 
   const deliveryKitActive = isDeliveryTab(tab);
@@ -277,24 +271,6 @@ export function Projects({
     onSuccess: (res) => setClonePreviewResult(res),
   });
 
-  const addMember = useMutation({
-    mutationFn: () => api.projectAddMember(selectedProjectId, newMember),
-    onSuccess: () => {
-      setNewMember({ user_id: "", role: "developer" });
-      refreshAll();
-    },
-  });
-
-  const updateMember = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: string }) => api.projectUpdateMember(selectedProjectId, userId, { role }),
-    onSuccess: refreshAll,
-  });
-
-  const removeMember = useMutation({
-    mutationFn: (userId: string) => api.projectRemoveMember(selectedProjectId, userId),
-    onSuccess: refreshAll,
-  });
-
   const bootstrapTasks = useMutation({
     mutationFn: (dryRun: boolean) => api.projectBootstrapTasks(selectedProjectId, { dry_run: dryRun, priority: "P1", owner_id: "" }),
     onSuccess: (data) => {
@@ -321,11 +297,9 @@ export function Projects({
   };
 
   if (!authed) return <NeedLogin />;
+  if (tab === "members") return <Organization initialTab="projectMembers" focused={showFocusedChrome} />;
 
   const busy = projects.isFetching || summary.isFetching || templates.isFetching;
-  const projectRoles = roles.data?.project_member_roles?.length
-    ? roles.data.project_member_roles
-    : ["project_admin", "developer", "devops", "product_manager", "analyst", "viewer"];
   const userRoles = roles.data?.user_roles?.length
     ? roles.data.user_roles
     : ["developer", "devops", "project_admin", "tenant_admin"];
@@ -375,6 +349,10 @@ export function Projects({
         key={item.key}
         type="button"
         onClick={() => {
+          if (item.key === "members") {
+            window.location.hash = projectMembersHash(selectedProjectId);
+            return;
+          }
           if (isDeliveryTab(item.key)) {
             window.location.hash = deliveryDefaultHash[item.key];
             return;
@@ -478,24 +456,6 @@ export function Projects({
               onDelete={(userId, username) => {
                 if (window.confirm(t("page.projects.confirmDeleteUser", { name: username }))) deleteUser.mutate(userId);
               }}
-            />
-          ) : null}
-
-          {tab === "members" ? (
-            <MembersModule
-              project={selectedProject}
-              members={projectMembers.data ?? []}
-              loading={projectMembers.isLoading}
-              users={memberCandidates.data ?? []}
-              roles={projectRoles}
-              newMember={newMember}
-              setNewMember={setNewMember}
-              addPending={addMember.isPending}
-              removePending={removeMember.isPending}
-              addError={addMember.error as Error | null}
-              onAdd={() => addMember.mutate()}
-              onUpdateRole={(userId, role) => updateMember.mutate({ userId, role })}
-              onRemove={(userId) => removeMember.mutate(userId)}
             />
           ) : null}
 
