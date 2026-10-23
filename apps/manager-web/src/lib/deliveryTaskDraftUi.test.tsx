@@ -86,6 +86,22 @@ beforeEach(() => {
 afterEach(() => { Object.keys(h.hooks).forEach(unmount); vi.unstubAllGlobals(); });
 
 describe("task draft navigation protection", () => {
+  it("lets a dispatch draft continue while blocking other editor scopes", () => {
+    const first = host(), dispatch = find(first, TaskDispatchHost).props;
+    expect(dispatch.canStart()).toBe(true);
+    dispatch.onEditingChange(true); expect(dispatch.canStart()).toBe(true);
+    find(first, DeliveryDesignContextPanel).props.onEditingChange(true); expect(dispatch.canStart()).toBe(false);
+    find(first, DeliveryDesignContextPanel).props.onEditingChange(false); expect(dispatch.canStart()).toBe(true);
+    dispatch.onEditingChange(false); expect(dispatch.canStart()).toBe(true);
+  });
+  it("revokes actual dispatch submit authority when the parent task read loses permission or fails", () => {
+    const first = host(), dispatch = find(first, TaskDispatchHost).props;
+    expect(dispatch.canSubmit()).toBe(true);
+    h.task.data.permissions.write = false; host(); expect(dispatch.canSubmit()).toBe(false);
+    h.task.data.permissions.write = true; h.task.error = new Error("Current task unavailable"); h.task.isError = true;
+    host(); expect(dispatch.canSubmit()).toBe(false);
+    h.task.error = null; h.task.isError = false; host(); expect(dispatch.canSubmit()).toBe(true);
+  });
   it("blocks starting a report or rework preview while another Task editor owns a draft", () => {
     const first = host(), submission = find(first, DeliveryTaskSubmissionPanel).props;
     expect(submission.canStart()).toBe(true);

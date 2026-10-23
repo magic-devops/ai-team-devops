@@ -1,7 +1,8 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Button, Select } from "antd";
+import { Button } from "antd";
 import { TaskDispatchHost } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDispatchHost";
+import { TaskDispatchChoices } from "../../subapps/ai-rd-center/src/pages/delivery/TaskDispatchChoices";
 import { ExecutionPlanEditor } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionPlanEditor";
 import { fetchDeliveryTaskEditData } from "./deliveryQuery";
 import { fetchDeliveryTargets } from "./deliveryExecution";
@@ -28,7 +29,7 @@ const feedbackA = { submission_id: "S", submission_digest: "d".repeat(64), decis
 const feedbackB = { submission_id: "S2", submission_digest: "e".repeat(64), decision_id: "D2" };
 function report(ref = feedbackA): any { return { project_id: "P", task_id: "T", submission: { id: ref.submission_id, digest: ref.submission_digest, invalidated: true }, decision: { id: ref.decision_id, decision: "request_changes" } }; }
 function queue(): any { return { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, locked: false, run: vi.fn() }; }
-function choose(tree: ReactNode, label: string, value: string) { nodes(tree).find((node) => node.type === Select && node.props["aria-label"] === label)!.props.onChange(value); }
+function choose(tree: ReactNode, mode: string, member = "") { nodes(tree).find((node) => node.type === TaskDispatchChoices)!.props.onChoose(mode, member); }
 async function next(tree: ReactNode) { await nodes(tree).find((node) => node.type === Button && node.props.children === "Continue")!.props.onClick(); await settle(); }
 afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
@@ -41,9 +42,8 @@ describe("one Task dispatch choice (source definitions only)", () => {
     const external = vi.fn(), queue: any = { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, locked: false, run: vi.fn() };
     const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, queueCommand: queue, onExternal: external, onSaved: vi.fn() }));
     read(); h.effects.forEach((effect) => effect()); await settle();
-    let tree = read(); nodes(tree).find((node) => node.type === Select && node.props["aria-label"] === "Delivery method")!.props.onChange("agent");
-    tree = read(); nodes(tree).find((node) => node.type === Select && node.props["aria-label"] === "Execution member")!.props.onChange("agent:one");
-    tree = read(); await nodes(tree).find((node) => node.type === Button && node.props.children === "Continue")!.props.onClick(); await settle();
+    choose(read(), "agent", "agent:one");
+    await next(read());
     const editor = nodes(read()).find((node) => node.type === ExecutionPlanEditor)!;
     expect(editor.props.initial).toMatchObject({ executorMemberId: "agent:one", executorBindingBasis: "b".repeat(64), workspaceId: "W", agentId: "A", agentVersion: 2 });
     expect(external).not.toHaveBeenCalled(); expect(queue.run).not.toHaveBeenCalled();
@@ -53,29 +53,29 @@ describe("one Task dispatch choice (source definitions only)", () => {
     const queue: any = { state: { phase: "idle" }, snapshot: () => ({ phase: "idle" }), current: () => true, locked: false };
     const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, queueCommand: queue, onExternal: vi.fn(), onSaved: vi.fn() }));
     read(); h.effects.forEach((effect) => effect()); await settle();
-    const tree = read(), method = nodes(tree).find((node) => node.type === Select && node.props["aria-label"] === "Delivery method")!;
-    expect(method.props.options.find((item: any) => item.value === "agent").disabled).toBe(true);
+    const choices = nodes(read()).find((node) => node.type === TaskDispatchChoices)!;
+    expect(choices.props.options.filter((item: any) => item.mode === "agent").every((item: any) => !item.available)).toBe(true);
   });
 });
 
 it("keeps command and external collaboration explicit, using the same native editor or exact W request", async () => {
   let external = vi.fn(() => true), q = queue();
   const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, feedbackReference: feedbackA, queueCommand: q, onExternal: external, onSaved: vi.fn() }));
-  read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "Delivery method", "command"); await next(read());
+  read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "command"); await next(read());
   expect(nodes(read()).find((node) => node.type === ExecutionPlanEditor)?.props.initial).toMatchObject({ mode: "command", feedback_reference: feedbackA });
   expect(q.run).not.toHaveBeenCalled(); expect(external).not.toHaveBeenCalled();
-  h.slots = []; { read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "Delivery method", "external"); choose(read(), "Execution member", "agent:one"); await next(read()); }
+  h.slots = []; { read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "external", "agent:one"); await next(read()); }
   expect(external).toHaveBeenCalledWith({ executorId: "agent:one", feedback_reference: feedbackA }); expect(q.run).not.toHaveBeenCalled();
 });
 it("leaves multiple eligible targets for an explicit target choice and requires adoption when formal binding changes", async () => {
   const multiple = structuredClone(targets); multiple.workspaces[0].devices = [{ ...target, id: "D", kind: "device" }]; vi.mocked(fetchDeliveryTargets).mockResolvedValue(multiple);
   const q = queue(), read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, queueCommand: q, onExternal: vi.fn(() => true), onSaved: vi.fn() }));
-  read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "Delivery method", "agent"); choose(read(), "Execution member", "agent:one");
+  read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "agent", "agent:one");
   const changed = structuredClone(bindings); changed.members[0].binding.agent_version = 3; vi.mocked(fetchTeamRuntimeBindings).mockResolvedValue(changed);
   await next(read()); expect(nodes(read()).some((node) => node.type === ExecutionPlanEditor)).toBe(false);
   expect(nodes(read()).some((node) => node.type === Button && node.props.children === "Use the current facts and select again")).toBe(true);
   vi.mocked(fetchTeamRuntimeBindings).mockResolvedValue(structuredClone(bindings));
-  choose(read(), "Execution member", "agent:one"); await next(read());
+  choose(read(), "agent", "agent:one"); await next(read());
   expect(nodes(read()).find((node) => node.type === ExecutionPlanEditor)?.props.initial.target).toBeNull(); expect(q.run).not.toHaveBeenCalled();
 });
 it("waits for the latest same-Task feedback source after a cancelled A read and opens B only", async () => {
@@ -83,7 +83,7 @@ it("waits for the latest same-Task feedback source after a cancelled A read and 
   let count = 1, ref = feedbackA; const q = queue(), read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: count, feedbackReference: ref, queueCommand: q, onExternal: vi.fn(() => true), onSaved: vi.fn() }));
   read(); h.effects.forEach((effect) => effect()); count = 2; ref = feedbackB; location.hash += `&feedback_submission=S2&feedback_digest=${feedbackB.submission_digest}&feedback_decision=D2`; read(); h.effects.forEach((effect) => effect());
   release(structuredClone(task)); await settle(); read(); h.effects.forEach((effect) => effect()); await settle();
-  choose(read(), "Delivery method", "command"); await next(read());
+  choose(read(), "command"); await next(read());
   expect(nodes(read()).find((node) => node.type === ExecutionPlanEditor)?.props.initial.feedback_reference).toEqual(feedbackB); expect(q.run).not.toHaveBeenCalled();
 });
 it("offers an explicit read-only retry after same-source S/W navigation cancels its pending read", async () => {
@@ -91,12 +91,12 @@ it("offers an explicit read-only retry after same-source S/W navigation cancels 
   let q = { ...queue(), current: () => live }; const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, queueCommand: q, onExternal: vi.fn(() => true), onSaved: vi.fn() }));
   read(); h.effects.forEach((effect) => effect()); location.hash += "&work_order_id=W"; live = false; q = queue(); read(); h.effects.forEach((effect) => effect()); release(structuredClone(task)); await settle();
   const retry = nodes(read()).find((node) => node.type === Button && node.props.children === "Read current capabilities")!;
-  await retry.props.onClick(); await settle(); expect(nodes(read()).some((node) => node.type === Select && node.props["aria-label"] === "Delivery method")).toBe(true); expect(q.run).not.toHaveBeenCalled();
+  await retry.props.onClick(); await settle(); expect(nodes(read()).some((node) => node.type === TaskDispatchChoices)).toBe(true); expect(q.run).not.toHaveBeenCalled();
 });
 it("pins native editor callbacks to the original feedback and cannot close an unknown original", async () => {
   const q = queue(); let ref = feedbackA, count = 1;
   const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: count, feedbackReference: ref, queueCommand: q, onExternal: vi.fn(() => true), onSaved: vi.fn() }));
-  read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "Delivery method", "command"); await next(read());
+  read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "command"); await next(read());
   const old = nodes(read()).find((node) => node.type === ExecutionPlanEditor)!; expect(old.props.isActive()).toBe(true);
   ref = feedbackB; count++; read(); expect(old.props.isActive()).toBe(true); expect(old.props.canSubmit()).toBe(false);
   q.snapshot = () => ({ phase: "unknown" }); old.props.onClose(); expect(history.replaceState).not.toHaveBeenCalled(); expect(nodes(read()).some((node) => node.type === ExecutionPlanEditor)).toBe(true);
@@ -105,7 +105,7 @@ it("pins native editor callbacks to the original feedback and cannot close an un
 it("never silently selects a different report when the exact feedback read fails", async () => {
   vi.mocked(readSubmissionDetail).mockRejectedValue(new Error("HTTP 404")); const q = queue();
   const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, feedbackReference: feedbackA, queueCommand: q, onExternal: vi.fn(() => true), onSaved: vi.fn() }));
-  read(); h.effects.forEach((effect) => effect()); await settle(); expect(nodes(read()).some((node) => node.type === Select)).toBe(false); expect(readSubmissionDetail).toHaveBeenCalledWith("P", "T", "S", "scope"); expect(q.run).not.toHaveBeenCalled();
+  read(); h.effects.forEach((effect) => effect()); await settle(); expect(nodes(read()).some((node) => node.type === TaskDispatchChoices)).toBe(false); expect(readSubmissionDetail).toHaveBeenCalledWith("P", "T", "S", "scope"); expect(q.run).not.toHaveBeenCalled();
 });
 it("does not open a second task draft when another editor starts during capability reads", async () => {
   let release!: (value: any) => void, canStart = true;
@@ -113,8 +113,34 @@ it("does not open a second task draft when another editor starts during capabili
   const q = queue(), editing = vi.fn(), external = vi.fn(() => true);
   const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, queueCommand: q, onExternal: external, onSaved: vi.fn(), onEditingChange: editing, canStart: () => canStart }));
   read(); h.effects.forEach((effect) => effect()); canStart = false; read(); release(structuredClone(task)); await settle();
-  expect(nodes(read()).some((node) => node.type === Select)).toBe(false); expect(editing).not.toHaveBeenCalledWith(true);
+  expect(nodes(read()).some((node) => node.type === TaskDispatchChoices)).toBe(false); expect(editing).not.toHaveBeenCalledWith(true);
   expect(q.run).not.toHaveBeenCalled(); expect(external).not.toHaveBeenCalled();
   canStart = true; const retry = nodes(read()).find((node) => node.type === Button && node.props.children === "Read current capabilities")!;
-  await retry.props.onClick(); await settle(); expect(nodes(read()).some((node) => node.type === Select && node.props["aria-label"] === "Delivery method")).toBe(true);
+  await retry.props.onClick(); await settle(); expect(nodes(read()).some((node) => node.type === TaskDispatchChoices)).toBe(true);
+});
+
+for (const change of ["other_editor", "permission", "unknown_command"]) it(`discards a later continue response after ${change} and retains its selected draft`, async () => {
+  let allowed = true, another = false, phase = "idle", release!: (value: any) => void;
+  const q = { ...queue(), snapshot: () => ({ phase }) }, external = vi.fn(() => true);
+  const read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, queueCommand: q, onExternal: external, onSaved: vi.fn(), canSubmit: () => allowed, canStart: () => !another }));
+  read(); h.effects.forEach((effect) => effect()); await settle(); choose(read(), "agent", "agent:one");
+  vi.mocked(fetchDeliveryTaskEditData).mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  const pending = nodes(read()).find((node) => node.type === Button && node.props.children === "Continue")!.props.onClick();
+  if (change === "other_editor") another = true;
+  if (change === "permission") allowed = false;
+  if (change === "unknown_command") phase = "unknown";
+  read(); release(structuredClone(task)); await pending; await settle();
+  expect(nodes(read()).some((node) => node.type === ExecutionPlanEditor)).toBe(false); expect(external).not.toHaveBeenCalled(); expect(q.run).not.toHaveBeenCalled();
+  expect(nodes(read()).find((node) => node.type === TaskDispatchChoices)?.props.value).toMatchObject({ mode: "agent", member: "agent:one" });
+});
+
+it("rejects disabled and stale choice callbacks without changing a later selection", async () => {
+  const q = queue(), read = () => frame(() => TaskDispatchHost({ projectId: "P", taskId: "T", sessionId: "s", requestOpen: 1, queueCommand: q, onExternal: vi.fn(() => true), onSaved: vi.fn() }));
+  read(); h.effects.forEach((effect) => effect()); await settle();
+  const original = read(), old = nodes(original).find((node) => node.type === TaskDispatchChoices)!, nextOld = nodes(original).find((node) => node.type === Button && node.props.children === "Continue")!;
+  old.props.onChoose("external", "invented-member"); expect(nodes(read()).find((node) => node.type === TaskDispatchChoices)?.props.value.mode).toBeNull();
+  old.props.onChoose("agent", "agent:one");
+  old.props.onChoose("command", ""); await nextOld.props.onClick(); await settle();
+  expect(nodes(read()).find((node) => node.type === TaskDispatchChoices)?.props.value).toMatchObject({ mode: "agent", member: "agent:one" });
+  expect(nodes(read()).some((node) => node.type === ExecutionPlanEditor)).toBe(false); expect(q.run).not.toHaveBeenCalled();
 });

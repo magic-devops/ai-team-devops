@@ -1,13 +1,13 @@
-import { Alert, Button, Modal, Select, Skeleton, Space } from "antd";
+import { Alert, Button, Modal, Skeleton, Space } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchDeliveryTaskEditData } from "@/lib/deliveryQuery";
-import { fetchDeliveryTargets, openExecutionDraft, executionTargetProblems, type DeliveryTargets, type ExecutionDraftSession } from "@/lib/deliveryExecution";
-import { fetchTeamRuntimeBindings, selectExecutionMember, type TeamRuntimeBindings } from "@/lib/deliveryTeamRuntime";
-import { readWorkOrderCurrent, type WorkOrderCurrent } from "@/lib/externalWorkOrders";
-import { readSubmissionDetail, type SubmissionDetail } from "@/lib/deliveryTaskSubmission";
+import { fetchDeliveryTargets, openExecutionDraft, executionTargetProblems, type ExecutionDraftSession } from "@/lib/deliveryExecution";
+import { fetchTeamRuntimeBindings, selectExecutionMember } from "@/lib/deliveryTeamRuntime";
+import { readWorkOrderCurrent } from "@/lib/externalWorkOrders";
+import { readSubmissionDetail } from "@/lib/deliveryTaskSubmission";
 import type { FeedbackReference } from "@/lib/deliveryFeedback";
-import type { DeliveryCommandAck, DeliveryTaskData } from "@/lib/delivery";
+import type { DeliveryCommandAck } from "@/lib/delivery";
 import type { ExecutionDispatchCommand } from "@/lib/executionDispatchCommand";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { commandDraft } from "@/lib/executionCommands";
@@ -16,9 +16,9 @@ import { useDeliveryDraftState } from "@/lib/useDeliveryDraftState";
 import { closeTaskDispatchRoute, taskDispatchRequest } from "@/lib/taskDispatchRoute";
 import { ExecutionPlanEditor } from "./ExecutionPlanEditor";
 import { TaskDispatchFeedback } from "./TaskDispatchFeedback";
+import { TaskDispatchChoices } from "./TaskDispatchChoices";
+import { dispatchChoices, type TaskDispatchFacts as Facts, type DispatchMode as Mode } from "@/lib/taskDispatchChoices";
 
-type Facts = { reference?: FeedbackReference; data: DeliveryTaskData; targets?: DeliveryTargets; bindings?: TeamRuntimeBindings; external?: WorkOrderCurrent; feedback?: SubmissionDetail; failures: string[] };
-type Mode = "agent" | "command" | "external";
 type Choice = { kind: "choice"; facts: Facts; mode: Mode | null; member: string | null } | { kind: "native"; facts: Facts; execution: ExecutionDraftSession };
 export type ExternalDispatchRequest = { executorId: string; feedback_reference?: FeedbackReference };
 // The immutable S digest + decision identity pins the historical body; fresh capability facts remain separate.
@@ -34,9 +34,13 @@ export function TaskDispatchHost({ projectId, taskId, sessionId, requestOpen = 0
   const access = useRef({ isActive, canSubmit, canStart, queueCommand, feedbackReference }); access.current = { isActive, canSubmit, canStart, queueCommand, feedbackReference };
   const [draft, writeDraft] = useDeliveryDraftState<Choice | null>(null, onEditingChange), draftRef = useRef(draft);
   const setDraft = (value: Choice | null) => { draftRef.current = value; writeDraft(value); };
-  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [candidate, setCandidate] = useState<Facts | null>(null);
+  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [candidate, writeCandidate] = useState<Facts | null>(null);
+  const candidateRef = useRef(candidate); candidateRef.current = candidate;
+  const setCandidate = (value: Facts | null) => { candidateRef.current = value; writeCandidate(value); };
+  const [search, setSearch] = useState(""), [limit, setLimit] = useState(40);
   const current = () => mounted.current && liveIdentity.current === identity && origin.current === projectSessionKey() && queueCommand.current() && access.current.isActive?.() !== false;
-  const canChange = () => current() && !pending.current && access.current.canSubmit?.() !== false && ["idle", "refused"].includes(queueCommand.snapshot().phase);
+  const canProceed = () => current() && access.current.canSubmit?.() !== false && access.current.canStart?.() !== false && ["idle", "refused"].includes(queueCommand.snapshot().phase);
+  const canChange = () => !pending.current && canProceed();
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   async function load(): Promise<Facts> {
     const hash = typeof location === "undefined" ? "" : location.hash;
@@ -51,14 +55,19 @@ export function TaskDispatchHost({ projectId, taskId, sessionId, requestOpen = 0
     const external = results[3].status === "fulfilled" && results[3].value.project_id === projectId && results[3].value.task_id === taskId ? results[3].value : undefined;
     return { reference: feedbackReference && structuredClone(feedbackReference), data, targets, bindings, external, feedback, failures: results.slice(1, 4).flatMap((value) => value.status === "rejected" ? [(value.reason as Error).message] : []) };
   }
-  const open = async () => { if (!canChange() || access.current.canStart?.() === false || draftRef.current) return; pending.current = true; setBusy(true); setError(""); try { const facts = await load(); if (!current() || access.current.canSubmit?.() === false || access.current.canStart?.() === false) throw new Error(copy.changed); if (JSON.stringify(facts.reference) !== JSON.stringify(access.current.feedbackReference)) throw new Error(copy.feedbackInvalid); setDraft({ kind: "choice", facts, mode: null, member: null }); } catch (cause) { if (current()) setError((cause as Error).message); } finally { pending.current = false; if (mounted.current) setBusy(false); } };
+  const open = async () => { if (!canChange() || draftRef.current) return; pending.current = true; setBusy(true); setError(""); try { const facts = await load(); if (!canProceed() || draftRef.current) throw new Error(copy.changed); if (JSON.stringify(facts.reference) !== JSON.stringify(access.current.feedbackReference)) throw new Error(copy.feedbackInvalid); setSearch(""); setLimit(40); setDraft({ kind: "choice", facts, mode: null, member: null }); } catch (cause) { if (current()) setError((cause as Error).message); } finally { pending.current = false; if (mounted.current) setBusy(false); } };
   useEffect(() => { if (!requestOpen || requestOpen === handled.current || busy || canStart?.() === false || !canChange() || draftRef.current) return; handled.current = requestOpen; void open(); }, [requestOpen, busy, queueCommand.state.phase, isActive, canSubmit, canStart]);
-  const close = () => { if (!current() || pending.current || !["idle", "refused"].includes(queueCommand.snapshot().phase)) return; handled.current = requestOpen; setDraft(null); setCandidate(null); setError(""); if (access.current.canSubmit?.() !== false) closeTaskDispatchRoute(projectId, taskId); };
-  const patch = (value: Partial<{ mode: Mode; member: string }>) => { const old = draftRef.current; if (!canChange() || old?.kind !== "choice") return; setDraft({ ...old, ...value, ...(value.mode ? { member: null } : {}) }); setCandidate(null); };
-  const next = async () => {
-    const value = draftRef.current; if (!canChange() || value?.kind !== "choice" || !value.mode || value.mode !== "command" && value.member === null) return;
+  const close = (expected: Choice | null) => { if (draftRef.current !== expected || !current() || pending.current || !["idle", "refused"].includes(queueCommand.snapshot().phase)) return; handled.current = requestOpen; setDraft(null); setCandidate(null); setError(""); if (access.current.canSubmit?.() !== false) closeTaskDispatchRoute(projectId, taskId); };
+  const choose = (expected: Choice, mode: Mode, member: string) => {
+    if (!canChange() || draftRef.current !== expected || expected.kind !== "choice" || !sourceMatches()) return;
+    if (!dispatchChoices(expected.facts).some((row) => row.mode === mode && row.member === member && row.available)) return;
+    setDraft({ ...expected, mode, member }); setCandidate(null); setError("");
+  };
+  const next = async (expected: Choice) => {
+    const value = draftRef.current; if (!canChange() || value !== expected || value?.kind !== "choice" || !value.mode || value.member === null || !dispatchChoices(value.facts).some((row) => row.mode === value.mode && row.member === value.member && row.available)) return;
     pending.current = true; setBusy(true); setError("");
-    try { if (JSON.stringify(value.facts.reference) !== JSON.stringify(access.current.feedbackReference)) throw new Error(copy.feedbackInvalid); const fresh = await load(); if (access.current.canSubmit?.() === false) throw new Error(copy.changed); if (JSON.stringify(fresh.reference) !== JSON.stringify(access.current.feedbackReference)) throw new Error(copy.feedbackInvalid); if (factsKey(value.facts) !== factsKey(fresh)) { setCandidate(fresh); return; }
+    try { if (JSON.stringify(value.facts.reference) !== JSON.stringify(access.current.feedbackReference)) throw new Error(copy.feedbackInvalid); const fresh = await load(); if (!canProceed() || draftRef.current !== value) return; if (JSON.stringify(fresh.reference) !== JSON.stringify(access.current.feedbackReference)) throw new Error(copy.feedbackInvalid); if (factsKey(value.facts) !== factsKey(fresh)) { setCandidate(fresh); return; }
+      if (!dispatchChoices(fresh).some((row) => row.mode === value.mode && row.member === value.member && row.available)) throw new Error(copy.unavailable);
       if (value.mode === "external") { const member = fresh.external?.executors.find((row) => row.id === value.member && row.active && row.available); if (!fresh.external?.can_dispatch || !member) throw new Error(copy.unavailable); if (!onExternal({ executorId: member.id, ...(fresh.reference ? { feedback_reference: structuredClone(fresh.reference) } : {}) })) throw new Error(copy.unavailable); setDraft(null); return; }
       if (!fresh.targets?.can_execute || !fresh.data.task.execution_gate.eligible || !fresh.external || fresh.external.active_work_order_id) throw new Error(copy.activeOrder);
       let execution = openExecutionDraft(fresh.data, taskId, crypto.randomUUID());
@@ -70,21 +79,21 @@ export function TaskDispatchHost({ projectId, taskId, sessionId, requestOpen = 0
   };
   const sourceMatches = () => JSON.stringify(draftRef.current?.facts.reference) === JSON.stringify(access.current.feedbackReference);
   const shown = draft?.kind === "choice" ? draft : null, facts = shown?.facts;
-  const native = Boolean(facts?.data.task.execution_gate.eligible && facts.targets?.can_execute && facts.external && !facts.external.active_work_order_id);
-  const memberOptions = shown?.mode === "external" ? facts?.external?.executors.map((row) => ({ value: row.id, label: row.name, disabled: !row.active || !row.available })) : [{ value: "", label: copy.direct }, ...(facts?.bindings?.members || []).map((row) => ({ value: row.member_id, label: facts?.data.members.find((member) => member.id === row.member_id)?.name || row.member_id, disabled: row.status !== "current" || !row.binding }))];
+  const options = facts ? dispatchChoices(facts) : [], selectedChoice = options.find((row) => shown && row.mode === shown.mode && row.member === shown.member);
+  const closeBlocked = busy || !["idle", "refused"].includes(queueCommand.snapshot().phase);
   const route = taskDispatchRequest(typeof location === "undefined" ? "" : location.hash, projectId, taskId);
   return <section className="space-y-3" aria-label={copy.title}>
-    {route.invalid && <Alert type="warning" title={copy.feedbackInvalid} action={<Button disabled={!canChange() || Boolean(draft)} onClick={close}>{copy.close}</Button>} />}
+    {route.invalid && <Alert type="warning" title={copy.feedbackInvalid} action={<Button disabled={closeBlocked || Boolean(draft)} onClick={() => close(null)}>{copy.close}</Button>} />}
     {route.open && requestOpen > 0 && !busy && !draft && !error && !candidate && canChange() && canStart?.() !== false && <Button onClick={() => void open()}>{copy.retry}</Button>}
     {busy && !draft && <Skeleton active title={false} paragraph={{ rows: 2 }} />}{error && !draft && <Alert type="warning" title={error} action={<Button disabled={busy || !canChange()} onClick={() => void open()}>{copy.retry}</Button>} />}
-    {shown && facts && <Modal open width={760} title={copy.title} maskClosable={false} closable={!busy} onCancel={close} footer={<Space wrap><Button disabled={busy} onClick={close}>{copy.close}</Button><Button type="primary" loading={busy} disabled={!shown.mode || shown.mode !== "command" && shown.member === null || !canChange()} onClick={next}>{copy.next}</Button></Space>}>
+    {shown && facts && <Modal open width={760} title={copy.title} maskClosable={false} closable={!closeBlocked} keyboard={!closeBlocked} onCancel={() => close(shown)} footer={<Space wrap><Button disabled={closeBlocked} onClick={() => close(shown)}>{copy.close}</Button><Button type="primary" loading={busy} disabled={!selectedChoice?.available || !canChange()} onClick={() => next(shown)}>{copy.next}</Button></Space>}>
       <div className="space-y-4"><strong>{facts.data.task.title}</strong><div><strong>{copy.current}</strong><p className="whitespace-pre-wrap">{facts.data.task.description}</p><ul>{(facts.data.task.acceptance_criteria || []).map((text, index) => <li key={index}>{text}</li>)}</ul></div>
       {facts.feedback && <TaskDispatchFeedback detail={facts.feedback} />}{facts.external?.active_work_order_id && <Alert type="warning" title={copy.activeOrder} />}{facts.failures.map((failure, index) => <Alert key={index} type="warning" title={failure} />)}
-      <label className="block">{copy.method}<Select aria-label={copy.method} className="w-full" value={shown.mode || undefined} disabled={busy} options={[{ value: "agent", label: copy.agent, disabled: !native }, { value: "command", label: copy.command, disabled: !native }, { value: "external", label: copy.external, disabled: !facts.external?.can_dispatch }]} onChange={(mode) => patch({ mode })} /></label>
-      {shown.mode && <p>{shown.mode === "external" ? copy.externalHint : shown.mode === "command" ? copy.commandHint : copy.nativeHint}</p>}{shown.mode && shown.mode !== "command" && <label className="block">{copy.member}<Select aria-label={copy.member} className="w-full" value={shown.member} disabled={busy} options={memberOptions} placeholder={copy.chooseMember} onChange={(member) => patch({ member })} /></label>}
-      {error && <Alert type="warning" title={error} />}{candidate && <Alert type="warning" title={copy.changed} description={<><strong>{candidate.data.task.title}</strong><p className="whitespace-pre-wrap">{candidate.data.task.description}</p><ul>{candidate.data.task.acceptance_criteria?.map((text, index) => <li key={index}>{text}</li>)}</ul><p>{copy.member}: {candidate.bindings?.members.map((row) => `${row.member_id} · ${row.status} · ${row.binding?.agent_version ?? "—"}`).join("; ")}</p></>} action={<Button disabled={busy || !canChange()} onClick={() => { if (canChange()) { setDraft({ kind: "choice", facts: candidate, mode: null, member: null }); setCandidate(null); setError(""); } }}>{copy.refresh}</Button>} />}
+      <TaskDispatchChoices options={options} value={shown} search={search} limit={limit} disabled={busy || !canChange()} onChoose={(mode, member) => choose(shown, mode, member)} onSearch={(value) => { if (canChange() && draftRef.current === shown) { setSearch(value); setLimit(40); } }} onMore={() => { if (canChange() && draftRef.current === shown) setLimit((value) => value + 40); }} />
+      {shown.mode && <p className="runtime-help">{shown.mode === "external" ? copy.externalHint : shown.mode === "command" ? copy.commandHint : copy.nativeHint}</p>}
+      {error && <Alert type="warning" title={error} />}{candidate && <Alert type="warning" title={copy.changed} description={<><strong>{candidate.data.task.title}</strong><p className="whitespace-pre-wrap">{candidate.data.task.description}</p><ul>{candidate.data.task.acceptance_criteria?.map((text, index) => <li key={index}>{text}</li>)}</ul></>} action={<Button disabled={busy || !canChange()} onClick={() => { if (canChange() && draftRef.current === shown && candidateRef.current === candidate && JSON.stringify(candidate.reference) === JSON.stringify(access.current.feedbackReference)) { setDraft({ kind: "choice", facts: candidate, mode: null, member: null }); setSearch(""); setLimit(40); setCandidate(null); setError(""); } }}>{copy.refresh}</Button>} />}
       </div></Modal>}
-    {draft && !sourceMatches() && <Alert type="warning" title={copy.feedbackInvalid} action={<Button disabled={!canChange()} onClick={close}>{copy.close}</Button>} />}
-    {draft?.kind === "native" && draft.facts.targets && <ExecutionPlanEditor initial={draft.execution} initialTargets={draft.facts.targets} members={draft.facts.data.members} canConfigure={draft.facts.data.permissions.configure && draft.facts.targets.can_configure_policy} sessionId={sessionId} queueCommand={queueCommand} isActive={current} canSubmit={() => sourceMatches() && access.current.canSubmit?.() !== false} contextWarning={!sourceMatches() ? copy.feedbackInvalid : undefined} onSaved={onSaved} onClose={close} onUnresolvedChange={onUnresolvedChange} />}
+    {draft && !sourceMatches() && <Alert type="warning" title={copy.feedbackInvalid} action={<Button disabled={closeBlocked} onClick={() => close(draft)}>{copy.close}</Button>} />}
+    {draft?.kind === "native" && draft.facts.targets && <ExecutionPlanEditor initial={draft.execution} initialTargets={draft.facts.targets} members={draft.facts.data.members} canConfigure={draft.facts.data.permissions.configure && draft.facts.targets.can_configure_policy} sessionId={sessionId} queueCommand={queueCommand} isActive={current} canSubmit={() => draftRef.current === draft && sourceMatches() && canProceed()} contextWarning={!sourceMatches() ? copy.feedbackInvalid : undefined} onSaved={onSaved} onClose={() => close(draft)} onUnresolvedChange={onUnresolvedChange} />}
   </section>;
 }
