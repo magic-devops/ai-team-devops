@@ -474,9 +474,9 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
         <label data-i18n="field_username">用户名</label>
         <input id="init-username" type="text" placeholder="admin" required>
         <label data-i18n="field_password_min">密码（至少 8 位）</label>
-        <input id="init-password" type="password" data-i18n="ph_password_min" placeholder="" required minlength="8">
+        <div class="pw-wrap"><input id="init-password" type="password" data-i18n="ph_password_min" placeholder="" required minlength="8"><button type="button" class="pw-eye" data-pw-for="init-password" aria-pressed="false" aria-label="显示密码"></button></div>
         <label data-i18n="field_password_confirm">确认密码</label>
-        <input id="init-password2" type="password" data-i18n="ph_password_confirm" placeholder="" required minlength="8">
+        <div class="pw-wrap"><input id="init-password2" type="password" data-i18n="ph_password_confirm" placeholder="" required minlength="8"><button type="button" class="pw-eye" data-pw-for="init-password2" aria-pressed="false" aria-label="显示密码"></button></div>
         <label data-i18n="field_tenant">租户名称（可选）</label>
         <input id="init-tenant" type="text" placeholder="default">
         <button class="btn btn-init" type="submit" id="init-btn" data-i18n="init_btn">创建账号并登录</button>
