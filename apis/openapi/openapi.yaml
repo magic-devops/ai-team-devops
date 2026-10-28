@@ -3424,15 +3424,9 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                - ok
-                - id
-                properties:
-                  ok:
-                    type: boolean
-                  id:
-                    type: string
+                $ref: '#/components/schemas/ProjectCreateAck'
+        '409':
+          description: The original key was used with different input, or project creation conflicted. Retain the original request.
         '422':
           description: Validation Error
           content:
@@ -3441,8 +3435,9 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
-      description: Create a project with initial planning, active or paused state. Initial archived is rejected; archive and
-        restore require the explicit lifecycle preview/command.
+      description: Create a project with a required caller-retained idempotency_key. Retry the same complete body and key after an unknown result;
+        an exact receipt returns the original project even after later edits. Project, creator membership and receipt commit atomically.
+        The default state is planning. Initial archived is rejected; archive and restore require the explicit lifecycle preview/command.
   /api/v1/tasks:
     get:
       operationId: listTasks
@@ -15361,6 +15356,12 @@ components:
     ProjectCreate:
       additionalProperties: false
       properties:
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_.:-]+$'
+          description: Stable original request identity, scoped to the authenticated tenant and creator. Retain before sending.
         name:
           maxLength: 128
           minLength: 1
@@ -15374,6 +15375,7 @@ components:
         business_id:
           anyOf:
           - type: string
+            maxLength: 64
           - type: 'null'
           default: null
           title: Business Id
@@ -15396,7 +15398,7 @@ components:
           title: Vector Db Config
           type: object
         status:
-          default: active
+          default: planning
           enum:
           - planning
           - active
@@ -15405,8 +15407,20 @@ components:
           type: string
       required:
       - name
+      - idempotency_key
       title: ProjectCreate
       type: object
+    ProjectCreateAck:
+      type: object
+      required: [ok, action, id, tenant_id, creator_id, idempotency_key, replayed]
+      properties:
+        ok: {type: boolean, const: true, default: true}
+        action: {type: string, const: project.create, default: project.create}
+        id: {type: string}
+        tenant_id: {type: string}
+        creator_id: {type: string}
+        idempotency_key: {type: string}
+        replayed: {type: boolean}
     Task:
       type: object
       required:

@@ -8,14 +8,14 @@ from datetime import datetime
 from typing import Any, Optional, List, Literal
 
 from fastapi import APIRouter, HTTPException, Depends, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from .sql_models import get_session, Tenant, Business, Project, ProjectMember, User, Requirement, Task, Issue, Sprint
 from .auth_sql import current_user, require_role, ADMIN_MODE, assert_project_member_role, check_project_access
 from .webhook import notify_webhook
-from .project_lifecycle_contract import WorkingProjectStatus
 from .project_portfolio_routes import router as portfolio_router
+from .project_creation import ProjectCreate, ProjectCreateAck, create_project_record
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
 proj_router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
@@ -125,17 +125,6 @@ def delete_business(biz_id: str, user: User = Depends(require_role("tenant_admin
 
 
 # ── 项目管理 ──────────────────────────────────────────────────────
-class ProjectCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    name: str = Field(strict=True, min_length=1, max_length=128)
-    description: str = Field(default="", strict=True, max_length=20000)
-    business_id: Optional[str] = None
-    project_path: str = Field(default="", strict=True, max_length=512)
-    vector_db: Literal["lance", "milvus", "qdrant", "oceanbase"] = "lance"
-    vector_db_config: dict = Field(default_factory=dict)
-    status: WorkingProjectStatus = "active"
-
-
 def _project_counts(db: Session, project_id: str) -> dict:
     return {
         "members": db.query(ProjectMember).filter_by(project_id=project_id).count(),
@@ -394,31 +383,19 @@ def project_review(project_id: str, request: Request,
         ),
     }
 
-@proj_router.post("")
+@proj_router.post("", response_model=ProjectCreateAck)
 def create_project(body: ProjectCreate, user: User = Depends(require_role("project_admin")),
                    db: Session = Depends(get_session)):
-    if body.business_id:
-        b = db.get(Business, body.business_id)
-        if not b or b.tenant_id != user.tenant_id:
-            raise HTTPException(404, "业务线不存在")
-    p = Project(
-        id=f"proj-{uuid.uuid4().hex[:12]}", tenant_id=user.tenant_id,
-        business_id=body.business_id, name=body.name, description=body.description,
-        project_path=body.project_path, vector_db=body.vector_db,
-        vector_db_config=body.vector_db_config,
-        status=body.status,
-    )
-    db.add(p)
-    # 创建者自动成为 project_admin
-    db.add(ProjectMember(project_id=p.id, user_id=user.id, role="project_admin"))
-    db.commit()
-    notify_webhook(
-        "project.created",
-        {"project_id": p.id, "name": p.name, "vector_db": p.vector_db},
-        tenant_id=user.tenant_id,
-        project_id=p.id,
-    )
-    return {"ok": True, "id": p.id}
+    result = create_project_record(db, user, body)
+    if not result.replayed:
+        try:
+            notify_webhook("project.created", {"project_id": result.id, "name": body.name, "vector_db": body.vector_db},
+                           tenant_id=result.tenant_id, project_id=result.id)
+        except Exception:
+            # Optional notification failure cannot invalidate an atomic save.
+            import logging
+            logging.getLogger(__name__).exception("Project creation notification failed")
+    return result
 
 # 项目成员管理
 @proj_router.get("/{project_id}/members")

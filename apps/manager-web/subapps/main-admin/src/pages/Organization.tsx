@@ -283,6 +283,9 @@ export function Organization({ initialTab = "users", focused = false }: { initia
           loading={projects.isLoading || (Boolean(selectedProject) && projectMembers.isPending)}
           candidateLoading={memberCandidates.isLoading}
           readFailed={projects.isError || projectMembers.isError}
+          onRetry={() => { if (memberMounted.current && memberOwner.current === projectSessionKey() && !memberWriteBusy.current) {
+            void projects.refetch(); void roles.refetch(); void projectMembers.refetch(); void memberCandidates.refetch();
+          } }}
           disabled={!memberAccess.current.ready || memberCandidates.isError}
           errors={[projects.error as Error | null, roles.error as Error | null, projectMembers.error as Error | null, memberCandidates.error as Error | null, addProjectMember.error as Error | null, updateProjectMember.error as Error | null, removeProjectMember.error as Error | null]}
           newMember={newMember}

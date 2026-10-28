@@ -28,6 +28,12 @@
 .project-portfolio-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .project-portfolio-modal .ant-modal-footer .ant-btn { margin-inline-start: 0; height: auto; min-height: 32px; white-space: normal; }
 .project-portfolio-history { border-inline-start: 3px solid var(--border-strong); padding-inline-start: 12px; }
+.project-creation-content { display: grid; gap: 14px; min-width: 0; }
+.project-creation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.project-creation-grid .ant-select { width: 100%; }
+.project-creation-next { display: grid; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.project-creation-next .ant-tag { justify-self: start; }
+@media (max-width: 480px) { .project-creation-grid { grid-template-columns: minmax(0, 1fr); gap: 0; } }
 .project-context-gate { max-width: 640px; margin: 24px auto; padding: 20px; display: grid; gap: 16px; min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 800px) { .project-portfolio-row { grid-template-columns: minmax(0, 1fr); gap: 10px; } .project-portfolio-row > .project-portfolio-actions { justify-content: flex-end; } }
 @media (max-width: 480px) { .project-portfolio-summary, .project-portfolio-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .project-portfolio-toolbar > .ant-select { flex-basis: calc(50% - 4px); max-width: 100%; } .project-portfolio-toolbar > .ant-input-affix-wrapper { flex-basis: 100%; } .project-portfolio-modal { max-width: calc(100vw - 24px); } .project-portfolio-drawer .ant-drawer-body { padding: 12px; } }

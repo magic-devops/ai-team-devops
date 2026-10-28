@@ -1,8 +1,8 @@
-import { Alert, Button, Empty, Select, Table, Tag } from "antd";
+import { Alert, Button, Empty, Input, Popconfirm, Select, Table, Tag } from "antd";
 import { projectTeamHash } from "../../../../../src/lib/projectTeamNavigation";
 import type { ColumnsType } from "antd/es/table";
 import { Trash2, UserPlus } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EmptyState, ErrorBlock, LoadingBlock } from "../../../../../src/components/PageStates";
 import { ModuleFrame } from "./ModuleFrame";
@@ -28,6 +28,7 @@ export function ProjectMembersModule({
   onAdd,
   onUpdateRole,
   onRemove,
+  onRetry,
 }: {
   projects: ProjectRow[];
   selectedProjectId: string;
@@ -48,8 +49,12 @@ export function ProjectMembersModule({
   onAdd: () => void;
   onUpdateRole: (userId: string, role: string) => void;
   onRemove: (userId: string) => void;
+  onRetry?: () => void;
 }) {
   const { t } = useTranslation();
+  const [search, setSearch] = useState({ projectId: selectedProjectId, text: "" });
+  const memberSearch = search.projectId === selectedProjectId ? search.text : "";
+  const matchingMembers = members.filter((member) => [member.username, member.email || "", member.user_id].some((value) => value.toLocaleLowerCase().includes(memberSearch.trim().toLocaleLowerCase())));
   const selectedProject = useMemo(() => projects.find((p) => p.id === selectedProjectId), [projects, selectedProjectId]);
   const pending = addPending || updatePending || removePending;
   const blocked = disabled || loading || pending || !selectedProject;
@@ -77,7 +82,11 @@ export function ProjectMembersModule({
       width: 100,
       align: "right",
       render: (_value, row) => (
-        <Button aria-label={`${t("page.organization.actions")} · ${row.username}`} size="small" danger disabled={blocked} loading={removePending} icon={<Trash2 className="h-4 w-4" />} onClick={() => { if (!blocked) onRemove(row.user_id); }} />
+        <Popconfirm disabled={blocked} title={`${t("projectPortfolio.teamRemoveConfirm")} · ${row.username}`}
+          description={<div className="max-w-72 break-words"><strong>{selectedProject?.name} · {selectedProjectId}</strong><p>{t("projectPortfolio.teamRemoveHint")}</p></div>}
+          okText={t("projectPortfolio.teamRemoveAction")} cancelText={t("common.cancel")} okButtonProps={{ danger: true }} onConfirm={() => { if (!blocked) onRemove(row.user_id); }}>
+          <Button aria-label={`${t("page.organization.actions")} · ${row.username}`} size="small" danger disabled={blocked} loading={removePending} icon={<Trash2 className="h-4 w-4" />} />
+        </Popconfirm>
       ),
     },
   ];
@@ -118,8 +127,13 @@ export function ProjectMembersModule({
         </div>
       ) : null}
       {errors.filter(Boolean).map((error) => <ErrorBlock key={error!.message} message={error!.message} />)}
+      {errors.some(Boolean) && onRetry && <Button onClick={onRetry} disabled={pending}>{t("projectPortfolio.refresh")}</Button>}
+      {selectedProject && !candidateLoading && !disabled && !candidates.length && <Alert className="mb-3" type="info" showIcon title={t("projectPortfolio.teamNoCandidates")} />}
+      {selectedProject && !loading && !readFailed && members.length > 0 && <Input.Search className="mb-3" aria-label={t("projectPortfolio.teamSearch")} placeholder={t("projectPortfolio.teamSearch")}
+        value={memberSearch} allowClear onChange={(event) => setSearch({ projectId: selectedProjectId, text: event.target.value })} />}
       {loading ? <LoadingBlock /> : readFailed ? null : !selectedProjectId ? <Empty description={t("page.organization.pickProject")} /> : !selectedProject ? <Alert type="warning" showIcon title={t("deliveryTeam.projectUnavailable")} /> : members.length === 0 ? <EmptyState message={t("page.organization.emptyMembers")} /> : (
-        <Table rowKey="user_id" columns={columns} dataSource={members} pagination={{ pageSize: 10, showSizeChanger: true }} />
+        <Table key={`${selectedProjectId}:${memberSearch}`} rowKey="user_id" columns={columns} dataSource={matchingMembers} scroll={{ x: 620 }}
+          locale={{ emptyText: t("projectPortfolio.teamNoMatches") }} pagination={{ defaultPageSize: 10, showSizeChanger: true }} />
       )}
     </ModuleFrame>
   );
