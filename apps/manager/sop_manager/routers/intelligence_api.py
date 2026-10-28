@@ -46,13 +46,13 @@ def intelligence_hub(db: Session = Depends(get_session)) -> dict[str, Any]:
             ],
         },
         {
-            "id": "rules_distill",
+            "id": "rules_reflections",
             "path": "#/intelligence/rules",
             "capability": "ai.intelligence.rules",
             "category": "ai-knowledge",
             "links": [
                 {"id": "rules", "path": "#/intelligence/rules", "capability": "ai.intelligence.rules"},
-                {"id": "distill", "path": "#/intelligence/distill", "capability": "ai.intelligence.distill"},
+                {"id": "reflections", "path": "#/intelligence/reflections", "capability": "ai.intelligence.reflections"},
             ],
         },
         {
@@ -104,7 +104,7 @@ def intelligence_hub(db: Session = Depends(get_session)) -> dict[str, Any]:
         "stack_layers": [
             {"id": "knowledge_assets", "name": "Knowledge assets", "maturity": 88},
             {"id": "retrieval_memory", "name": "Retrieval & Memory", "maturity": 88},
-            {"id": "rules_distill", "name": "Rules & Distill", "maturity": 86},
+            {"id": "rules_reflections", "name": "Rules & reflections", "maturity": None, "assessment_state": "unassessed"},
             {"id": "runtime_ops", "name": "Runtime Ops", "maturity": 84},
             {"id": "spec_designs", "name": "Specs & Designs", "maturity": 86},
             {"id": "data_context", "name": "Data Context", "maturity": 90},

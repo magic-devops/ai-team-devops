@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sop_manager.text_files import read_document_text, read_text_file
 
 app = FastAPI(title="AI Dev Dashboard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -409,7 +410,7 @@ def get_custom_content(path: str = Query(...)):
     if not target.exists():
         raise HTTPException(404, "File not found")
     if target.suffix in (".md", ".txt", ".html", ".json", ".yaml", ".yml", ".java", ".ts", ".tsx", ".py", ".sql"):
-        return {"content": target.read_text(errors="replace"), "type": "text"}
+        return {"content": read_document_text(target), "type": "text"}
     return {"content": None, "type": "binary", "size": target.stat().st_size}
 
 # ── 新增：项目状态（current_state.json） ─────────────────────────
@@ -417,7 +418,7 @@ def get_custom_content(path: str = Query(...)):
 def get_state():
     state_file = Path(os.getenv("PROJECT_PATH", ".")) / "memory" / "current_state.json"
     if state_file.exists():
-        return json.loads(state_file.read_text())
+        return json.loads(read_text_file(state_file))
     return {"error": "current_state.json not found"}
 
 @app.patch("/api/state")
@@ -425,10 +426,10 @@ def update_state(body: dict):
     state_file = Path(os.getenv("PROJECT_PATH", ".")) / "memory" / "current_state.json"
     if not state_file.exists():
         raise HTTPException(404, "current_state.json not found")
-    state = json.loads(state_file.read_text())
+    state = json.loads(read_text_file(state_file))
     state.update(body)
     state["updated_at"] = datetime.utcnow().isoformat() + "Z"
-    state_file.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+    state_file.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"ok": True}
 
 # ── 规范文档列表（ai-sop/specs/，或 SOP_SPEC_ROOT） ────────────────────────────────────
@@ -456,7 +457,7 @@ def get_spec_content(path: str = Query(...)):
     if not target.exists():
         raise HTTPException(404, "Not found")
     if target.suffix in (".md", ".txt", ".yaml", ".yml", ".json"):
-        return {"content": target.read_text(errors="replace"), "type": "text"}
+        return {"content": read_document_text(target), "type": "text"}
     return {"content": None, "type": "binary"}
 
 # ── 规则库 ────────────────────────────────────────────────────────

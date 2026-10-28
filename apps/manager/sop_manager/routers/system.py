@@ -1,5 +1,6 @@
 """系统管理：脚本、配置、记忆、SOP 文档、工作区上下文与产出物书签"""
 from sop_manager.project_write_guard import project_file_write_scope
+from sop_manager.text_files import read_document_text, read_text_file
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -152,7 +153,7 @@ def get_script(name: str):
     if not str(f).startswith(str(tools_dir.resolve())):
         raise HTTPException(403, "Access denied")
     if not f.exists(): raise HTTPException(404, "Not found")
-    return {"content": f.read_text(errors="replace")}
+    return {"content": read_document_text(f)}
 
 class ScriptUpdate(BaseModel):
     content: str
@@ -166,7 +167,7 @@ def update_script(name: str, body: ScriptUpdate):
         f = (tools_dir / name).resolve()
         if not str(f).startswith(str(tools_dir.resolve())):
             raise HTTPException(403, "Access denied")
-        f.write_text(body.content); return {"ok": True}
+        f.write_text(body.content, encoding="utf-8"); return {"ok": True}
 
 @router.post("/scripts/{name}/run")
 def run_script(name: str):
@@ -202,8 +203,8 @@ def update_claude_config(body: dict):
     with project_file_write_scope():
         f = resolved_project_path() / ".claude" / "settings.json"
         if not f.exists(): raise HTTPException(404, "settings.json not found")
-        cfg = json.loads(f.read_text()); cfg.update(body)
-        f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False)); return {"ok": True}
+        cfg = json.loads(read_text_file(f)); cfg.update(body)
+        f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"); return {"ok": True}
 
 # ── 记忆管理 ──────────────────────────────────────────────────────
 @router.get("/memory")
@@ -224,7 +225,7 @@ def list_memory():
 def get_rule_file(filename: str):
     f = (resolved_ai_memory_root() / "rules" / filename).resolve()
     if not f.exists(): raise HTTPException(404, "Not found")
-    return {"content": f.read_text(errors="replace")}
+    return {"content": read_document_text(f)}
 
 @router.delete("/memory/snapshots/{filename}")
 def delete_snapshot(filename: str):

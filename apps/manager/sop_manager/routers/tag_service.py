@@ -1,5 +1,6 @@
 """标签服务：标签目录、规则、画像本体。"""
 from __future__ import annotations
+from sop_manager.text_files import read_text_file
 import json
 from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 
@@ -29,7 +30,7 @@ def _load_all(sub: str) -> list[dict]:
     items = []
     for f in _dir(sub).glob("*.json"):
         try:
-            item = json.loads(f.read_text())
+            item = json.loads(read_text_file(f))
             if isinstance(item, dict) and scope_matches(item, require_business=True):
                 items.append(item)
         except Exception:
@@ -40,14 +41,14 @@ def _save(sub: str, item: dict):
     with project_file_write_scope():
         _dir(sub).mkdir(parents=True, exist_ok=True)
         attach_scope(item, overwrite=False)
-        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
+        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def _load_item(sub: str, item_id: str, label: str) -> dict:
     p = _dir(sub) / f"{item_id}.json"
     if not p.exists():
         raise HTTPException(404, f"{label} not found")
     try:
-        item = json.loads(p.read_text())
+        item = json.loads(read_text_file(p))
     except Exception as exc:
         raise HTTPException(500, f"{label} is unreadable") from exc
     if not isinstance(item, dict) or not scope_matches(item, require_business=True):

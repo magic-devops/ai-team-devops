@@ -1,4 +1,5 @@
 """管理员账号（轻量本地认证，无需数据库）"""
+from sop_manager.text_files import read_text_file
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -10,8 +11,8 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 AUTH_FILE = ai_memory_root() / "auth.json"
 security = HTTPBearer(auto_error=False)
 
-def _load(): return json.loads(AUTH_FILE.read_text()) if AUTH_FILE.exists() else {"users": [], "tokens": {}}
-def _save(d): AUTH_FILE.parent.mkdir(parents=True, exist_ok=True); AUTH_FILE.write_text(json.dumps(d, indent=2))
+def _load(): return json.loads(read_text_file(AUTH_FILE)) if AUTH_FILE.exists() else {"users": [], "tokens": {}}
+def _save(d): AUTH_FILE.parent.mkdir(parents=True, exist_ok=True); AUTH_FILE.write_text(json.dumps(d, indent=2), encoding="utf-8")
 def _hash(p): return hashlib.sha256(p.encode()).hexdigest()
 
 class LoginBody(BaseModel):

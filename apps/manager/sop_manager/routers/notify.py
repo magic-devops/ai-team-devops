@@ -1,4 +1,5 @@
 """消息通知：微信/钉钉/Slack/Webhook 推送开发进度与入站协同"""
+from sop_manager.text_files import read_text_file
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Any, List
@@ -31,12 +32,12 @@ def _notify_file() -> Path:
     return resolved_ai_memory_root() / "notify.json"
 
 
-def _load(): return json.loads(_notify_file().read_text()) if _notify_file().exists() else {"channels": {}, "rules": []}
+def _load(): return json.loads(read_text_file(_notify_file())) if _notify_file().exists() else {"channels": {}, "rules": []}
 def _save(d):
     with project_file_write_scope():
         p = _notify_file()
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(d, indent=2))
+        p.write_text(json.dumps(d, indent=2), encoding="utf-8")
 
 def _ledger_file() -> Path:
     return resolved_ai_memory_root() / "notify-events.jsonl"

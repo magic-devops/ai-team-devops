@@ -1,5 +1,6 @@
 """LLM 网关 v2：模型路由、成本统计、限流策略。"""
 from __future__ import annotations
+from sop_manager.text_files import read_text_file
 from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 
 from datetime import datetime, timezone
@@ -41,14 +42,14 @@ def _load_all(sub: str) -> list[dict]:
     items = []
     for f in _dir(sub).glob("*.json"):
         try:
-            items.append(json.loads(f.read_text()))
+            items.append(json.loads(read_text_file(f)))
         except Exception:
             pass
     return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
 
 def _save(sub: str, item: dict):
     import json
-    (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
+    (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
 
 class RouteCreate(BaseModel):
     name: str
@@ -199,7 +200,7 @@ def update_route(route_id: str, body: RouteCreate):
     p = _dir("routes") / f"{route_id}.json"
     if not p.exists():
         raise HTTPException(404, "route not found")
-    item = json.loads(p.read_text())
+    item = json.loads(read_text_file(p))
     item.update(body.model_dump())
     _save("routes", item)
     return item
@@ -345,7 +346,7 @@ def update_throttle(rule_id: str, body: ThrottleCreate):
     p = _dir("throttle") / f"{rule_id}.json"
     if not p.exists():
         raise HTTPException(404, "throttle not found")
-    item = json.loads(p.read_text())
+    item = json.loads(read_text_file(p))
     item.update(body.model_dump())
     item["updated_at"] = _now()
     _save("throttle", item)

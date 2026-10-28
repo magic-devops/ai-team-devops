@@ -1,5 +1,6 @@
 """智能运维中心：部署流水线、根因分析、Runbook、自愈策略。"""
 from __future__ import annotations
+from sop_manager.text_files import read_text_file
 import hashlib
 from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 
@@ -86,7 +87,7 @@ def _load_all(sub: str) -> list[dict]:
     items = []
     for f in _dir(sub).glob("*.json"):
         try:
-            item = json.loads(f.read_text())
+            item = json.loads(read_text_file(f))
         except Exception:
             continue
         if isinstance(item, dict) and scope_matches(item):
@@ -98,7 +99,7 @@ def _save(sub: str, item: dict):
         _dir(sub).mkdir(parents=True, exist_ok=True)
         import json
         attach_scope(item)
-        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
+        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def _load_scoped_item(sub: str, item_id: str, missing: str) -> dict:
     import json
@@ -106,7 +107,7 @@ def _load_scoped_item(sub: str, item_id: str, missing: str) -> dict:
     if not p.exists():
         raise HTTPException(404, missing)
     try:
-        item = json.loads(p.read_text())
+        item = json.loads(read_text_file(p))
     except Exception as exc:
         raise HTTPException(404, missing) from exc
     if not isinstance(item, dict) or not scope_matches(item):

@@ -1,4 +1,5 @@
 """Vibe Coding：界面化调用底层 CLI 开发工具或大模型；会话、上传、多模态 LLM"""
+from sop_manager.text_files import read_text_file
 import base64
 import datetime
 import json
@@ -52,20 +53,20 @@ def _safe_filename(name: str) -> str:
 
 
 def _load_history():
-    return json.loads(_history_file().read_text()) if _history_file().exists() else []
+    return json.loads(read_text_file(_history_file())) if _history_file().exists() else []
 
 
 def _save_history(h):
     with project_file_write_scope():
         _history_file().parent.mkdir(parents=True, exist_ok=True)
-        _history_file().write_text(json.dumps(h[-100:], ensure_ascii=False, indent=2))
+        _history_file().write_text(json.dumps(h[-100:], ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _load_sessions() -> Dict[str, Any]:
     if not _sessions_file().exists():
         return {"sessions": []}
     try:
-        return json.loads(_sessions_file().read_text())
+        return json.loads(read_text_file(_sessions_file()))
     except Exception:
         return {"sessions": []}
 
@@ -73,7 +74,7 @@ def _load_sessions() -> Dict[str, Any]:
 def _save_sessions(db: Dict[str, Any]):
     with project_file_write_scope():
         _sessions_file().parent.mkdir(parents=True, exist_ok=True)
-        _sessions_file().write_text(json.dumps(db, ensure_ascii=False, indent=2))
+        _sessions_file().write_text(json.dumps(db, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _resolve_upload_path(rel: str) -> Optional[Path]:

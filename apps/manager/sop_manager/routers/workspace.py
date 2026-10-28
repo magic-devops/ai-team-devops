@@ -26,6 +26,7 @@ from sop_manager.routers.db_sql_compat import rows, table, now
 from sop_manager.routers.business_access import read_business_access, require_business_access
 
 from sop_manager.project_write_guard import project_file_write_scope
+from sop_manager.text_files import read_document_text, read_text_file
 
 router = APIRouter(prefix="/api/v1", tags=["workspace"])
 
@@ -141,7 +142,7 @@ def search(q: str = Query(..., min_length=1)) -> list[dict[str, Any]]:
 @router.get("/state", dependencies=[Depends(read_business_access)])
 def get_state() -> Any:
     f = resolved_project_path() / "memory" / "current_state.json"
-    return json.loads(f.read_text()) if f.exists() else {"error": "current_state.json not found"}
+    return json.loads(read_text_file(f)) if f.exists() else {"error": "current_state.json not found"}
 
 
 @router.patch("/state", dependencies=[Depends(require_business_access)])
@@ -150,10 +151,10 @@ def update_state(body: dict[str, Any]) -> dict[str, str]:
         f = resolved_project_path() / "memory" / "current_state.json"
         if not f.exists():
             raise HTTPException(404, "Not found")
-        state = json.loads(f.read_text())
+        state = json.loads(read_text_file(f))
         state.update(body)
         state["updated_at"] = now().isoformat() + "Z"
-        f.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+        f.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
         return {"ok": "true"}
 
 
@@ -417,7 +418,7 @@ def get_spec_content(path: str = Query(...)) -> dict[str, Any]:
     if not target.exists():
         raise HTTPException(404, "Not found")
     if target.suffix in (".md", ".yaml", ".yml", ".json"):
-        return {"content": target.read_text(errors="replace"), "type": "text"}
+        return {"content": read_document_text(target), "type": "text"}
     return {"content": None, "type": "binary"}
 
 
@@ -466,7 +467,7 @@ def get_custom_content(path: str = Query(...)) -> dict[str, Any]:
     if not target.exists():
         raise HTTPException(404, "Not found")
     if target.suffix in (".md", ".txt", ".html", ".json", ".yaml", ".yml", ".java", ".ts", ".tsx", ".py", ".sql"):
-        return {"content": target.read_text(errors="replace"), "type": "text"}
+        return {"content": read_document_text(target), "type": "text"}
     return {"content": None, "type": "binary"}
 
 

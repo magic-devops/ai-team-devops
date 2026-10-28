@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from sop_manager.project_write_guard import project_file_write_scope
 
 from sop_manager.path_config import resolved_ai_memory_root
+from sop_manager.routers.skill_encoding import read_external_skill_json, read_persisted_json, write_persisted_json
 
 router = APIRouter(prefix="/api/v1/skill-repo", tags=["skill-repo"])
 
@@ -35,14 +36,14 @@ def _installed_file() -> Path:
 
 def _load_installed():
     p = _installed_file()
-    return json.loads(p.read_text()) if p.exists() else {}
+    return read_persisted_json(p) if p.exists() else {}
 
 
 def _save_installed(d):
     with project_file_write_scope():
         p = _installed_file()
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(d, indent=2, ensure_ascii=False))
+        write_persisted_json(p, d)
 
 
 class RepoConfig(BaseModel):
@@ -64,7 +65,7 @@ class SkillInstall(BaseModel):
 def list_repos():
     repos = []
     for f in sorted(_repo_dir().glob("repo_*.json")):
-        try: repos.append(json.loads(f.read_text()))
+        try: repos.append(read_persisted_json(f))
         except Exception: pass
     return repos
 
@@ -73,7 +74,7 @@ def add_repo(body: RepoConfig):
     f = _repo_dir() / f"repo_{body.id}.json"
     with project_file_write_scope():
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps(body.model_dump(), ensure_ascii=False, indent=2))
+        write_persisted_json(f, body.model_dump())
     return {"ok": True, "id": body.id}
 
 @router.delete("/repos/{repo_id}")
@@ -91,7 +92,7 @@ def sync_repo(repo_id: str):
     f = _repo_dir() / f"repo_{repo_id}.json"
     if not f.exists():
         raise HTTPException(404, "Repo not found")
-    repo = json.loads(f.read_text())
+    repo = read_persisted_json(f)
     clone_dir = _repo_dir() / f"clone_{repo_id}"
     try:
         with tempfile.TemporaryDirectory(prefix="skill-repo-sync-") as tmp:
@@ -105,7 +106,7 @@ def sync_repo(repo_id: str):
             skills = []
             for sf in sorted(staged.rglob("skill.json")):
                 try:
-                    skill = json.loads(sf.read_text())
+                    skill = read_external_skill_json(sf)
                     skill["_path"] = str(sf.relative_to(staged))
                     skill["_repo"] = repo_id
                     skills.append(skill)
@@ -120,7 +121,7 @@ def sync_repo(repo_id: str):
                     shutil.rmtree(clone_dir)
                 clone_dir.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(staged, clone_dir)
-                f.write_text(json.dumps(repo, ensure_ascii=False, indent=2))
+                write_persisted_json(f, repo)
         return {"ok": True, "skills_found": len(skills)}
     except HTTPException:
         raise
@@ -225,7 +226,7 @@ def _load_skill_from_npm_pack(spec: str) -> Dict[str, Any]:
         sj = _find_skill_json_under(extract)
         if not sj:
             raise HTTPException(400, "包内未找到 skill.json，请改用「技能描述」或上传 ZIP")
-        return json.loads(sj.read_text(encoding="utf-8", errors="replace"))
+        return read_external_skill_json(sj)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -283,7 +284,10 @@ def import_skill_visual(body: SkillImportVisualBody):
 
     if body.mode == "npx":
         spec = _validate_npm_spec(body.npx_package)
-        skill_data = _load_skill_from_npm_pack(spec)
+        try:
+            skill_data = _load_skill_from_npm_pack(spec)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(400, "skill.json 必须是有效的 UTF-8 JSON") from exc
         if (body.name or "").strip():
             skill_data["name"] = body.name.strip()
         if (body.description or "").strip():
@@ -322,7 +326,10 @@ async def import_skill_zip(
         sj = _find_skill_json_under(ext)
         if not sj:
             raise HTTPException(400, "ZIP 内未找到 skill.json")
-        skill_data = json.loads(sj.read_text(encoding="utf-8", errors="replace"))
+        try:
+            skill_data = read_external_skill_json(sj)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(400, "skill.json 必须是有效的 UTF-8 JSON") from exc
         key = _persist_imported(sid, ver, skill_data)
         return {"ok": True, "key": key, "mode": "zip"}
     except zipfile.BadZipFile:

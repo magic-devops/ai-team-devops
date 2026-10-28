@@ -6,6 +6,7 @@ from pathlib import Path
 import json, os
 from sop_manager.path_config import resolved_ai_memory_root
 from sop_manager.routers.productization_contract import summarize_items, unified_payload
+from sop_manager.routers.skill_encoding import read_persisted_json, write_persisted_json
 
 from sop_manager.project_write_guard import project_file_write_scope
 
@@ -40,7 +41,7 @@ def list_skills():
     ]
     custom = []
     for f in sorted(_skills_dir().glob("*.json")):
-        try: custom.append({**json.loads(f.read_text()), "builtin": False})
+        try: custom.append({**read_persisted_json(f), "builtin": False})
         except Exception: pass
     return builtin + custom
 
@@ -133,7 +134,7 @@ def create_skill(body: SkillDef):
     with project_file_write_scope():
         _skills_dir().mkdir(parents=True, exist_ok=True)
         f = _skills_dir() / f"{body.skill_id}.json"
-        f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
+        write_persisted_json(f, body.dict())
         return {"ok": True, "skill_id": body.skill_id}
 
 @router.delete("/{skill_id}")

@@ -1,6 +1,7 @@
 """Agent 编排：工作流定义、工具选择、版本管理、开发工具自定义与受控安装"""
 from __future__ import annotations
 
+from sop_manager.text_files import read_text_file
 import json
 import os
 import re
@@ -247,7 +248,7 @@ def _merged_tool_ids() -> List[str]:
 
 def _config_projection() -> Dict[str, Any]:
     f = _orch_dir() / "config.json"
-    cfg = json.loads(f.read_text()) if f.exists() else {"quality_config": {}, "version": "1.0.0"}
+    cfg = json.loads(read_text_file(f)) if f.exists() else {"quality_config": {}, "version": "1.0.0"}
     ids = set(_merged_tool_ids())
     dt = str(cfg.get("default_tool") or "claude")
     cfg["default_tool"] = dt if dt in ids else ("claude" if "claude" in ids else next(iter(sorted(ids)), "claude"))
@@ -774,7 +775,7 @@ def orchestration_hub() -> dict[str, Any]:
 
 @router.get("/workflows")
 def list_workflows():
-    return [json.loads(f.read_text()) for f in sorted(_orch_dir().glob("wf_*.json"))]
+    return [json.loads(read_text_file(f)) for f in sorted(_orch_dir().glob("wf_*.json"))]
 
 
 @router.get("/workflows/{wf_id}")
@@ -804,7 +805,7 @@ def create_workflow(body: WorkflowDef):
         if f.is_file():
             raise HTTPException(409, "该工作流 id 已存在")
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+        f.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True, "id": wid}
 
 
@@ -826,14 +827,14 @@ def get_config():
 def update_config(body: dict):
     f = _orch_dir() / "config.json"
     with project_file_write_scope():
-        cfg = json.loads(f.read_text()) if f.exists() else {}
+        cfg = json.loads(read_text_file(f)) if f.exists() else {}
         cfg.update(body or {})
         ids = set(_merged_tool_ids())
         dt = str(cfg.get("default_tool") or "")
         if dt and dt not in ids:
             cfg["default_tool"] = "claude" if "claude" in ids else next(iter(ids), "claude")
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+        f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"ok": True}
 
 
