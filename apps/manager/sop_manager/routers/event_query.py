@@ -66,7 +66,7 @@ def page(project, items, total, limit, signature, upper, last):
     }
 
 
-def list_events(db, project, user, permissions, *, state, event_type, producer_id, limit, cursor):
+def list_events(db, project, user, permissions, *, state, event_type, producer_id, limit, cursor, store=None):
     saved = watermark(db, project)
     signature = ["event-list", project.tenant_id, project.id, user.id, state, event_type, producer_id, limit]
     upper, after = cursor_position(cursor, signature, saved)
@@ -115,10 +115,19 @@ def list_events(db, project, user, permissions, *, state, event_type, producer_i
         ),
     )
     rows = db.execute(query.where(m.EventInbox.seq > after).order_by(m.EventInbox.seq).limit(limit + 1)).all()
+    # A light generic directory cannot verify the original bytes. It always
+    # redacts reflection source/subject/effect; exact views use the full shared
+    # visibility and integrity check before exposing any original or attempt.
+    from .reflection_intake import is_reflection, recorded_receipts
+
+    recorded = recorded_receipts(db, project, [original.id for original, _ in rows])
     items = []
     for original, row in rows:
         value = summary(original, row)
         if original.event_type == "sop.task.delivery_submitted":
+            value["source"], value["subject"] = "", ""
+            value["processing"] = {**value["processing"], "result": None}
+        if is_reflection(original, row, recorded=original.id in recorded, metadata_only=True):
             value["source"], value["subject"] = "", ""
             value["processing"] = {**value["processing"], "result": None}
         items.append(value)
@@ -142,6 +151,9 @@ def list_events(db, project, user, permissions, *, state, event_type, producer_i
 
 def attempts(db, project, user, rid, limit, cursor, *, store=None):
     original = inbox(db, project, rid)
+    from .reflection_intake import require_visible
+
+    require_visible(original, db.get(m.EventProcessing, rid), project, user, store)
     from .task_submission_event_access import require_submission_event_access
 
     require_submission_event_access(db, project, user, original, db.get(m.EventProcessing, rid), store)
@@ -213,6 +225,9 @@ def detail(db, project, user, permissions, rid, *, store=None):
     saved = watermark(db, project)
     original = inbox(db, project, rid)
     row = db.get(m.EventProcessing, rid)
+    from .reflection_intake import require_visible
+
+    require_visible(original, row, project, user, store)
     from .task_submission_event_access import require_submission_event_access
 
     require_submission_event_access(db, project, user, original, row, store)

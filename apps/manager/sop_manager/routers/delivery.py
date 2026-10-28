@@ -1934,15 +1934,26 @@ def execute(
     request: Request = None,
     background_tasks: BackgroundTasks = None,
 ):
+    if body.action == "reflection.input.create":
+        active = db.get(User, user.id, populate_existing=True)
+        if active is None or active.status != "active":
+            raise HTTPException(403, "An active account is required")
+        user = active
     project = _project(db, user, project_id)
     permissions = _role_permissions(db, user, project)
     needed = _command_permission(body.action, body.payload)
-    if not permissions[needed]:
+    recoverable_input_ack = body.action == "reflection.input.create"
+    if not permissions[needed] and not recoverable_input_ack:
         raise HTTPException(403, f"Project {needed} permission required")
     key = hashlib.sha256(
         json.dumps([project.tenant_id, project.id, user.id, body.idempotency_key]).encode()
     ).hexdigest()
-    fingerprint = hashlib.sha256(body.model_dump_json(exclude_none=True).encode()).hexdigest()
+    try:
+        fingerprint = hashlib.sha256(body.model_dump_json(exclude_none=True).encode()).hexdigest()
+    except ValueError as exc:
+        if recoverable_input_ack:
+            raise HTTPException(422, {"code": "reflection_selection_invalid", "message": "Invalid fixed reflection input"}) from exc
+        raise
     receipt = db.get(DeliveryReceipt, key)
     if receipt:
         from .delivery_query_commands import replay_ack
@@ -1957,12 +1968,16 @@ def execute(
             user=user,
             store=getattr(request.app.state, "hermes_store", None) if request else None,
         )
+    if not permissions[needed]:
+        raise HTTPException(403, f"Project {needed} permission required")
     # An exact committed original is recovered under its original request hash,
     # before a tightened current payload contract can reject that old original.
     # A missing receipt still requires the full current contract before writing.
     try:
         payload = PAYLOADS[body.action].model_validate(body.payload)
     except ValidationError as exc:
+        if recoverable_input_ack:
+            raise HTTPException(422, {"code": "reflection_selection_invalid", "message": "Invalid fixed reflection input"}) from exc
         raise HTTPException(422, json.loads(exc.json(include_context=False))) from exc
     from ..project_write_guard import lifecycle_scope, require_project_operation
 
@@ -2143,6 +2158,10 @@ def stage_delivery_command(db, project, user, body, payload, key, fingerprint, r
             "before": before,
             "input": payload.model_dump(mode="json", exclude_unset=body.action == "project.update"),
         }
+        if body.action == "reflection.input.create":
+            # The immutable input owns its protected manifest/rationale. Generic
+            # project activity and receipt recovery expose only this opaque ID.
+            event_data["input"] = {"input_id": resource_id}
         if body.action == "project.update" and "vector_db_config" in event_data["input"]:
             event_data["input"]["vector_db_config"] = {"changed": True}
         if len(applied) == 3:
@@ -2266,6 +2285,10 @@ def _apply(db, project, user, data, action, payload, request, *, command_key="",
             store=getattr(request.app.state, "hermes_store", None) if request else None,
             execution=getattr(request.app.state, "hermes_execution", None) if request else None,
             command_key=command_key)
+    if action == "reflection.input.create":
+        from .reflection_commands import apply_input
+
+        return apply_input(db, project, user, payload, getattr(request.app.state, "hermes_store", None) if request else None)
     if action in {"issue.create", "sync.record.apply"}:
         from .event_business import apply_canonical
 

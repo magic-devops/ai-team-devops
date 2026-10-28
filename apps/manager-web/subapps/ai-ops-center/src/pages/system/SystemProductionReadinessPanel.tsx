@@ -3,6 +3,8 @@ import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ErrorBlock } from "@/components/PageStates";
+import { CatalogAssessmentCounts } from "@/components/CatalogAssessmentCounts";
+import { assessmentText, isAssessedNumber } from "@/lib/catalogAssessment";
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
@@ -57,7 +59,8 @@ export function SystemProductionReadinessPanel({
         title: t("page.systemMap.productionStage"),
         dataIndex: "stage",
         width: 150,
-        render: (value) => {
+        render: (value, row) => {
+          if (!isAssessedNumber(row.production_score)) return <Tag>{t("catalogAssessment.unassessed")}</Tag>;
           const stageValue = String(value || "gap");
           const color = stageValue === "production_ready" ? "green" : stageValue === "runtime_ready" ? "blue" : stageValue === "contract_complete" ? "gold" : "red";
           return <Tag color={color}>{t(`page.systemMap.productionStageValue.${stageValue}`)}</Tag>;
@@ -69,22 +72,22 @@ export function SystemProductionReadinessPanel({
         width: 120,
         render: (value, row) => (
           <div>
-            <p className="font-mono text-sm font-semibold text-[var(--brand)]">{value}</p>
-            <p className="text-[11px] text-[var(--muted)]">{row.readiness_score} contract</p>
+            <p className="font-mono text-sm font-semibold text-[var(--muted-strong)]">{assessmentText(value, t("catalogAssessment.unassessed"))}</p>
+            <p className="text-[11px] text-[var(--muted)]">{assessmentText(row.readiness_score, t("catalogAssessment.unassessed"))} contract</p>
           </div>
         ),
       },
       {
         title: t("page.systemMap.productionDimensions"),
         dataIndex: "dimensions",
-        render: (value) => (
+        render: (value, row) => !isAssessedNumber(row.production_score) ? <Tag>{t("catalogAssessment.unassessed")}</Tag> : (
           <Space size={[4, 4]} wrap>
             {Object.entries(value ?? {}).slice(0, 7).map(([key, dim]: [string, any]) => {
               const statusValue = String(dim.status || "gap");
-              const color = statusValue === "ready" || statusValue === "not_required" ? "green" : statusValue === "partial" ? "gold" : "red";
+              const color = !isAssessedNumber(dim.score) ? undefined : statusValue === "ready" || statusValue === "not_required" ? "green" : statusValue === "partial" ? "gold" : "red";
               return (
                 <Tag key={key} color={color}>
-                  {t(`page.systemMap.productionDimension.${key}`)} {dim.score}
+                  {t(`page.systemMap.productionDimension.${key}`)} {assessmentText(dim.score, t("catalogAssessment.unassessed"))}
                 </Tag>
               );
             })}
@@ -94,7 +97,7 @@ export function SystemProductionReadinessPanel({
       {
         title: t("page.systemMap.recommendation"),
         dataIndex: "recommendations",
-        render: (value) => (
+        render: (value, row) => !isAssessedNumber(row.production_score) ? <span className="text-xs text-[var(--muted)]">{t("catalogAssessment.unassessed")}</span> : (
           <div className="max-w-lg space-y-1">
             {(value ?? []).slice(0, 2).map((item: string, index: number) => (
               <p key={`${item}-${index}`} className="line-clamp-1 text-xs text-[var(--muted-strong)]">{item}</p>
@@ -117,12 +120,13 @@ export function SystemProductionReadinessPanel({
         <div className="flex flex-wrap items-center gap-2">
           <Metric label={t("page.systemMap.productionReady")} value={data?.summary?.production_ready ?? 0} />
           <Metric label={t("page.systemMap.runtimeReady")} value={data?.summary?.runtime_ready ?? 0} />
-          <Metric label={t("page.systemMap.productionAvgScore")} value={data?.summary?.avg_production_score ?? 0} />
+          <Metric label={t("page.systemMap.productionAvgScore")} value={assessmentText(data?.summary?.avg_production_score, t("catalogAssessment.unassessed"))} />
+          <CatalogAssessmentCounts value={data?.summary} />
           <Segmented
             value={stage}
             onChange={(value) => onStageChange(value as string)}
-            options={["all", "gap", "contract_complete", "runtime_ready", "production_ready"].map((value) => ({
-              label: t(`page.systemMap.productionStageValue.${value}`),
+            options={["all", "unassessed", "gap", "contract_complete", "runtime_ready", "production_ready"].map((value) => ({
+              label: value === "unassessed" ? t("catalogAssessment.unassessed") : t(`page.systemMap.productionStageValue.${value}`),
               value,
             }))}
           />

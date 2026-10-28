@@ -228,6 +228,7 @@ export type NavItem = {
   hidden?: boolean;
   external?: boolean;
   capability?: string;
+  permissionScope?: "global" | "project";
   /** 视觉徽标（如 NEW/BETA），仅用于近 1-2 个发布周期 */
   badge?: NavBadge;
   /** 生命周期状态，过期模块标 deprecated 并准备移除 */
@@ -382,7 +383,7 @@ const ITEM_CATEGORY: Record<string, string> = {
   ragSearch: "ai-knowledge",
   aiMemory: "ai-knowledge",
   ruleCenter: "ai-knowledge",
-  reflectionDistill: "ai-knowledge",
+  reflectionIntake: "ai-knowledge",
   specs: "ai-knowledge",
   designDocs: "ai-knowledge",
   intelligenceDataSources: "ai-knowledge",
@@ -824,11 +825,11 @@ export const NAV: readonly NavItem[] = [
     icon: Brain,
     category: "ai-knowledge",
     capability: "ai.intelligence",
-    description: "智能与知识中枢：知识资产、检索记忆、规则蒸馏、运行治理、规约方案和数据上下文分流入口",
+    description: "智能与知识中枢：知识资产、检索记忆、规则与反思、运行治理、规约方案和数据上下文分流入口",
     submodules: [
       { key: "knowledge_assets", path: "#/intelligence/kb", capability: "ai.intelligence.knowledge" },
       { key: "retrieval_memory", path: "#/intelligence/rag", capability: "ai.intelligence.rag" },
-      { key: "rules_distill", path: "#/intelligence/rules", capability: "ai.intelligence.rules" },
+      { key: "rules_reflections", path: "#/intelligence/rules", capability: "ai.intelligence.rules" },
       { key: "runtime_ops", path: "#/intelligence/worker", capability: "ai.intelligence.worker" },
       { key: "spec_designs", path: "#/intelligence/specs", capability: "ai.intelligence.specs" },
       { key: "data_context", path: "#/data/sources", capability: "data.sources" },
@@ -838,13 +839,13 @@ export const NAV: readonly NavItem[] = [
   { key: "ragSearch", path: "#/intelligence/rag", el: pageElement(IntelligencePage, { initialTab: "rag", focused: true }), group: "ai", icon: SearchCheck, category: "ai-knowledge", capability: "ai.intelligence.rag" },
   { key: "aiMemory", path: "#/intelligence/memory", el: pageElement(IntelligencePage, { initialTab: "mem", focused: true }), group: "ai", icon: Brain, category: "ai-knowledge", capability: "ai.intelligence.memory" },
   { key: "ruleCenter", path: "#/intelligence/rules", el: pageElement(IntelligencePage, { initialTab: "rules", focused: true }), group: "ai", icon: ShieldCheck, category: "ai-knowledge", capability: "ai.intelligence.rules" },
-  { key: "reflectionDistill", path: "#/intelligence/distill", el: pageElement(IntelligencePage, { initialTab: "distill", focused: true }), group: "ai", icon: SparklesIcon, category: "ai-knowledge", capability: "ai.intelligence.distill" },
+  { key: "reflectionIntake", path: "#/intelligence/reflections", el: pageElement(IntelligencePage, { initialTab: "reflections", focused: true }), group: "ai", icon: SparklesIcon, category: "ai-knowledge", capability: "ai.intelligence.reflections", permissionScope: "project" },
   { key: "specs", path: "#/intelligence/specs", el: pageElement(SpecsWorkbenchPage), group: "ai", icon: FileCode, category: "ai-knowledge", capability: "ai.intelligence.specs", badge: "new" },
   { key: "designDocs", path: "#/intelligence/design-docs", el: pageElement(DesignDocsWorkbenchPage), group: "ai", icon: BookOpen, category: "ai-knowledge", capability: "ai.intelligence.design-docs", badge: "new" },
   { key: "intelligenceDataSources", path: "#/intelligence/datasources", el: pageElement(DataSourcesWorkbenchPage, { focused: true, initialView: "overview" }), group: "ai", icon: Database, category: "ai-knowledge", capability: "ai.intelligence.datasources", hidden: true, parentKey: "intelligence", description: "数据源管理兼容入口，主入口已迁移到数据域" },
   { key: "workerOps", path: "#/intelligence/worker", el: pageElement(IntelligencePage, { initialTab: "worker", focused: true }), group: "ai", icon: Cpu, category: "ai-runtime-ops", capability: "ai.intelligence.worker" },
   { key: "syncOps", path: "#/intelligence/sync", el: pageElement(IntelligencePage, { initialTab: "sync", focused: true }), group: "ai", icon: GitBranch, category: "ai-runtime-ops", capability: "ai.intelligence.sync" },
-  { key: "eventStream", path: "#/intelligence/events", el: pageElement(IntelligencePage, { initialTab: "events", focused: true }), group: "ai", icon: Activity, category: "ai-runtime-ops", capability: "ai.intelligence.events" },
+  { key: "eventStream", path: "#/intelligence/events", el: pageElement(IntelligencePage, { initialTab: "events", focused: true }), group: "ai", icon: Activity, category: "ai-runtime-ops", capability: "ai.intelligence.events", permissionScope: "project" },
   { key: "usageOps", path: "#/intelligence/usage", el: pageElement(IntelligencePage, { initialTab: "usage", focused: true }), group: "ai", icon: BarChart3, category: "ai-runtime-ops", capability: "ai.intelligence.usage" },
   { key: "platforms", path: "#/platforms", el: pageElement(PlatformsHubPage), group: "ecosystem", icon: Cpu, category: "agent-platform", capability: "ecosystem.platforms", description: "Agent 平台治理中心：CLI 探活、MCP、Agent 注册、运行中心、模型运维与运行治理", submodules: subnav("platforms", "tool_profiles", "mcp_hub", "agents", "agent_runs", "models", "ops", "a2a") },
   { key: "platformTools", path: "#/platforms/tools", el: pageElement(PlatformsPage, { initialModule: "tools", focused: true }), group: "ecosystem", icon: TerminalIcon, category: "agent-platform", capability: "ecosystem.platforms.tools" },
@@ -1051,6 +1052,8 @@ export type GroupedNavCategory = {
 };
 
 export type CapabilityGrant = {
+  permission_scope?: "global" | "project";
+  project_id?: string | null;
   capability: string;
   visible?: boolean;
   allowed?: {
@@ -1066,6 +1069,10 @@ export type CapabilityGrant = {
 };
 
 export function canReadNavItem(item: NavItem, role: string, grants: CapabilityGrant[] | undefined): boolean {
+  if (item.permissionScope === "project") {
+    const grant = grants?.find((value) => value.capability === item.capability);
+    return grant?.permission_scope === "project" && !!grant.project_id && grant.visible !== false && grant.allowed?.read === true;
+  }
   if (!grants?.length || !item.capability) return true;
   const grant = grants.find((x) => x.capability === item.capability);
   if (!grant) return true;

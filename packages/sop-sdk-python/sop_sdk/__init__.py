@@ -28,6 +28,7 @@ from .event_envelope import EventIdentity, EventProtocolError, FrozenEvent
 from .event_outbox import EventOutbox, QueueError
 from .hermes import HermesClient
 from .ipc import AgentdIpcClient
+from .reflection_intake import freeze_reflection, parse_reflection_event
 from .security import Auth, BearerAuth, HmacAuth, NoAuth
 
 __version__ = "1.0.0"
@@ -49,6 +50,8 @@ __all__ = [
     "EventProtocolError",
     "EventOutbox",
     "QueueError",
+    "freeze_reflection",
+    "parse_reflection_event",
     "HermesContractError",
     "HermesUnavailableError",
     "SopError",

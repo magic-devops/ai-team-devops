@@ -3,6 +3,8 @@ import { Activity, ArrowRight, Brain, Cpu, Database, FileCode, Gauge, GitBranch,
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
+import { CatalogAssessmentCounts } from "@/components/CatalogAssessmentCounts";
+import { assessmentText } from "@/lib/catalogAssessment";
 import { ErrorBlock, LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
@@ -12,7 +14,7 @@ import { WorkbenchStats } from "@/pages/shared/workbenchUi";
 const DOMAIN_ICONS: Record<string, LucideIcon> = {
   knowledge_assets: Library,
   retrieval_memory: Search,
-  rules_distill: ShieldCheck,
+  rules_reflections: ShieldCheck,
   runtime_ops: Cpu,
   spec_designs: FileCode,
   data_context: Database,
@@ -20,7 +22,7 @@ const DOMAIN_ICONS: Record<string, LucideIcon> = {
   rag: Search,
   memory: Brain,
   rules: ShieldCheck,
-  distill: Sparkles,
+  reflections: Sparkles,
   specs: FileCode,
   "design-docs": FileCode,
   datasources: Database,
@@ -33,7 +35,7 @@ const DOMAIN_ICONS: Record<string, LucideIcon> = {
 const DOMAIN_I18N: Record<string, string> = {
   knowledge_assets: "nav.sub.knowledge_assets",
   retrieval_memory: "nav.sub.retrieval_memory",
-  rules_distill: "nav.sub.rules_distill",
+  rules_reflections: "nav.sub.rules_reflections",
   runtime_ops: "nav.sub.runtime_ops",
   spec_designs: "nav.sub.spec_designs",
   data_context: "nav.sub.data_context",
@@ -41,7 +43,7 @@ const DOMAIN_I18N: Record<string, string> = {
   rag: "nav.ragSearch",
   memory: "nav.aiMemory",
   rules: "nav.ruleCenter",
-  distill: "nav.reflectionDistill",
+  reflections: "nav.reflectionIntake",
   specs: "nav.specs",
   "design-docs": "nav.designDocs",
   datasources: "nav.dataSources",
@@ -91,12 +93,13 @@ export function IntelligenceHub() {
       {stackLayers.length ? (
         <Card title={t("page.intelligence.stackTitle")}>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {stackLayers.map((layer: { id: string; name: string; maturity: number }) => (
+            {stackLayers.map((layer: { id: string; name: string; maturity: number | null; assessed_count?: number; unassessed_count?: number }) => (
               <div key={layer.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-[var(--text)]">{layer.name}</span>
-                  <span className="text-xs font-semibold text-[var(--brand)]">{layer.maturity}%</span>
+                  <span className="text-xs font-semibold text-[var(--muted-strong)]">{assessmentText(layer.maturity, t("catalogAssessment.unassessed"), true)}</span>
                 </div>
+                <CatalogAssessmentCounts value={layer} />
               </div>
             ))}
           </div>

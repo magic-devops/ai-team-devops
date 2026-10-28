@@ -11,6 +11,7 @@ def resource_kind(action):
     if action.startswith("work_order."):
         return "work_order"
     precise = {
+        "reflection.input.create": "reflection_input",
         "task.delivery.submit": "task_submission",
         "task.delivery.review": "task_review",
         "tasks.schedule": "project",

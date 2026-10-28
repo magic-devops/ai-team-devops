@@ -18,6 +18,7 @@ def handler(event):
         "sop.task.delivery_submitted": "task.delivery.submit",
         "sop.issue.opened": "issue.create",
         "sop.agent.heartbeat": "heartbeat.record",
+        "sop.reflection.recorded": "reflection.record",
     }
     if event.type == "sop.sync.push":
         module = event.data.get("module")
@@ -180,9 +181,19 @@ def process(db, project, user, receipt_id, request=None, *, retry=None):
         _, producer, permissions, _ = authorize(db, producer, project.id)
         if not permissions["write"]:
             fail("event_producer_denied", "Original producer no longer has write access", 403)
-        event = CloudEvent.model_validate(json.loads(original.event_json))
+        from .reflection_intake import is_reflection, prepare_processing, recorded_receipts
+
+        prepared_reflection = None
+        if is_reflection(original, row, recorded=receipt_id in recorded_receipts(db, project, [receipt_id])):
+            prepared_reflection = prepare_processing(db, project, producer, original, row, getattr(request.app.state, "hermes_store", None) if request else None)
+            event = prepared_reflection[0]
+        else:
+            event = CloudEvent.model_validate(json.loads(original.event_json))
         with event_write_scope(db, project.tenant_id, project.id):
-            if row.handler == "heartbeat.record":
+            if prepared_reflection is not None:
+                effect = {"kind": "reflection_recorded", "target_kind": "reflection", "target_id": receipt_id}
+                context = nullcontext()
+            elif row.handler == "heartbeat.record":
                 effect = {"kind": "fact_recorded", "target_kind": None, "target_id": None}
                 context = nullcontext()
             elif row.handler == "sync.asset":
@@ -215,6 +226,10 @@ def process(db, project, user, receipt_id, request=None, *, retry=None):
                 if effect is None:
                     effect = _effect(body, staged["ack"])
                 entry = _attempt(db, project, row, user, action, effect, None, retry)
+                if prepared_reflection is not None:
+                    from .reflection_intake import append_record
+
+                    append_record(db, project, original, entry, prepared_reflection)
                 from .delivery_issue_origins import append_origin
 
                 append_origin(db, project, original, entry)

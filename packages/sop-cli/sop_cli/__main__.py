@@ -39,6 +39,7 @@ from .commands import (
     plugins as plugins_cmd,
     project as project_cmd,
     register as register_cmd,
+    reflection as reflection_cmd,
     requirement as requirement_cmd,
     rule as rule_cmd,
     skills as skills_cmd,
@@ -108,6 +109,7 @@ app.add_typer(hermes_cmd.build_resource_app("assets"), name="asset", help="Herme
 app.add_typer(hermes_cmd.system_app, name="hermes", help="Hermes 系统：health/actions/readiness/sync")
 app.add_typer(work_cmd.app, name="work", help="工作台：summary/list/next/export")
 app.add_typer(event_cmd.app, name="event", help="事件：emit/flush/list")
+app.add_typer(reflection_cmd.app, name="reflection", help="反思：record/list/show/inputs/input/prepare")
 app.add_typer(usage_cmd.app, name="usage", help="用量：record/flush/summary/quota")
 app.add_typer(rule_cmd.app,    name="rule",    help="规则：list/propose/apply/flush")
 app.add_typer(sync_cmd.app,    name="sync",    help="双向同步规约 / 规则 / 知识")

@@ -6,6 +6,7 @@ from sop_manager.project_write_guard import project_file_write_scope
 import json
 import hashlib
 import gzip
+import math
 from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 
 from collections import Counter
@@ -16,12 +17,14 @@ from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root
 from .auth_sql import USER_ROLES, User, current_user
 from .business_access import read_business_access
+from .sql_models import get_session
 from .tasks import TaskBulkUpdate, TaskCreate, bulk_update_tasks, create_task, list_tasks
 
 router = APIRouter(prefix="/api/v1/system/pages", tags=["system-pages"])
@@ -521,13 +524,13 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
     "dataIngest": [("connectors", "连接器管理"), ("dry_run", "连接器 Dry-run"), ("schema_registry", "Schema Registry"), ("cdc_cursors", "CDC 游标"), ("batch_jobs", "批量作业"), ("run_history", "运行历史")],
     "analyticsNlq": [("natural_query", "自然语言问数"), ("semantic_context", "语义上下文"), ("save_report", "保存报告")],
     "copilot": [("chat", "会话问答"), ("commands", "命令中心"), ("tool_plan", "工具计划"), ("plan_to_tasks", "计划转任务")],
-    "intelligence": [("knowledge_assets", "知识资产"), ("retrieval_memory", "检索与记忆"), ("rules_distill", "规则与蒸馏"), ("runtime_ops", "运行治理"), ("spec_designs", "规约方案"), ("data_context", "数据上下文")],
+    "intelligence": [("knowledge_assets", "知识资产"), ("retrieval_memory", "检索与记忆"), ("rules_reflections", "规则与反思"), ("runtime_ops", "运行治理"), ("spec_designs", "规约方案"), ("data_context", "数据上下文")],
     "knowledgeBase": [("documents", "知识文档"), ("index", "索引"), ("search", "检索")],
     "ragSearch": [("retrieval", "检索增强"), ("citations", "引用证据"), ("prompt_context", "提示词上下文")],
     "aiMemory": [("recent", "最近记忆"), ("search", "记忆检索"), ("attach_run", "运行挂载"), ("lifecycle", "生命周期")],
     "knowledgeGraph": [("build", "图谱构建"), ("query", "Graph RAG"), ("lineage", "血缘关联"), ("profile_merge", "画像合并")],
-    "ruleCenter": [("proposals", "规则提案"), ("apply", "规则应用"), ("sync", "规则同步")],
-    "reflectionDistill": [("run", "蒸馏运行"), ("proposal_review", "提案审核"), ("rule_apply", "规则入库")],
+    "ruleCenter": [("manual_rules", "规则管理"), ("sync", "规则同步")],
+    "reflectionIntake": [("collected", "已收集原件"), ("fixed_inputs", "固定分析输入")],
     "workerOps": [("job_types", "任务类型"), ("enqueue", "任务投递"), ("monitor", "运行监控")],
     "syncOps": [("modules", "同步模块"), ("pull", "拉取预览"), ("asset_push", "资产推送")],
     "eventStream": [("cloud_events", "CloudEvents"), ("sync_events", "同步事件"), ("agent_events", "Agent 事件")],
@@ -572,6 +575,8 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
 
 
 SUBMODULE_PATHS: dict[tuple[str, str], str] = {
+    ("reflectionIntake", "collected"): "#/intelligence/reflections?reflection_tab=collected",
+    ("reflectionIntake", "fixed_inputs"): "#/intelligence/reflections?reflection_tab=inputs",
     ("projects", "portfolio"): "#/projects/portfolio",
     ("projects", "businesses"): "#/projects/businesses",
     ("projects", "tenant_users"): "#/projects/users",
@@ -640,7 +645,7 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("copilot", "tool_plan"): "#/copilot/tool-plan",
     ("intelligence", "knowledge_assets"): "#/intelligence/kb",
     ("intelligence", "retrieval_memory"): "#/intelligence/rag",
-    ("intelligence", "rules_distill"): "#/intelligence/rules",
+    ("intelligence", "rules_reflections"): "#/intelligence/rules",
     ("intelligence", "runtime_ops"): "#/intelligence/worker",
     ("intelligence", "spec_designs"): "#/intelligence/specs",
     ("intelligence", "data_context"): "#/data/sources",
@@ -1056,7 +1061,7 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "aiMemory", "path": "#/intelligence/memory", "domain": "ai", "capability": "ai.intelligence.memory"},
     {"id": "knowledgeGraph", "path": "#/ai/knowledge-graph", "domain": "ai", "capability": "ai.knowledgeGraph"},
     {"id": "ruleCenter", "path": "#/intelligence/rules", "domain": "ai", "capability": "ai.intelligence.rules"},
-    {"id": "reflectionDistill", "path": "#/intelligence/distill", "domain": "ai", "capability": "ai.intelligence.distill"},
+    {"id": "reflectionIntake", "path": "#/intelligence/reflections", "domain": "ai", "capability": "ai.intelligence.reflections"},
     {"id": "specs", "path": "#/intelligence/specs", "domain": "ai", "capability": "ai.intelligence.specs"},
     {"id": "designDocs", "path": "#/intelligence/design-docs", "domain": "ai", "capability": "ai.intelligence.design-docs"},
     {"id": "workerOps", "path": "#/intelligence/worker", "domain": "ai", "capability": "ai.intelligence.worker"},
@@ -1275,8 +1280,8 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "ragSearch", "name": "RAG 检索", "domain": "ai", "path": "#/intelligence/rag", "status": "active", "maturity": 84, "apis": ["/api/v1/rag/search"], "capabilities": ["检索增强", "引用证据", "提示词上下文"], "next": ["混合检索", "图谱 RAG"]},
     {"id": "aiMemory", "name": "AI 记忆", "domain": "ai", "path": "#/intelligence/memory", "status": "active", "maturity": 88, "apis": ["/api/v1/memory", "/api/v1/memory/{id}/lifecycle"], "capabilities": ["最近记忆", "记忆检索", "运行挂载", "本地优先同步", "记忆生命周期"], "next": ["长期记忆压缩", "画像本体"]},
     {"id": "knowledgeGraph", "name": "知识图谱", "domain": "ai", "path": "#/ai/knowledge-graph", "status": "active", "maturity": 90, "apis": ["/api/v1/knowledge-graph/summary", "/api/v1/knowledge-graph/build", "/api/v1/knowledge-graph/query", "/api/v1/knowledge-graph/lineage", "/api/v1/knowledge-graph/entities", "/api/v1/knowledge-graph/edges", "/api/v1/knowledge-graph/entity-profiles/merge", "/api/v1/memory/{id}/lifecycle"], "capabilities": ["图谱构建", "Graph RAG", "血缘关联", "来源权限检查", "证据链", "实体画像合并", "记忆生命周期", "Agent 上下文包"], "next": ["多模态证据", "跨项目联邦图谱"]},
-    {"id": "ruleCenter", "name": "规则中心", "domain": "ai", "path": "#/intelligence/rules", "status": "active", "maturity": 84, "apis": ["/api/v1/rules", "/api/v1/reflections/proposals"], "capabilities": ["规则提案", "规则应用", "蒸馏审核", "规则同步"], "next": ["规则评测", "灰度发布"]},
-    {"id": "reflectionDistill", "name": "蒸馏审核", "domain": "ai", "path": "#/intelligence/distill", "status": "active", "maturity": 83, "apis": ["/api/v1/reflections/distill", "/api/v1/reflections/proposals", "/api/v1/reflections/proposals/{proposal_id}/review"], "capabilities": ["反思采样", "规则蒸馏", "提案审核", "规则入库"], "next": ["模型评测", "自动化置信度策略"]},
+    {"id": "ruleCenter", "name": "规则中心", "domain": "ai", "path": "#/intelligence/rules", "status": "active", "maturity": 84, "apis": ["/api/v1/rules"], "capabilities": ["规则管理", "规则同步"], "next": ["基于固定输入的模型提案与审核", "规则评测", "灰度发布"]},
+    {"id": "reflectionIntake", "name": "反思收集", "domain": "ai", "path": "#/intelligence/reflections", "status": "active", "maturity": None, "assessment_state": "unassessed", "apis": ["/api/v1/reflections", "/api/v1/reflections/inputs", "/api/v1/events:ingest", "/api/v1/delivery/commands"], "capabilities": ["规范反思收集", "不可变原件核验", "固定分析输入"], "next": ["实际模型分析与提案审核"]},
     {"id": "workerOps", "name": "WorkerOps", "domain": "ai", "path": "#/intelligence/worker", "status": "active", "maturity": 82, "apis": ["/api/v1/worker/jobs"], "capabilities": ["任务类型", "幂等投递", "运行监控", "取消重试"], "next": ["真实执行池", "资源配额"]},
     {"id": "syncOps", "name": "SyncOps", "domain": "ai", "path": "#/intelligence/sync", "status": "active", "maturity": 82, "apis": ["/api/v1/sync/summary", "/api/v1/sync/pull"], "capabilities": ["同步模块", "拉取预览", "资产推送", "流水查看"], "next": ["冲突合并", "双向同步策略"]},
     {"id": "eventStream", "name": "事件流水", "domain": "ai", "path": "#/intelligence/events", "status": "active", "maturity": 82, "apis": ["/api/v1/events", "/ws/events"], "capabilities": ["CloudEvents 查询", "同步事件", "Agent 事件", "实时订阅"], "next": ["事件检索索引", "事件驱动自动修复"]},
@@ -1370,18 +1375,36 @@ def _target_domain(item: dict[str, Any]) -> str | None:
     return None
 
 
+def _assessment_value(item: dict[str, Any], key: str = "maturity") -> float | None:
+    value = item.get(key)
+    if item.get("assessment_state") == "unassessed" or type(value) not in {int, float} or not math.isfinite(value) or not 0 <= value <= 100:
+        return None
+    return value
+
+
+def _assessment_summary(items: list[dict[str, Any]], key: str = "maturity", average: str = "avg_maturity") -> dict[str, Any]:
+    values = [value for item in items if (value := _assessment_value(item, key)) is not None]
+    return {average: round(sum(values) / len(values), 1) if values else None,
+            "assessed_count": len(values), "unassessed_count": len(items) - len(values)}
+
+
+def _unassessed_module(item: dict[str, Any], score: str, state: str = "status") -> dict[str, Any]:
+    return {**item, "assessment_state": "unassessed", state: "unassessed", score: None, "maturity": None,
+            "dimensions": {}, "gaps": [], "recommendations": [], "next_actions": [], "ui_contract": {},
+            "contract_complete": None, "runtime_ready": None, "production_ready": None}
+
+
 def _summary(items: list[dict[str, Any]]) -> dict[str, Any]:
     statuses = Counter(str(i.get("status", "unknown")) for i in items)
     domains = Counter(str(i.get("domain", "unknown")) for i in items)
-    avg = round(sum(int(i.get("maturity", 0)) for i in items) / max(len(items), 1), 1)
-    return {"total": len(items), "avg_maturity": avg, "by_status": dict(statuses), "by_domain": dict(domains)}
+    return {"total": len(items), **_assessment_summary(items), "by_status": dict(statuses), "by_domain": dict(domains)}
 
 
 def _legacy_cockpit_summary(legacy: list[dict[str, Any]]) -> dict[str, Any]:
     plan = _legacy_migration_plan(legacy)
     summary = _summary(legacy)
     open_rows = [item for item in legacy if str(item.get("status") or "legacy") in {"legacy", "migrating"}]
-    low_maturity = [item for item in legacy if int(item.get("maturity", 0)) < 70]
+    low_maturity = [item for item in legacy if (value := _assessment_value(item)) is not None and value < 70]
     domains = Counter(str(item.get("effective_domain") or item.get("domain") or "unknown") for item in legacy)
     return {
         **summary,
@@ -1409,14 +1432,13 @@ def _domain_matrix(react: list[dict[str, Any]], legacy: list[dict[str, Any]]) ->
         react_rows = [p for p in react if p.get("domain") == domain["id"]]
         target_paths = {str(p.get("path")) for p in react_rows}
         legacy_rows = [p for p in legacy if str(p.get("target", "")) in target_paths or p.get("domain") == f"legacy-{domain['id']}"]
-        maturities = [int(p.get("maturity", 0)) for p in [*react_rows, *legacy_rows]]
         rows.append(
             {
                 **domain,
                 "react_count": len(react_rows),
                 "legacy_count": len(legacy_rows),
                 "total": len(react_rows) + len(legacy_rows),
-                "avg_maturity": round(sum(maturities) / max(len(maturities), 1), 1),
+                **_assessment_summary([*react_rows, *legacy_rows]),
                 "react_pages": [p["id"] for p in react_rows],
                 "legacy_pages": [p["id"] for p in legacy_rows],
             }
@@ -1483,7 +1505,7 @@ def _migration_backlog(legacy: list[dict[str, Any]], *, limit: int = 8) -> list[
         legacy,
         key=lambda item: (
             0 if item.get("status") == "migrating" else 1,
-            int(item.get("maturity", 0)),
+            _assessment_value(item) if _assessment_value(item) is not None else 101,
             str(item.get("id", "")),
         ),
     )
@@ -1509,11 +1531,11 @@ def _legacy_migration_plan(legacy: list[dict[str, Any]]) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for item in legacy:
         target = target_by_path.get(str(item.get("target") or ""))
-        maturity = int(item.get("maturity", 0))
-        target_maturity = int(target.get("maturity", 0)) if target else 0
+        maturity = _assessment_value(item)
+        target_maturity = _assessment_value(target) if target else None
         status = str(item.get("status") or "legacy")
-        priority_score = (100 - maturity) + (20 if status == "legacy" else 8 if status == "migrating" else 0)
-        coverage = "covered" if target and target_maturity >= 85 and status != "legacy" else "partial" if target else "missing_target"
+        priority_score = (100 - maturity) + (20 if status == "legacy" else 8 if status == "migrating" else 0) if maturity is not None else None
+        coverage = "covered" if target and target_maturity is not None and target_maturity >= 85 and status != "legacy" else "partial" if target else "missing_target"
         row = {
             "id": item.get("id"),
             "console_id": item.get("console_id"),
@@ -1529,7 +1551,7 @@ def _legacy_migration_plan(legacy: list[dict[str, Any]]) -> dict[str, Any]:
             "maturity": maturity,
             "target_maturity": target_maturity,
             "priority_score": priority_score,
-            "priority": "P0" if priority_score >= 70 else "P1" if priority_score >= 45 else "P2",
+            "priority": None if priority_score is None else "P0" if priority_score >= 70 else "P1" if priority_score >= 45 else "P2",
             "next": item.get("next", []),
             "recommended_slice": [
                 f"迁移 legacy 入口 {item.get('path')} 到 {item.get('target')}",
@@ -1539,7 +1561,7 @@ def _legacy_migration_plan(legacy: list[dict[str, Any]]) -> dict[str, Any]:
         }
         rows.append(row)
         groups.setdefault(str(row["domain"] or "unknown"), []).append(row)
-    rows.sort(key=lambda row: (-int(row.get("priority_score", 0)), str(row.get("id"))))
+    rows.sort(key=lambda row: (row.get("priority_score") is None, -float(row.get("priority_score") or 0), str(row.get("id"))))
     group_rows = [
         {
             "domain": domain,
@@ -1547,7 +1569,7 @@ def _legacy_migration_plan(legacy: list[dict[str, Any]]) -> dict[str, Any]:
             "missing_target": sum(1 for item in items if item["coverage"] == "missing_target"),
             "partial": sum(1 for item in items if item["coverage"] == "partial"),
             "covered": sum(1 for item in items if item["coverage"] == "covered"),
-            "items": sorted(items, key=lambda row: (-int(row.get("priority_score", 0)), str(row.get("id")))),
+            "items": sorted(items, key=lambda row: (row.get("priority_score") is None, -float(row.get("priority_score") or 0), str(row.get("id")))),
         }
         for domain, items in sorted(groups.items())
     ]
@@ -1563,8 +1585,8 @@ def _legacy_migration_plan(legacy: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _governance_status(react: list[dict[str, Any]], legacy: list[dict[str, Any]]) -> dict[str, Any]:
     validation = _registry_validation()
-    react_ready = [item for item in react if int(item.get("maturity", 0)) >= 85]
-    react_improve = [item for item in react if int(item.get("maturity", 0)) < 85]
+    react_ready = [item for item in react if (value := _assessment_value(item)) is not None and value >= 85]
+    react_improve = [item for item in react if (value := _assessment_value(item)) is not None and value < 85]
     legacy_open = [item for item in legacy if item.get("status") in {"legacy", "migrating"}]
     backlog = _migration_backlog(legacy, limit=100)
     tasks = [
@@ -1595,7 +1617,7 @@ def _governance_status(react: list[dict[str, Any]], legacy: list[dict[str, Any]]
         {
             "id": "module_maturity",
             "name": "模块成熟度提升",
-            "status": "todo" if react_improve else "done",
+            "status": "todo" if react_improve else "unassessed" if _assessment_summary(react)["unassessed_count"] else "done",
             "description": "对成熟度低于 85 的 React 模块补齐交互、API、权限、AI 与运维能力。",
             "next_action": "优先处理低成熟度模块的 next 建议。",
             "metric": len(react_improve),
@@ -1608,6 +1630,7 @@ def _governance_status(react: list[dict[str, Any]], legacy: list[dict[str, Any]]
             "registry_ready": validation["ok"],
             "react_ready": len(react_ready),
             "react_need_improvement": len(react_improve),
+            **{key: value for key, value in _assessment_summary(react).items() if key != "avg_maturity"},
             "legacy_need_convergence": len(legacy_open),
             "migration_backlog": len(backlog),
         },
@@ -2315,8 +2338,8 @@ def _governance_task_payloads(*, scope: str, priority: str, owner_id: str, max_i
         )
     if include_all or scope == "module_maturity":
         improve = sorted(
-            [item for item in react if int(item.get("maturity", 0)) < 85],
-            key=lambda item: (int(item.get("maturity", 0)), str(item.get("id"))),
+            [item for item in react if (value := _assessment_value(item)) is not None and value < 85],
+            key=lambda item: (_assessment_value(item), str(item.get("id"))),
         )[:max_items]
         for item in improve:
             next_items = [str(x) for x in item.get("next", [])]
@@ -2707,7 +2730,15 @@ def _module_readiness_matrix() -> list[dict[str, Any]]:
         submodules = capability_item.get("submodules") or []
         module_issues = issues_by_module.get(module_id, [])
         high_issues = [item for item in module_issues if item.get("severity") in {"critical", "high"}]
-        maturity = max(0, min(int(page.get("maturity") or 0), 100))
+        maturity = _assessment_value(page)
+        if maturity is None:
+            rows.append(_unassessed_module({"id": module_id, "name": page.get("name") or module_id,
+                "domain": page.get("effective_domain") or page.get("domain"), "domain_name": page.get("domain_name"),
+                "path": page.get("path") or "", "capabilities": capabilities,
+                "implementation_contract": {"route": page.get("path") or "", "api_count": len(apis), "apis": apis,
+                    "capability": capability_item.get("capability") or "", "ai_surfaces": ai_surfaces,
+                    "submodule_count": len(submodules), "action_count": int(capability_item.get("action_count") or 0)}}, "readiness_score"))
+            continue
         frontend_score = 100 if nav and page.get("path") else 70 if page.get("path") else 35
         backend_score = 100 if len(apis) >= 2 else 85 if len(apis) == 1 else 35
         ai_score = 100 if ai_surfaces else 45
@@ -2779,7 +2810,7 @@ def _module_readiness_matrix() -> list[dict[str, Any]]:
                 },
             }
         )
-    return sorted(rows, key=lambda item: ({"risk": 0, "watch": 1, "complete": 2}.get(str(item["status"]), 3), float(item["readiness_score"]), str(item["id"])))
+    return sorted(rows, key=lambda item: ({"risk": 0, "watch": 1, "complete": 2}.get(str(item["status"]), 3), float(item["readiness_score"] or 0), str(item["id"])))
 
 
 def _module_readiness_payload(*, domain: str | None = None, status: str | None = None, q: str | None = None) -> dict[str, Any]:
@@ -2823,19 +2854,18 @@ def _module_readiness_payload(*, domain: str | None = None, status: str | None =
         bucket[str(item.get("status"))] = int(bucket.get(str(item.get("status")), 0)) + 1
         bucket["avg_score"] += float(item.get("readiness_score") or 0)
     for bucket in domain_summary.values():
-        bucket["avg_score"] = round(float(bucket["avg_score"]) / max(1, int(bucket["total"])), 1)
-    avg_score = round(sum(float(item.get("readiness_score") or 0) for item in rows) / max(1, len(rows)), 1)
+        bucket.update(_assessment_summary([item for item in rows if str(item.get("domain") or "unknown") == bucket["domain"]], "readiness_score", "avg_score"))
     return {
         "ok": True,
         "items": rows,
         "summary": {
             "total": len(rows),
-            "avg_score": avg_score,
+            **_assessment_summary(rows, "readiness_score", "avg_score"),
             "complete": by_status.get("complete", 0),
             "watch": by_status.get("watch", 0),
             "risk": by_status.get("risk", 0),
         },
-        "domain_summary": sorted(domain_summary.values(), key=lambda item: (float(item["avg_score"]), str(item["domain"]))),
+        "domain_summary": sorted(domain_summary.values(), key=lambda item: (item["avg_score"] is None, float(item["avg_score"] or 0), str(item["domain"]))),
         "filters": {"domain": domain or "all", "status": status or "all", "q": q or ""},
         "agent_consumption": {
             "purpose": "供 AI CLI/Agent 判断每个模块是否前后端完整、是否具备 API/权限/AI surface，并据此生成增强任务。",
@@ -2874,6 +2904,9 @@ def _production_readiness_matrix() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in _module_readiness_matrix():
         contract = item.get("implementation_contract") or {}
+        if item.get("assessment_state") == "unassessed":
+            rows.append(_unassessed_module(item, "production_score", "stage"))
+            continue
         api_count = int(contract.get("api_count") or 0)
         action_count = int(contract.get("action_count") or 0)
         ai_surface_count = len(contract.get("ai_surfaces") or [])
@@ -3037,7 +3070,7 @@ def _production_readiness_matrix() -> list[dict[str, Any]]:
             }
         )
     order = {"gap": 0, "contract_complete": 1, "runtime_ready": 2, "production_ready": 3}
-    return sorted(rows, key=lambda row: (order.get(str(row.get("stage")), 0), float(row.get("production_score") or 0), str(row.get("id"))))
+    return sorted(rows, key=lambda row: (order.get(str(row.get("stage")), 4), float(row.get("production_score") or 0), str(row.get("id"))))
 
 
 def _module_production_readiness_payload(*, domain: str | None = None, stage: str | None = None, q: str | None = None) -> dict[str, Any]:
@@ -3061,13 +3094,12 @@ def _module_production_readiness_payload(*, domain: str | None = None, stage: st
                 continue
         rows.append(item)
     by_stage = Counter(str(item.get("stage") or "gap") for item in rows)
-    avg_score = round(sum(float(item.get("production_score") or 0) for item in rows) / max(1, len(rows)), 1)
     return {
         "ok": True,
         "items": rows,
         "summary": {
             "total": len(rows),
-            "avg_production_score": avg_score,
+            **_assessment_summary(rows, "production_score", "avg_production_score"),
             "contract_complete": sum(1 for item in rows if item.get("contract_complete")),
             "runtime_ready": sum(1 for item in rows if item.get("runtime_ready")),
             "production_ready": sum(1 for item in rows if item.get("production_ready")),
@@ -3108,6 +3140,9 @@ def _module_experience_review_matrix() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in _module_readiness_matrix():
         contract = item.get("implementation_contract") or {}
+        if item.get("assessment_state") == "unassessed":
+            rows.append(_unassessed_module(item, "experience_score"))
+            continue
         api_count = int(contract.get("api_count") or 0)
         action_count = int(contract.get("action_count") or 0)
         submodule_count = int(contract.get("submodule_count") or 0)
@@ -3229,7 +3264,7 @@ def _module_experience_review_matrix() -> list[dict[str, Any]]:
             }
         )
     order = {"complex": 0, "watch": 1, "simple": 2}
-    return sorted(rows, key=lambda row: (order.get(str(row.get("status")), 0), float(row.get("experience_score") or 0), str(row.get("id"))))
+    return sorted(rows, key=lambda row: (order.get(str(row.get("status")), 3), float(row.get("experience_score") or 0), str(row.get("id"))))
 
 
 def _module_experience_review_payload(*, domain: str | None = None, status: str | None = None, q: str | None = None) -> dict[str, Any]:
@@ -3254,7 +3289,6 @@ def _module_experience_review_payload(*, domain: str | None = None, status: str 
                 continue
         rows.append(item)
     by_status = Counter(str(item.get("status") or "complex") for item in rows)
-    avg_score = round(sum(float(item.get("experience_score") or 0) for item in rows) / max(1, len(rows)), 1)
     domain_summary: dict[str, dict[str, Any]] = {}
     for item in rows:
         domain_id = str(item.get("domain") or "unknown")
@@ -3274,23 +3308,23 @@ def _module_experience_review_payload(*, domain: str | None = None, status: str 
         bucket[str(item.get("status") or "complex")] = int(bucket.get(str(item.get("status") or "complex"), 0)) + 1
         bucket["avg_score"] += float(item.get("experience_score") or 0)
     for bucket in domain_summary.values():
-        bucket["avg_score"] = round(float(bucket["avg_score"]) / max(1, int(bucket["total"])), 1)
+        bucket.update(_assessment_summary([item for item in rows if str(item.get("domain") or "unknown") == bucket["domain"]], "experience_score", "avg_score"))
     return {
         "ok": True,
         "items": rows,
         "summary": {
             "total": len(rows),
-            "avg_experience_score": avg_score,
+            **_assessment_summary(rows, "experience_score", "avg_experience_score"),
             "simple": by_status.get("simple", 0),
             "watch": by_status.get("watch", 0),
             "complex": by_status.get("complex", 0),
             "needs_simplification": by_status.get("watch", 0) + by_status.get("complex", 0),
-            "mobile_risk": sum(1 for item in rows if int((item.get("dimensions") or {}).get("responsive", {}).get("score") or 0) < 86),
-            "permission_gap": sum(1 for item in rows if int((item.get("dimensions") or {}).get("permission", {}).get("score") or 0) < 86),
-            "ai_edit_gap": sum(1 for item in rows if int((item.get("dimensions") or {}).get("ai_editability", {}).get("score") or 0) < 86),
+            "mobile_risk": sum(1 for item in rows if item.get("assessment_state") != "unassessed" and int((item.get("dimensions") or {}).get("responsive", {}).get("score") or 0) < 86),
+            "permission_gap": sum(1 for item in rows if item.get("assessment_state") != "unassessed" and int((item.get("dimensions") or {}).get("permission", {}).get("score") or 0) < 86),
+            "ai_edit_gap": sum(1 for item in rows if item.get("assessment_state") != "unassessed" and int((item.get("dimensions") or {}).get("ai_editability", {}).get("score") or 0) < 86),
             "by_status": dict(by_status),
         },
-        "domain_summary": sorted(domain_summary.values(), key=lambda item: (float(item["avg_score"]), str(item["domain"]))),
+        "domain_summary": sorted(domain_summary.values(), key=lambda item: (item["avg_score"] is None, float(item["avg_score"] or 0), str(item["domain"]))),
         "filters": {"domain": domain or "all", "status": status or "all", "q": q or ""},
         "agent_consumption": {
             "purpose": "供 SystemMap、产品经理和 AI Agent 评估菜单分类、页面复杂度、响应式、权限与 AI 可改造性，优先把复杂页面拆成清晰模块。",
@@ -3477,7 +3511,7 @@ def _isolation_source_scan_payload(q: str = "", status: str = "all") -> dict[str
         try:
             source = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
-            source = path.read_text(errors="ignore")
+            source = path.read_text(errors="ignore", encoding="utf-8")
         storage = _storage_signals(source)
         scope_fields = [field for field in ISOLATION_SCAN_SCOPE_FIELDS if field in source]
         attach_scope = "attach_scope(" in source or "scope_guard.attach_scope" in source
@@ -3785,7 +3819,8 @@ def _action_allowed(item: dict[str, Any], role: str, action: str = "read") -> bo
     return str(role) in roles
 
 
-def _decorate_capabilities_for_role(registry: list[dict[str, Any]], role: str) -> list[dict[str, Any]]:
+def _decorate_capabilities_for_role(registry: list[dict[str, Any]], role: str, *,
+                                    project_permissions: dict[str, bool] | None = None, project_id: str | None = None) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in registry:
         allowed = {
@@ -3793,12 +3828,17 @@ def _decorate_capabilities_for_role(registry: list[dict[str, Any]], role: str) -
             "write": _action_allowed(item, role, "write"),
             "admin": _action_allowed(item, role, "admin"),
         }
-        rows.append({**item, "allowed": allowed, "visible": allowed["read"]})
+        project_scope = project_permissions is not None and item.get("id") in {"reflectionIntake", "eventStream"}
+        if project_scope:
+            allowed = {action: bool(project_permissions.get(action, False)) for action in ("read", "write", "admin")}
+        rows.append({**item, "allowed": allowed, "visible": allowed["read"],
+                     **({"permission_scope": "project", "project_id": project_id} if project_scope else {})})
     return rows
 
 
-def _capability_payload(registry: list[dict[str, Any]], *, role: str | None = None) -> dict[str, Any]:
-    items = _decorate_capabilities_for_role(registry, role) if role else registry
+def _capability_payload(registry: list[dict[str, Any]], *, role: str | None = None,
+                        project_permissions: dict[str, bool] | None = None, project_id: str | None = None) -> dict[str, Any]:
+    items = _decorate_capabilities_for_role(registry, role, project_permissions=project_permissions, project_id=project_id) if role else registry
     by_domain: dict[str, list[dict[str, Any]]] = {}
     for item in items:
         by_domain.setdefault(str(item["domain"]), []).append(item)
@@ -4710,13 +4750,13 @@ def _micro_app_registry() -> list[dict[str, Any]]:
             for page in pages_by_id.values()
             if str(page.get("domain")) in set(str(domain) for domain in app.get("domains", []))
         ]
-        maturity_values = [int(page.get("maturity") or 0) for page in modules or all_domain_pages]
-        avg_maturity = round(sum(maturity_values) / len(maturity_values), 1) if maturity_values else 0
-        status = "healthy" if avg_maturity >= 85 else "watch" if avg_maturity >= 75 else "risk"
+        assessment = _assessment_summary(modules or all_domain_pages)
+        avg_maturity = assessment["avg_maturity"]
+        status = "unassessed" if avg_maturity is None else "healthy" if avg_maturity >= 85 else "watch" if avg_maturity >= 75 else "risk"
         rows.append({
             **app,
             "status": status,
-            "avg_maturity": avg_maturity,
+            **assessment,
             "module_count": len(modules),
             "domain_module_count": len(all_domain_pages),
             "capability_count": sum(len(page.get("capabilities") or []) for page in modules),
@@ -4863,7 +4903,9 @@ def system_pages_hub(user: User = Depends(current_user)) -> dict[str, Any]:
             "react_pages": react_sum.get("total", 0),
             "legacy_pages": legacy_sum.get("total", 0),
             "micro_apps": len(micro_apps),
-            "avg_maturity": react_sum.get("avg_maturity", 0),
+            "avg_maturity": react_sum.get("avg_maturity"),
+            "assessed_count": react_sum["assessed_count"],
+            "unassessed_count": react_sum["unassessed_count"],
             "validation_issues": len(issues) + int(menu_health.get("summary", {}).get("issues") or 0),
             "menu_health_score": menu_health.get("score", 0),
             "domains_count": len(DOMAINS),
@@ -4949,7 +4991,7 @@ def system_pages_production_readiness_tasks(body: ProductionReadinessTaskIn) -> 
         stage=stage,
         q=body.q,
     )
-    rows = payload.get("items") or []
+    rows = [item for item in (payload.get("items") or []) if item.get("assessment_state") != "unassessed"]
     selected = {str(x) for x in body.ids or [] if str(x).strip()}
     if selected:
         rows = [item for item in rows if str(item.get("id") or "") in selected]
@@ -5064,7 +5106,7 @@ def system_page_experience_tasks(body: ExperienceTaskIn) -> dict[str, Any]:
         status=status,
         q=body.q,
     )
-    rows = payload.get("items") or []
+    rows = [item for item in (payload.get("items") or []) if item.get("assessment_state") != "unassessed"]
     selected = {str(x) for x in body.ids or [] if str(x).strip()}
     if selected:
         rows = [item for item in rows if str(item.get("id") or "") in selected]
@@ -5115,7 +5157,7 @@ def system_page_readiness_tasks(body: ReadinessTaskIn) -> dict[str, Any]:
         status=status,
         q=body.q,
     )
-    rows = payload.get("items") or []
+    rows = [item for item in (payload.get("items") or []) if item.get("assessment_state") != "unassessed"]
     selected = {str(x) for x in body.ids or [] if str(x).strip()}
     if selected:
         rows = [item for item in rows if str(item.get("id") or "") in selected]
@@ -5430,14 +5472,32 @@ def system_page_capabilities() -> dict[str, Any]:
 
 
 @router.get("/capabilities/me")
-def system_page_capabilities_me(user: User = Depends(current_user)) -> dict[str, Any]:
+def system_page_capabilities_me(user: User = Depends(current_user), db: Session = Depends(get_session),
+                                project_id: str = Header(default="", alias="X-Project-Id")) -> dict[str, Any]:
     react = _enrich_pages(REACT_PAGES)
     registry = _capability_registry(react)
-    return _capability_payload(registry, role=user.role)
+    permissions, actual_project_id = _current_project_capabilities(db, user, project_id)
+    return _capability_payload(registry, role=user.role, project_permissions=permissions, project_id=actual_project_id)
+
+
+def _current_project_capabilities(db: Session, user: User, project_id: str) -> tuple[dict[str, bool], str | None]:
+    from .event_common import authorize
+
+    if not project_id:
+        return {}, None
+    try:
+        project, _, permissions, _ = authorize(db, user, project_id)
+    except HTTPException:
+        # A missing or inaccessible selection cannot grant another project's
+        # capabilities, and this metadata read never provisions a project.
+        return {}, None
+    writable = project.status != "archived"
+    return {"read": True, "write": writable and permissions["write"], "admin": writable and permissions["configure"]}, project.id
 
 
 @router.post("/capabilities/check")
-def system_page_capabilities_check(body: CapabilityCheckIn, user: User = Depends(current_user)) -> dict[str, Any]:
+def system_page_capabilities_check(body: CapabilityCheckIn, user: User = Depends(current_user), db: Session = Depends(get_session),
+                                   project_id: str = Header(default="", alias="X-Project-Id")) -> dict[str, Any]:
     react = _enrich_pages(REACT_PAGES)
     registry = _capability_registry(react)
     item = next((x for x in registry if x.get("capability") == body.capability), None)
@@ -5450,6 +5510,10 @@ def system_page_capabilities_check(body: CapabilityCheckIn, user: User = Depends
             "capability": body.capability,
             "action": body.action,
         }
+    if item.get("id") in {"reflectionIntake", "eventStream"}:
+        permissions, actual_project_id = _current_project_capabilities(db, user, project_id)
+        return {"ok": True, "allowed": bool(permissions.get(body.action, False)), "role": user.role,
+                "capability": body.capability, "action": body.action, "permission_scope": "project", "project_id": actual_project_id}
     return {
         "ok": True,
         "allowed": _action_allowed(item, user.role, body.action),

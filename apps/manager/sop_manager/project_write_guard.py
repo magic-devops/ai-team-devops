@@ -332,6 +332,16 @@ def _check_handoff_write(db, table, scope, operation, old, values):
             _deny("handoff_projection_invalid", "Only proven references of this handoff may be projected")
 
 
+def reflection_record_write_scope(db, tenant_id, project_id, receipt_id, attempt_id):
+    """A successful event attempt alone may append this precise record."""
+    return _scope(db, tenant_id, project_id, "reflection_record:" + receipt_id + ":" + attempt_id)
+
+
+def reflection_input_write_scope(db, tenant_id, project_id, input_id):
+    """A canonical selection command alone may append this precise input."""
+    return _scope(db, tenant_id, project_id, "reflection_input:" + input_id)
+
+
 def issue_origin_rebuild_scope(db, tenant_id, project_id):
     """Derived-only origin maintenance, also permitted on archived projects."""
     return _scope(db, tenant_id, project_id, "issue_origin_rebuild")
@@ -720,6 +730,15 @@ def _check_event_write(db, table, scope, operation, old, values):
     if table.name == "ops_issue_sources":
         if operation != "insert" or not _permission(db, scope, "ops_intake:" + str(values.get("source_type")) + ":" + str(values.get("source_id"))):
             _deny("ops_source_immutable", "Only the canonical intake may append a fixed operational source")
+    if table.name in {"reflection_records", "reflection_inputs"}:
+        if operation != "insert":
+            _deny("reflection_immutable", "Reflection facts are append-only")
+        if table.name == "reflection_records":
+            purpose = "reflection_record:" + str(values.get("receipt_id")) + ":" + str(values.get("attempt_id"))
+        else:
+            purpose = "reflection_input:" + str(values.get("id"))
+        if not _permission(db, scope, purpose):
+            _deny("reflection_command_required", "Only the exact canonical operation may append reflection facts")
     if table.name == "issue_event_origins":
         if operation != "insert":
             _deny("event_origin_immutable", "Issue event origins are append-only")

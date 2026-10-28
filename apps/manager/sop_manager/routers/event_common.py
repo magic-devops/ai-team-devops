@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
+from sqlalchemy.orm import defer
 
 from . import sql_models as m
 from .auth_sql import check_project_access
@@ -163,7 +164,7 @@ def processing(row):
 
 
 def inbox(db, project, rid):
-    row = db.scalar(select(m.EventInbox).where(*scope(project, m.EventInbox), m.EventInbox.id == rid))
+    row = db.scalar(select(m.EventInbox).options(defer(m.EventInbox.event_json)).where(*scope(project, m.EventInbox), m.EventInbox.id == rid))
     if row is None:
         fail("event_not_found", "Receipt not found in this project", 404)
     return row

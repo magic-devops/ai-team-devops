@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, ExternalLink, Layers3, Network, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/Card";
+import { CatalogAssessmentCounts } from "@/components/CatalogAssessmentCounts";
+import { assessmentText, isAssessedNumber } from "@/lib/catalogAssessment";
 import { ErrorBlock, LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
@@ -16,7 +19,9 @@ type MicroAppRow = {
   entry: string;
   mode: string;
   status: string;
-  avg_maturity: number;
+  avg_maturity: number | null;
+  assessed_count?: number;
+  unassessed_count?: number;
   module_count: number;
   domain_module_count: number;
   capability_count: number;
@@ -25,18 +30,20 @@ type MicroAppRow = {
     id: string;
     name: string;
     path: string;
-    maturity: number;
+    maturity: number | null;
     capabilities?: string[];
   }>;
 };
 
 function statusClass(status: string) {
+  if (status === "unassessed") return "bg-[var(--surface-muted)] text-[var(--muted)] ring-[var(--border)]";
   if (status === "healthy") return "bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-300";
   if (status === "watch") return "bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-300";
   return "bg-amber-500/10 text-amber-700 ring-amber-500/25 dark:text-amber-300";
 }
 
 export function MicroAppGovernance() {
+  const { t } = useTranslation();
   const authed = Boolean(getToken());
   const appsQ = useQuery({ queryKey: ["systemPagesMicroApps"], queryFn: api.systemPagesMicroApps, enabled: authed });
 
@@ -64,6 +71,7 @@ export function MicroAppGovernance() {
           />
         }
       />
+      <CatalogAssessmentCounts value={summary} />
 
       <div className="grid gap-4 xl:grid-cols-2">
         {apps.map((app) => (
@@ -82,10 +90,11 @@ export function MicroAppGovernance() {
                     </p>
                   </div>
                 </div>
-                <span className={`rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClass(app.status)}`}>
-                  {app.status} · {app.avg_maturity}%
+                <span className={`rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClass(isAssessedNumber(app.avg_maturity) ? app.status : "unassessed")}`}>
+                  {isAssessedNumber(app.avg_maturity) ? `${app.status} · ${assessmentText(app.avg_maturity, t("catalogAssessment.unassessed"), true)}` : t("catalogAssessment.unassessed")}
                 </span>
               </div>
+              <CatalogAssessmentCounts value={app} />
 
               <div className="grid gap-2 sm:grid-cols-4">
                 <div className="rounded-lg bg-[var(--surface-muted)] p-2">
@@ -125,7 +134,7 @@ export function MicroAppGovernance() {
                   >
                     <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--brand)]" />
                     <span className="min-w-0 flex-1 truncate font-medium text-[var(--text)]">{module.name}</span>
-                    <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted)]">{module.maturity}%</span>
+                    <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted)]">{assessmentText(module.maturity, t("catalogAssessment.unassessed"), true)}</span>
                     <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
                   </a>
                 ))}

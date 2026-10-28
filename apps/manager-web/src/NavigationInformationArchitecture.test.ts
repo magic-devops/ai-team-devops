@@ -209,10 +209,10 @@ describe("navigation information architecture", () => {
   });
 
   it("keeps intelligence as a light hub while focused pages own the detailed work", () => {
-    expect(navigationSource).toContain("智能与知识中枢：知识资产、检索记忆、规则蒸馏、运行治理、规约方案和数据上下文分流入口");
+    expect(navigationSource).toContain("智能与知识中枢：知识资产、检索记忆、规则与反思、运行治理、规约方案和数据上下文分流入口");
     expect(navigationSource).toContain('key: "knowledge_assets", path: "#/intelligence/kb"');
     expect(navigationSource).toContain('key: "retrieval_memory", path: "#/intelligence/rag"');
-    expect(navigationSource).toContain('key: "rules_distill", path: "#/intelligence/rules"');
+    expect(navigationSource).toContain('key: "rules_reflections", path: "#/intelligence/rules"');
     expect(navigationSource).toContain('key: "runtime_ops", path: "#/intelligence/worker"');
     expect(navigationSource).toContain('key: "spec_designs", path: "#/intelligence/specs"');
     expect(navigationSource).toContain('key: "data_context", path: "#/data/sources"');

@@ -231,7 +231,7 @@ except Exception as _e:
 
 # ── 新增 M7-M12：可观测性、加密、Key 轮换、WORM、工作流、市场、蒸馏、SSO ──
 for _mod_name in ("audit_chain", "audit_worm", "crypto_box", "key_rotation",
-                  "workflow", "marketplace", "reflection_distill", "sso"):
+                  "workflow", "marketplace", "reflections", "sso"):
     try:
         _imp = __import__(f"sop_manager.routers.{_mod_name}", fromlist=["router"])
         globals()[f"_{_mod_name}"] = _imp
@@ -331,7 +331,7 @@ if _plugin_loader is not None:
 
 # ── M7-M12 子模块 mount ──────────────────────────────────────────
 for _name in ("_audit_chain", "_audit_worm", "_crypto_box", "_key_rotation",
-              "_workflow", "_marketplace", "_reflection_distill", "_sso",
+              "_workflow", "_marketplace", "_reflections", "_sso",
               "_agent_runs", "_data_quality", "_metrics_service", "_tag_service",
               "_data_ingest", "_metadata_management", "_a2a_gateway", "_llm_gateway_v2", "_ops_center"):
     _mod = globals().get(_name)

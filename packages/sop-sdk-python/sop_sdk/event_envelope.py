@@ -245,10 +245,13 @@ def _validate_effect(value):
         "record_upserted",
         "record_deleted",
         "asset_materialized",
+        "reflection_recorded",
     }:
         raise EventProtocolError("invalid effect kind")
-    if value["target_kind"] not in {None, "task", "issue", "requirement", "sprint", "asset", "task_submission"}:
+    if value["target_kind"] not in {None, "task", "issue", "requirement", "sprint", "asset", "reflection", "task_submission"}:
         raise EventProtocolError("invalid effect target kind")
+    if value["target_kind"] == "reflection" and value["kind"] != "reflection_recorded":
+        raise EventProtocolError("reflection target requires a reflection_recorded effect")
     if value["target_kind"] == "task_submission" and value["kind"] != "task_delivery_submitted":
         raise EventProtocolError("submission target requires a submitted report effect")
     _nullable_text(value["target_id"], "effect.target_id")
@@ -328,6 +331,17 @@ def matching_receipts(
                     or processing["handler"] != "task.delivery.submit"
                     or state != "processed" or processing["attempts"] < 1 or processing["processed_at"] is None):
                 raise EventProtocolError("submission effect must identify an actual saved report")
+        if effect is not None and effect["kind"] == "reflection_recorded":
+            processing = item["processing"]
+            if (
+                effect["target_kind"] != "reflection"
+                or effect["target_id"] != receipt_id
+                or processing["handler"] != "reflection.record"
+                or state != "processed"
+                or processing["attempts"] < 1
+                or processing["processed_at"] is None
+            ):
+                raise EventProtocolError("reflection effect must identify its actual successful receipt")
         result[event_id] = DurableReceipt(
             identity,
             event_id,

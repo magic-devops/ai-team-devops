@@ -1,6 +1,7 @@
 import { request } from "./http";
 import { getSessionRevision, USER_KEY } from "./authStorage";
 import { safeIssueOriginReturn } from "./issueOriginRoute";
+import { safeReflectionReturn } from "./reflectionRoute";
 export type EventState = "pending" | "processed" | "failed";
 export type EventProducer = { kind: "user"; id: string };
 export type EventFailure = {
@@ -16,8 +17,9 @@ export type EventEffect = {
     | "issue_created"
     | "record_upserted"
     | "record_deleted"
-    | "asset_materialized";
-  target_kind: "task" | "issue" | "requirement" | "sprint" | "asset" | "task_submission" | null;
+    | "asset_materialized"
+    | "reflection_recorded";
+  target_kind: "task" | "issue" | "requirement" | "sprint" | "asset" | "reflection" | "task_submission" | null;
   target_id: string | null;
 };
 export type EventProcessing = {
@@ -309,6 +311,8 @@ export function eventHash(
     projectId,
   );
   if (issueReturn) params.set("issue_return", issueReturn);
+  const reflectionReturn = safeReflectionReturn(sourceParams.get("reflection_return") || "", projectId);
+  if (reflectionReturn) params.set("reflection_return", reflectionReturn);
   for (const key of Object.values(routeKeys)) {
     const value = sourceParams.get(key);
     if (value) params.set(key, value);
@@ -341,7 +345,7 @@ export function safeEventReturn(
     !projectId ||
     hash.length > 12000 ||
     !/^#\/intelligence\/events(?:\?|$)/.test(hash) ||
-    /[\u0000-\u001f\u007f\\]/.test(hash)
+    /[\u0000-\u001f\u007f-\u009f\\]/.test(hash)
   )
     return null;
   const params = new URLSearchParams(hash.split("?")[1]);
@@ -353,15 +357,17 @@ export function safeEventReturn(
   const allowed = new Set([
     "project_id",
     "issue_return",
+    "reflection_return",
     ...Object.values(routeKeys),
   ]);
   for (const [key, value] of params) {
     if (
       !allowed.has(key) ||
       (key === "issue_return" && !safeIssueOriginReturn(value, projectId)) ||
+      (key === "reflection_return" && !safeReflectionReturn(value, projectId)) ||
       params.getAll(key).length !== 1 ||
       value.length > 4096 ||
-      /[\u0000-\u001f\u007f\\]/.test(value)
+      /[\u0000-\u001f\u007f-\u009f\\]/.test(value)
     )
       return null;
   }

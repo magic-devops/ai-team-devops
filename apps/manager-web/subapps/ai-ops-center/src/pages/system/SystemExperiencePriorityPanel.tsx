@@ -1,6 +1,8 @@
 import { Button, Tag } from "antd";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { isAssessedNumber } from "@/lib/catalogAssessment";
+import { CatalogAssessmentCounts } from "@/components/CatalogAssessmentCounts";
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
@@ -12,9 +14,9 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function weakestExperienceDimension(item: any): [string, any] | null {
-  const entries = Object.entries(item?.dimensions ?? {}) as Array<[string, any]>;
+  const entries = (Object.entries(item?.dimensions ?? {}) as Array<[string, any]>).filter(([, dimension]) => isAssessedNumber(dimension?.score));
   if (!entries.length) return null;
-  return entries.sort((a, b) => Number(a[1]?.score ?? 100) - Number(b[1]?.score ?? 100))[0] ?? null;
+  return entries.sort((a, b) => a[1].score - b[1].score)[0] ?? null;
 }
 
 export function SystemExperiencePriorityPanel({
@@ -40,7 +42,7 @@ export function SystemExperiencePriorityPanel({
 }) {
   const { t } = useTranslation();
   const topExperienceIssues = useMemo(
-    () => rows.filter((item: any) => item.status !== "simple").slice(0, 3),
+    () => rows.filter((item: any) => isAssessedNumber(item.experience_score) && item.status !== "simple").slice(0, 3),
     [rows],
   );
 
@@ -97,7 +99,7 @@ export function SystemExperiencePriorityPanel({
           })}
           {!topExperienceIssues.length ? (
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--muted)] md:col-span-3">
-              {t("page.systemMap.noExperienceRows")}
+              {t(rows.some((item) => !isAssessedNumber(item.experience_score)) ? "catalogAssessment.unassessed" : "page.systemMap.noExperienceRows")}
             </div>
           ) : null}
         </div>
@@ -105,6 +107,7 @@ export function SystemExperiencePriorityPanel({
       <div className="experienceAiChangePack rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
         <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.experienceAiChangePack")}</p>
         <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{agentConsumption?.purpose}</p>
+        <CatalogAssessmentCounts value={summary} />
         <div className="mt-3 space-y-2">
           <Info label="API" value={agentConsumption?.api ?? "/api/v1/system/pages/experience-review"} />
           <Info label={t("page.systemMap.taskApi")} value={agentConsumption?.task_api ?? "/api/v1/system/pages/experience-review/tasks"} />

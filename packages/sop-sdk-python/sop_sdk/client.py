@@ -35,6 +35,8 @@ from .errors import (
     SopServerError,
     SopTransportError,
 )
+from .reflection_intake import reflection_query_params
+from .reflection_ack import REFLECTION_INPUT_ACTION, reflection_input_original, validate_reflection_input_ack
 from .task_submission import submission_command_body
 from .delivery_ack import DeliveryAckError, MAX_ACK_BYTES, OPERATION_ACTIONS, command_original, strict_json, validate_ack
 from .design_original import design_command_body, design_preview_body
@@ -1311,8 +1313,10 @@ class ManagerClient:
 
     def delivery_command(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Caller preserves expected_version and idempotency_key across retries."""
-        if isinstance(body, Mapping) and isinstance(body.get("action"), str) and body["action"] in OPERATION_ACTIONS:
-            original = command_original(body)
+        action = body.get("action") if isinstance(body, Mapping) else None
+        if isinstance(action, str) and (action in OPERATION_ACTIONS or action == REFLECTION_INPUT_ACTION):
+            reflection_input = action == REFLECTION_INPUT_ACTION
+            original = reflection_input_original(body) if reflection_input else command_original(body)
             from .delivery_operations import _context, _frozen_client
 
             client = _frozen_client(self)
@@ -1323,6 +1327,8 @@ class ManagerClient:
                     retry=False, strict_response_limit=MAX_ACK_BYTES)
             except ValueError as exc:
                 raise DeliveryAckError("Manager response is not a complete strict delivery receipt") from exc
+            if reflection_input:
+                return validate_reflection_input_ack(original, ack, project_id=client.project_id)
             return validate_ack(original, ack, project_id=client.project_id)
         return self._request("POST", "/api/v1/delivery/commands", json_body=_delivery_command_body(body))
 
@@ -2113,15 +2119,25 @@ class ManagerClient:
     def intelligence_hub(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/intelligence/hub")
 
-    def reflection_distill(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        return self._request("POST", "/api/v1/reflections/distill", json_body=dict(body))
+    def reflections(
+        self, *, category: str = "", occurred_from: str = "", occurred_to: str = "",
+        limit: int = 20, cursor: str = "",
+    ) -> dict[str, Any]:
+        """Read one fixed directory window; collection metadata is not acceptance evidence."""
+        params = reflection_query_params(limit=limit, cursor=cursor, category=category,
+                                         occurred_from=occurred_from, occurred_to=occurred_to)
+        return self._request("GET", "/api/v1/reflections", params=params)
 
-    def reflection_proposals(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        r = self._request("GET", "/api/v1/reflections/proposals", params={"limit": limit})
-        return r if isinstance(r, list) else []
+    def reflection(self, reflection_id: str) -> dict[str, Any]:
+        """Read this exact original independently of the current directory page."""
+        return self._request("GET", f"/api/v1/reflections/{_resource_segment(reflection_id)}")
 
-    def reflection_review_proposal(self, proposal_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
-        return self._request("POST", f"/api/v1/reflections/proposals/{proposal_id}/review", json_body=dict(body))
+    def reflection_inputs(self, *, limit: int = 20, cursor: str = "") -> dict[str, Any]:
+        return self._request("GET", "/api/v1/reflections/inputs",
+                             params=reflection_query_params(limit=limit, cursor=cursor))
+
+    def reflection_input(self, input_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/reflections/inputs/{_resource_segment(input_id)}")
 
     def sync_pull(
         self,

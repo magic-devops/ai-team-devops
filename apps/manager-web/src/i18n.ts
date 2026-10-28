@@ -1,4 +1,6 @@
 import { eventReceiptTranslations } from "./i18n/event-receipts";
+import { reflectionTranslations } from "./i18n/reflections";
+import { catalogAssessmentTranslations } from "./i18n/catalog-assessment";
 import { externalWorkOrderNavigation, externalWorkOrderPages } from "./i18n/external-work-orders";
 import { assetSyncTranslations } from "./i18n/asset-sync";
 import { deliveryDiscussionTranslations } from "./i18n/delivery-discussion";
@@ -85,6 +87,8 @@ i18n
           deliveryAttention: deliveryAttentionTranslations["zh-CN"],
           deliveryDiscussion: deliveryDiscussionTranslations["zh-CN"],
           eventReceipts: eventReceiptTranslations["zh-CN"],
+          reflections: reflectionTranslations["zh-CN"],
+          catalogAssessment: catalogAssessmentTranslations["zh-CN"],
           assetSync: assetSyncTranslations["zh-CN"],
           deliveryManualReview: manualReviewTranslations["zh-CN"],
           deliverySchedule: schedulingTranslations["zh-CN"],
@@ -127,6 +131,8 @@ i18n
           deliveryAttention: deliveryAttentionTranslations["en-US"],
           deliveryDiscussion: deliveryDiscussionTranslations["en-US"],
           eventReceipts: eventReceiptTranslations["en-US"],
+          reflections: reflectionTranslations["en-US"],
+          catalogAssessment: catalogAssessmentTranslations["en-US"],
           assetSync: assetSyncTranslations["en-US"],
           deliveryManualReview: manualReviewTranslations["en-US"],
           deliverySchedule: schedulingTranslations["en-US"],
@@ -169,6 +175,8 @@ i18n
           deliveryAttention: deliveryAttentionTranslations["ja-JP"],
           deliveryDiscussion: deliveryDiscussionTranslations["ja-JP"],
           eventReceipts: eventReceiptTranslations["ja-JP"],
+          reflections: reflectionTranslations["ja-JP"],
+          catalogAssessment: catalogAssessmentTranslations["ja-JP"],
           assetSync: assetSyncTranslations["ja-JP"],
           deliveryManualReview: manualReviewTranslations["ja-JP"],
           deliverySchedule: schedulingTranslations["ja-JP"],

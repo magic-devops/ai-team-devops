@@ -3,6 +3,7 @@ import { projectSessionKey } from "./projectPortfolio";
 import { request } from "./http";
 import { fetchTaskDetail, fetchRequirementDetail } from "./deliveryQuery";
 import { fetchDeliveryIssue } from "./deliveryIssue";
+import { fetchReflection } from "./reflectionReads";
 import {
   eventProblem,
   eventRetryDraftKey,
@@ -63,6 +64,19 @@ export async function eventTargetHref(
   const target = effect.target_id;
   if (!target) throw new Error("event_target_unavailable");
   const params = new URLSearchParams({ project_id: projectId });
+  if (effect.kind === "reflection_recorded" && effect.target_kind === "reflection") {
+    const value = await fetchReflection(projectId, target, signal);
+    if (!value.available || value.reflection.id !== target) throw new Error("event_target_unavailable");
+    params.set("reflection_receipt", target);
+    const back = safeEventReturn(background, projectId);
+    // A return from Events may itself contain a Reflection return; strip it to avoid loops.
+    if (back) {
+      const clean = new URLSearchParams(back.split("?")[1]);
+      clean.delete("reflection_return");
+      params.set("event_return", "#/intelligence/events?" + clean);
+    }
+    return "#/intelligence/reflections?" + params;
+  }
   let taskTarget = effect.target_kind === "task" ? target : undefined;
   if (effect.kind === "task_delivery_submitted" && effect.target_kind === "task_submission") {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(target))

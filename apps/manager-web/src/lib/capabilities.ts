@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
-import { getToken } from "./authStorage";
+import { getProjectId, getToken } from "./authStorage";
+import { projectSessionKey } from "./projectPortfolio";
 
 export type CapabilityAction = "read" | "write" | "admin";
 
@@ -19,6 +20,8 @@ export type CapabilitySubmodule = {
 };
 
 export type CapabilityGrant = {
+  permission_scope?: "global" | "project";
+  project_id?: string | null;
   id?: string;
   name?: string;
   domain?: string;
@@ -51,6 +54,7 @@ export function capabilityAllowed(
   if (!grant) return false;
   if (typeof grant.allowed?.[action] === "boolean")
     return Boolean(grant.allowed[action]);
+  if (grant.permission_scope === "project") return false;
   if (grant.source === "action")
     return Object.values(grant.allowed ?? {}).some(Boolean);
   return (grant.permission?.[action] ?? []).includes(role);
@@ -64,6 +68,7 @@ export function capabilityReadOnly(
 ): boolean {
   if (status !== "success" || !grant) return false;
   if (typeof grant.allowed?.write === "boolean") return !grant.allowed.write;
+  if (grant.permission_scope === "project") return false;
   if (Array.isArray(grant.permission?.write))
     return !grant.permission.write.includes(role);
   return false;
@@ -72,8 +77,10 @@ export function capabilityReadOnly(
 function actionGrantAllowed(
   action: CapabilitySubmoduleAction,
   role: string,
+  parent: CapabilityGrant,
 ): Partial<Record<CapabilityAction, boolean>> {
-  return { [action.id]: (action.roles ?? []).includes(role) };
+  const allowed = parent.allowed?.[action.id];
+  return { [action.id]: typeof allowed === "boolean" ? allowed : parent.permission_scope === "project" ? false : (action.roles ?? []).includes(role) };
 }
 
 function actionGrantPermission(
@@ -85,9 +92,11 @@ function actionGrantPermission(
 export function flattenCapabilityGrants(
   items: CapabilityGrant[],
   role: string,
+  projectId = "",
 ): CapabilityGrant[] {
   const grants: CapabilityGrant[] = [];
   for (const item of items) {
+    if (item.permission_scope === "project" && (!projectId || item.project_id !== projectId)) continue;
     grants.push({ ...item, source: item.source ?? "module" });
     for (const action of item.actions ?? []) {
       grants.push({
@@ -100,7 +109,9 @@ export function flattenCapabilityGrants(
         parent_capability: item.capability,
         action_id: action.id,
         permission: actionGrantPermission(action),
-        allowed: actionGrantAllowed(action, role),
+        allowed: actionGrantAllowed(action, role, item),
+        permission_scope: item.permission_scope,
+        project_id: item.project_id,
         visible: item.visible,
         source: "action",
       });
@@ -116,6 +127,8 @@ export function flattenCapabilityGrants(
         parent_capability: item.capability,
         permission: item.permission,
         allowed: item.allowed,
+        permission_scope: item.permission_scope,
+        project_id: item.project_id,
         visible: item.visible,
         source: "submodule",
       });
@@ -130,7 +143,9 @@ export function flattenCapabilityGrants(
           parent_capability: submodule.capability,
           action_id: action.id,
           permission: actionGrantPermission(action),
-          allowed: actionGrantAllowed(action, role),
+          allowed: actionGrantAllowed(action, role, item),
+          permission_scope: item.permission_scope,
+          project_id: item.project_id,
           visible: item.visible,
           source: "action",
         });
@@ -142,30 +157,34 @@ export function flattenCapabilityGrants(
 
 export function useCapabilities() {
   const authed = Boolean(getToken());
+  const projectId = getProjectId() || "", session = projectSessionKey();
   const query = useQuery({
-    queryKey: ["systemPagesCapabilitiesMe"],
+    queryKey: ["systemPagesCapabilitiesMe", projectId, session],
     queryFn: api.systemPagesCapabilitiesMe,
     enabled: authed,
     retry: false,
   });
-  const rawItems = (query.data?.items ?? []) as CapabilityGrant[];
-  const role = String(query.data?.role || "");
-  const items = flattenCapabilityGrants(rawItems, role);
+  const data = authed && !query.error && query.status === "success" ? query.data : undefined;
+  const rawItems = ((data?.items ?? []) as CapabilityGrant[]).filter((item) => item.permission_scope !== "project" || !!projectId && item.project_id === projectId);
+  const role = String(data?.role || "");
+  const items = flattenCapabilityGrants(rawItems, role, projectId);
   const get = (capability: string) =>
     items.find((item) => item.capability === capability);
   const can = (capability: string, action: CapabilityAction = "read") =>
     capabilityAllowed(get(capability), action, role);
   return {
     ...query,
+    data,
     role,
     rawItems,
     items,
     visibleItems: flattenCapabilityGrants(
-      (query.data?.visible_items ??
+      (data?.visible_items ??
         rawItems.filter((item) => item.visible !== false)) as CapabilityGrant[],
       role,
+      projectId,
     ),
-    summary: query.data?.summary ?? {},
+    summary: data?.summary ?? {},
     get,
     can,
   };

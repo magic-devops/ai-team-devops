@@ -3920,7 +3920,7 @@ paths:
         grants authority.
       operationId: sync_push_api_v1_sync_push_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - $ref: '#/components/parameters/RequiredBusinessProjectId'
       requestBody:
@@ -9577,6 +9577,196 @@ paths:
         write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
         projects remain readable.
 
+  "/api/v1/reflections":
+    "get":
+      "tags": ["reflections"]
+      "operationId": "listReflections"
+      "description": "Fixed SQL window of collected facts. Total includes restricted metadata shells, not readable originals. No business writes or schema repair."
+      "security":
+        -
+          "bearerAuth": []
+        -
+          "apiKeyAuth": []
+          "sopTimestamp": []
+          "sopNonce": []
+          "sopSignature": []
+      "parameters":
+        -
+          "$ref": "#/components/parameters/RequiredBusinessProjectId"
+        -
+          "name": "category"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "enum": ["coding", "testing", "security", "workflow", "review", "other"]
+        -
+          "name": "occurred_from"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 64
+        -
+          "name": "occurred_to"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 64
+        -
+          "name": "limit"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "cursor"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 4000
+      "responses":
+        "200":
+          "description": "Read-only authorized projection"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ReflectionPage"
+        "403":
+          "description": "Current source or runtime permission denied; no prior original is returned"
+        "404":
+          "description": "Exact authorized resource not found"
+        "422":
+          "description": "Invalid filters, identity or fixed-window cursor"
+        "503":
+          "description": "Required storage schema or runtime unavailable; never represented as an empty pool"
+  "/api/v1/reflections/inputs":
+    "get":
+      "tags": ["reflections"]
+      "operationId": "listReflectionInputs"
+      "description": "Bounded prepared input directory; prepared does not mean a model or rule application ran."
+      "security":
+        -
+          "bearerAuth": []
+        -
+          "apiKeyAuth": []
+          "sopTimestamp": []
+          "sopNonce": []
+          "sopSignature": []
+      "parameters":
+        -
+          "$ref": "#/components/parameters/RequiredBusinessProjectId"
+        -
+          "name": "limit"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "cursor"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 4000
+      "responses":
+        "200":
+          "description": "Read-only authorized projection"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ReflectionInputsPage"
+        "403":
+          "description": "Current source or runtime permission denied; no prior original is returned"
+        "404":
+          "description": "Exact authorized resource not found"
+        "422":
+          "description": "Invalid filters, identity or fixed-window cursor"
+        "503":
+          "description": "Required storage schema or runtime unavailable; never represented as an empty pool"
+  "/api/v1/reflections/inputs/{input_id}":
+    "get":
+      "tags": ["reflections"]
+      "operationId": "getReflectionInput"
+      "description": "Exact immutable manifest with current per-source availability; frozen ACL protects the entire manifest."
+      "security":
+        -
+          "bearerAuth": []
+        -
+          "apiKeyAuth": []
+          "sopTimestamp": []
+          "sopNonce": []
+          "sopSignature": []
+      "parameters":
+        -
+          "$ref": "#/components/parameters/RequiredBusinessProjectId"
+        -
+          "name": "input_id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+      "responses":
+        "200":
+          "description": "Read-only authorized projection"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ReflectionInputDetail"
+        "403":
+          "description": "Current source or runtime permission denied; no prior original is returned"
+        "404":
+          "description": "Exact authorized resource not found"
+        "422":
+          "description": "Invalid filters, identity or fixed-window cursor"
+        "503":
+          "description": "Required storage schema or runtime unavailable; never represented as an empty pool"
+  "/api/v1/reflections/{reflection_id}":
+    "get":
+      "tags": ["reflections"]
+      "operationId": "getReflection"
+      "description": "Exact collected original, server identity facts and current source links. Denied or unavailable originals never fall back to stale raw text."
+      "security":
+        -
+          "bearerAuth": []
+        -
+          "apiKeyAuth": []
+          "sopTimestamp": []
+          "sopNonce": []
+          "sopSignature": []
+      "parameters":
+        -
+          "$ref": "#/components/parameters/RequiredBusinessProjectId"
+        -
+          "name": "reflection_id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+      "responses":
+        "200":
+          "description": "Read-only authorized projection"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/ReflectionDetail"
+        "403":
+          "description": "Current source or runtime permission denied; no prior original is returned"
+        "404":
+          "description": "Exact authorized resource not found"
+        "422":
+          "description": "Invalid filters, identity or fixed-window cursor"
+        "503":
+          "description": "Required storage schema or runtime unavailable; never represented as an empty pool"
+
   /api/v1/events:identity:
     get:
       tags:
@@ -9584,7 +9774,7 @@ paths:
       summary: Identity
       operationId: identity_api_v1_events_identity_get
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - $ref: '#/components/parameters/RequiredBusinessProjectId'
       responses:
@@ -9609,7 +9799,7 @@ paths:
       summary: Ingest
       operationId: ingest_api_v1_events_ingest_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - $ref: '#/components/parameters/RequiredBusinessProjectId'
       requestBody:
@@ -9640,7 +9830,7 @@ paths:
       summary: List Events
       operationId: list_events_api_v1_events_get
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - $ref: '#/components/parameters/RequiredBusinessProjectId'
       - name: state
@@ -9710,7 +9900,7 @@ paths:
       summary: Event Detail
       operationId: event_detail_api_v1_events__receipt_id__get
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - $ref: '#/components/parameters/RequiredBusinessProjectId'
       - name: receipt_id
@@ -9741,7 +9931,7 @@ paths:
       summary: Event Attempts
       operationId: event_attempts_api_v1_events__receipt_id__attempts_get
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - $ref: '#/components/parameters/RequiredBusinessProjectId'
       - name: receipt_id
@@ -9789,7 +9979,7 @@ paths:
       summary: Retry Event
       operationId: retry_event_api_v1_events__receipt_id__retry_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - $ref: '#/components/parameters/RequiredBusinessProjectId'
       - name: receipt_id
@@ -14141,6 +14331,7 @@ components:
           - milestone.save
           - requirement.create
           - requirement.update
+          - reflection.input.create
           - task.create
           - task.update
           - task.manual_review
@@ -14202,6 +14393,16 @@ components:
           description: Explicit fixed discussion conclusion used as provenance. Only the five adoption actions allow a non-null
             value; business payload/CAS/acceptance gates still apply.
       allOf:
+      -
+        "if":
+          "properties":
+            "action":
+              "const": "reflection.input.create"
+          "required": ["action"]
+        "then":
+          "properties":
+            "payload":
+              "$ref": "#/components/schemas/ReflectionInputCreate"
       - if:
           properties:
             action:
@@ -26645,6 +26846,8 @@ components:
           enum:
           - fact_recorded
           - task_updated
+          - task_delivery_submitted
+          - reflection_recorded
           - issue_created
           - record_upserted
           - record_deleted
@@ -26659,6 +26862,8 @@ components:
             - requirement
             - sprint
             - asset
+            - task_submission
+            - reflection
           - type: 'null'
           title: Target Kind
         target_id:
@@ -29948,3 +30153,386 @@ components:
         ],
         "title": "ReleaseSourcePacketResponse"
       }
+
+    "ReflectionReference":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "kind":
+          "type": "string"
+          "enum": ["task", "execution"]
+        "id":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 200
+      "required": ["kind", "id"]
+    "ReflectionData":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "schema_version":
+          "type": "integer"
+          "const": 1
+        "category":
+          "type": "string"
+          "enum": ["coding", "testing", "security", "workflow", "review", "other"]
+        "title":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 160
+        "observation":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 12000
+        "lesson":
+          "type": "string"
+          "default": ""
+          "maxLength": 8000
+        "references":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/ReflectionReference"
+          "maxItems": 8
+          "default": []
+      "required": ["schema_version", "category", "title", "observation"]
+      "description": "Producer claims, not acceptance evidence. schema_version rejects booleans; title/observation must be nonblank UTF-8. References are unique, trimmed stable IDs: task max64, execution max200; no controls or slashes."
+    "ReflectionSelectionReference":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "reflection_id":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 64
+        "source_digest":
+          "type": "string"
+          "pattern": "^[a-f0-9]{64}$"
+        "attempt_id":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 64
+      "required": ["reflection_id", "source_digest", "attempt_id"]
+    "ReflectionInputCreate":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "title":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 160
+        "rationale":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 2000
+        "sources":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/ReflectionSelectionReference"
+          "minItems": 1
+          "maxItems": 32
+      "required": ["title", "rationale", "sources"]
+      "description": "Explicit ordered unique sources only. Current exact identities and source ACL are rechecked atomically; raw source limits are 64KiB each and 2MiB total. Unknown results replay the identical original command."
+    "ReflectionPermissions":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "read":
+          "type": "boolean"
+        "collect":
+          "type": "boolean"
+        "prepare":
+          "type": "boolean"
+      "required": ["read", "collect", "prepare"]
+    "ReflectionProducer":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "id":
+          "type": "string"
+        "name":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+      "required": ["id", "name"]
+    "ReflectionSummary":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "id":
+          "type": "string"
+        "category":
+          "type": "string"
+          "enum": ["coding", "testing", "security", "workflow", "review", "other"]
+        "occurred_at":
+          "type": "string"
+        "collected_at":
+          "type": "string"
+        "producer":
+          "$ref": "#/components/schemas/ReflectionProducer"
+        "reference_count":
+          "type": "integer"
+        "intake_status":
+          "type": "string"
+          "const": "collected"
+        "original_status":
+          "type": "string"
+          "enum": ["not_loaded", "available", "restricted", "unavailable"]
+        "unavailable_reason":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+      "required": ["id", "category", "occurred_at", "collected_at", "producer", "reference_count", "intake_status", "original_status", "unavailable_reason"]
+    "ReflectionStatement":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "category":
+          "type": "string"
+          "enum": ["coding", "testing", "security", "workflow", "review", "other"]
+        "title":
+          "type": "string"
+        "observation":
+          "type": "string"
+        "lesson":
+          "type": "string"
+        "claimed_occurred_at":
+          "type": "string"
+      "required": ["category", "title", "observation", "lesson", "claimed_occurred_at"]
+    "ReflectionSource":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "receipt_id":
+          "type": "string"
+        "event_id":
+          "type": "string"
+        "digest":
+          "type": "string"
+          "pattern": "^[a-f0-9]{64}$"
+        "producer_id":
+          "type": "string"
+        "stored_at":
+          "type": "string"
+        "event_json":
+          "type": "string"
+      "required": ["receipt_id", "event_id", "digest", "producer_id", "stored_at", "event_json"]
+    "ReflectionVerified":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "attempt_id":
+          "type": "string"
+        "handler":
+          "type": "string"
+          "const": "reflection.record"
+        "collected_at":
+          "type": "string"
+        "identity_and_references_checked":
+          "type": "boolean"
+          "const": true
+        "is_acceptance_evidence":
+          "type": "boolean"
+          "const": false
+      "required": ["attempt_id", "handler", "collected_at", "identity_and_references_checked", "is_acceptance_evidence"]
+    "ReflectionLink":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "kind":
+          "type": "string"
+          "enum": ["task", "execution"]
+        "id":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+        "label":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+        "available":
+          "type": "boolean"
+        "reason":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+      "required": ["kind", "id", "label", "available", "reason"]
+    "ReflectionDetail":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "project_id":
+          "type": "string"
+        "as_of":
+          "type": "string"
+        "reflection":
+          "$ref": "#/components/schemas/ReflectionSummary"
+        "available":
+          "type": "boolean"
+        "unavailable_reason":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+        "statement":
+          "anyOf":
+            -
+              "$ref": "#/components/schemas/ReflectionStatement"
+            -
+              "type": "null"
+        "source":
+          "anyOf":
+            -
+              "$ref": "#/components/schemas/ReflectionSource"
+            -
+              "type": "null"
+        "verified":
+          "anyOf":
+            -
+              "$ref": "#/components/schemas/ReflectionVerified"
+            -
+              "type": "null"
+        "links":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/ReflectionLink"
+        "selection_reference":
+          "anyOf":
+            -
+              "$ref": "#/components/schemas/ReflectionSelectionReference"
+            -
+              "type": "null"
+      "required": ["project_id", "as_of", "reflection", "available", "unavailable_reason", "statement", "source", "verified", "links", "selection_reference"]
+    "ReflectionInputSummary":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "id":
+          "type": "string"
+        "title":
+          "type": "string"
+        "status":
+          "type": "string"
+          "const": "prepared"
+        "source_count":
+          "type": "integer"
+        "created_at":
+          "type": "string"
+        "created_by":
+          "$ref": "#/components/schemas/ReflectionProducer"
+        "source_version":
+          "type": "integer"
+      "required": ["id", "title", "status", "source_count", "created_at", "created_by", "source_version"]
+    "ReflectionInputSource":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "reflection_id":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 64
+        "source_digest":
+          "type": "string"
+          "pattern": "^[a-f0-9]{64}$"
+        "attempt_id":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 64
+        "available":
+          "type": "boolean"
+        "unavailable_reason":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+      "required": ["reflection_id", "source_digest", "attempt_id", "available", "unavailable_reason"]
+    "ReflectionInputDetail":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "project_id":
+          "type": "string"
+        "as_of":
+          "type": "string"
+        "input":
+          "$ref": "#/components/schemas/ReflectionInputSummary"
+        "rationale":
+          "type": "string"
+        "manifest_digest":
+          "type": "string"
+          "pattern": "^[a-f0-9]{64}$"
+        "sources":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/ReflectionInputSource"
+        "available":
+          "type": "boolean"
+        "is_acceptance_evidence":
+          "type": "boolean"
+          "const": false
+      "required": ["project_id", "as_of", "input", "rationale", "manifest_digest", "sources", "available", "is_acceptance_evidence"]
+    "ReflectionPage":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "project_id":
+          "type": "string"
+        "as_of":
+          "type": "string"
+        "total":
+          "type": "integer"
+        "limit":
+          "type": "integer"
+        "has_more":
+          "type": "boolean"
+        "next_cursor":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+        "permissions":
+          "$ref": "#/components/schemas/ReflectionPermissions"
+        "items":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/ReflectionSummary"
+      "required": ["project_id", "as_of", "total", "limit", "has_more", "next_cursor", "permissions", "items"]
+    "ReflectionInputsPage":
+      "type": "object"
+      "additionalProperties": false
+      "properties":
+        "project_id":
+          "type": "string"
+        "as_of":
+          "type": "string"
+        "total":
+          "type": "integer"
+        "limit":
+          "type": "integer"
+        "has_more":
+          "type": "boolean"
+        "next_cursor":
+          "anyOf":
+            -
+              "type": "string"
+            -
+              "type": "null"
+        "permissions":
+          "$ref": "#/components/schemas/ReflectionPermissions"
+        "items":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/ReflectionInputSummary"
+      "required": ["project_id", "as_of", "total", "limit", "has_more", "next_cursor", "permissions", "items"]

@@ -5,6 +5,8 @@ import { Activity, Archive, ArrowRight, CheckCircle2, FileDown, GitBranch, Layer
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
+import { CatalogAssessmentCounts } from "@/components/CatalogAssessmentCounts";
+import { assessmentText, isAssessedNumber } from "@/lib/catalogAssessment";
 import { ErrorBlock, LoadingBlock, NeedLogin } from "@/components/PageStates";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
@@ -33,7 +35,9 @@ type SystemMapSection =
   | "migration";
 type ContractPanel = "manifest" | "capabilities" | "actions";
 
-function MaturityBar({ value }: { value: number }) {
+function MaturityBar({ value }: { value: unknown }) {
+  const { t } = useTranslation();
+  if (!isAssessedNumber(value)) return <span className="text-xs text-[var(--muted)]">{t("catalogAssessment.unassessed")}</span>;
   const tone = value >= 80 ? "bg-emerald-500" : value >= 60 ? "bg-amber-500" : "bg-rose-500";
   return (
     <div className="flex items-center gap-2">
@@ -735,7 +739,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
       title: t("page.systemMap.maturity"),
       dataIndex: "maturity",
       width: 160,
-      render: (value) => <MaturityBar value={Number(value ?? 0)} />,
+      render: (value) => <MaturityBar value={value} />,
     },
     {
       title: t("page.systemMap.next"),
@@ -775,7 +779,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
       title: t("page.systemMap.maturity"),
       dataIndex: "maturity",
       width: 160,
-      render: (value) => <MaturityBar value={Number(value ?? 0)} />,
+      render: (value) => <MaturityBar value={value} />,
     },
     {
       title: t("page.systemMap.next"),
@@ -802,7 +806,8 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
       title: t("page.systemMap.experienceStatus"),
       dataIndex: "status",
       width: 130,
-      render: (value) => {
+      render: (value, row) => {
+        if (!isAssessedNumber(row.experience_score)) return <Tag>{t("catalogAssessment.unassessed")}</Tag>;
         const statusValue = String(value || "complex");
         const color = statusValue === "simple" ? "green" : statusValue === "watch" ? "gold" : "red";
         return <Tag color={color}>{t(`page.systemMap.experienceStatusValue.${statusValue}`)}</Tag>;
@@ -814,7 +819,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
       width: 120,
       render: (value, row) => (
         <div>
-          <p className="font-mono text-sm font-semibold text-[var(--brand)]">{value}</p>
+          <p className="font-mono text-sm font-semibold text-[var(--muted-strong)]">{assessmentText(value, t("catalogAssessment.unassessed"))}</p>
           <p className="text-[11px] text-[var(--muted)]">{row.implementation_contract?.api_count ?? 0} API</p>
         </div>
       ),
@@ -822,14 +827,14 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     {
       title: t("page.systemMap.experienceDimensions"),
       dataIndex: "dimensions",
-      render: (value) => (
+      render: (value, row) => !isAssessedNumber(row.experience_score) ? <Tag>{t("catalogAssessment.unassessed")}</Tag> : (
         <Space size={[4, 4]} wrap>
           {Object.entries(value ?? {}).slice(0, 6).map(([key, dim]: [string, any]) => {
             const statusValue = String(dim.status || "complex");
-            const color = statusValue === "simple" ? "green" : statusValue === "watch" ? "gold" : "red";
+            const color = !isAssessedNumber(dim.score) ? undefined : statusValue === "simple" ? "green" : statusValue === "watch" ? "gold" : "red";
             return (
               <Tag key={key} color={color}>
-                {t(`page.systemMap.experienceDimension.${key}`)} {dim.score}
+                {t(`page.systemMap.experienceDimension.${key}`)} {assessmentText(dim.score, t("catalogAssessment.unassessed"))}
               </Tag>
             );
           })}
@@ -839,7 +844,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     {
       title: t("page.systemMap.recommendation"),
       dataIndex: "recommendations",
-      render: (value) => (
+      render: (value, row) => !isAssessedNumber(row.experience_score) ? <span className="text-xs text-[var(--muted)]">{t("catalogAssessment.unassessed")}</span> : (
         <div className="max-w-lg space-y-1">
           {(value ?? []).slice(0, 2).map((item: string, index: number) => (
             <p key={`${item}-${index}`} className="line-clamp-1 text-xs text-[var(--muted-strong)]">{item}</p>
@@ -947,9 +952,9 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
 
       {showOverview ? (
       <div className="grid gap-3 md:grid-cols-3">
-        <SummaryTile label={t("page.systemMap.reactPages")} value={q.data?.summary?.react?.total ?? 0} sub={`${q.data?.summary?.react?.avg_maturity ?? 0}%`} />
-        <SummaryTile label={t("page.systemMap.legacyPages")} value={q.data?.summary?.legacy?.total ?? 0} sub={`${q.data?.summary?.legacy?.avg_maturity ?? 0}%`} />
-        <SummaryTile label={t("page.systemMap.allPages")} value={q.data?.summary?.all?.total ?? 0} sub={`${q.data?.summary?.all?.avg_maturity ?? 0}%`} />
+        <SummaryTile label={t("page.systemMap.reactPages")} value={q.data?.summary?.react?.total ?? 0} sub={assessmentText(q.data?.summary?.react?.avg_maturity, t("catalogAssessment.unassessed"), true)} assessment={q.data?.summary?.react} />
+        <SummaryTile label={t("page.systemMap.legacyPages")} value={q.data?.summary?.legacy?.total ?? 0} sub={assessmentText(q.data?.summary?.legacy?.avg_maturity, t("catalogAssessment.unassessed"), true)} assessment={q.data?.summary?.legacy} />
+        <SummaryTile label={t("page.systemMap.allPages")} value={q.data?.summary?.all?.total ?? 0} sub={assessmentText(q.data?.summary?.all?.avg_maturity, t("catalogAssessment.unassessed"), true)} assessment={q.data?.summary?.all} />
       </div>
       ) : null}
 
@@ -1617,9 +1622,10 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
             <p className="text-xs text-[var(--muted)]">{t("page.systemMap.readinessScore")}</p>
             <div className="mt-2 flex items-end gap-2">
-              <span className="text-4xl font-semibold text-[var(--text)]">{readinessQ.data?.summary?.avg_score ?? 0}</span>
-              <span className="pb-1 text-sm text-[var(--muted)]">/ 100</span>
+              <span className="text-4xl font-semibold text-[var(--text)]">{assessmentText(readinessQ.data?.summary?.avg_score, t("catalogAssessment.unassessed"))}</span>
+              {isAssessedNumber(readinessQ.data?.summary?.avg_score) && <span className="pb-1 text-sm text-[var(--muted)]">/ 100</span>}
             </div>
+            <CatalogAssessmentCounts value={readinessQ.data?.summary} />
             <p className="mt-3 text-xs leading-5 text-[var(--muted)]">{readinessQ.data?.agent_consumption?.purpose}</p>
             <div className="mt-4 grid grid-cols-3 gap-2">
               <Metric label={t("page.systemMap.readinessComplete")} value={readinessQ.data?.summary?.complete ?? 0} />
@@ -1630,8 +1636,8 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
               <Segmented
                 value={readinessStatus}
                 onChange={(value) => setReadinessStatus(value as string)}
-                options={["all", "complete", "watch", "risk"].map((value) => ({
-                  label: t(`page.systemMap.readinessStatus.${value}`),
+                options={["all", "unassessed", "complete", "watch", "risk"].map((value) => ({
+                  label: value === "unassessed" ? t("catalogAssessment.unassessed") : t(`page.systemMap.readinessStatus.${value}`),
                   value,
                 }))}
               />
@@ -1676,7 +1682,8 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                   }`}
                 >
                   <p className="truncate text-xs font-semibold text-[var(--text)]">{item.domain_name}</p>
-                  <p className="mt-1 font-mono text-lg font-semibold text-[var(--brand)]">{item.avg_score}</p>
+                  <p className="mt-1 font-mono text-lg font-semibold text-[var(--muted-strong)]">{assessmentText(item.avg_score, t("catalogAssessment.unassessed"))}</p>
+                  <CatalogAssessmentCounts value={item} />
                   <p className="mt-1 text-[11px] text-[var(--muted)]">
                     {t("page.systemMap.readinessDomainHint", { complete: item.complete, watch: item.watch, risk: item.risk })}
                   </p>
@@ -1707,12 +1714,13 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                 <div className="flex flex-wrap items-center gap-2">
                   <Metric label={t("page.systemMap.experienceSimple")} value={experienceReviewQ.data?.summary?.simple ?? 0} />
                   <Metric label={t("page.systemMap.experienceNeedsWork")} value={experienceReviewQ.data?.summary?.needs_simplification ?? 0} />
-                  <Metric label={t("page.systemMap.experienceAvgScore")} value={experienceReviewQ.data?.summary?.avg_experience_score ?? 0} />
+                  <Metric label={t("page.systemMap.experienceAvgScore")} value={assessmentText(experienceReviewQ.data?.summary?.avg_experience_score, t("catalogAssessment.unassessed"))} />
+                  <CatalogAssessmentCounts value={experienceReviewQ.data?.summary} />
                   <Segmented
                     value={experienceStatus}
                     onChange={(value) => setExperienceStatus(value as string)}
-                    options={["all", "simple", "watch", "complex"].map((value) => ({
-                      label: t(`page.systemMap.experienceStatusValue.${value}`),
+                    options={["all", "unassessed", "simple", "watch", "complex"].map((value) => ({
+                      label: value === "unassessed" ? t("catalogAssessment.unassessed") : t(`page.systemMap.experienceStatusValue.${value}`),
                       value,
                     }))}
                   />
@@ -1816,21 +1824,21 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                   </div>
                   <div>
                     <span className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${
-                      item.status === "complete"
+                      !isAssessedNumber(item.readiness_score) ? "bg-[var(--surface-muted)] text-[var(--muted)]" : item.status === "complete"
                         ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
                         : item.status === "watch"
                           ? "bg-amber-500/10 text-amber-700 dark:text-amber-200"
                           : "bg-rose-500/10 text-rose-700 dark:text-rose-200"
                     }`}>
-                      {t(`page.systemMap.readinessStatus.${item.status}`)}
+                      {isAssessedNumber(item.readiness_score) ? t(`page.systemMap.readinessStatus.${item.status}`) : t("catalogAssessment.unassessed")}
                     </span>
-                    <p className="mt-2 font-mono text-sm font-semibold text-[var(--brand)]">{item.readiness_score}</p>
+                    <p className="mt-2 font-mono text-sm font-semibold text-[var(--muted-strong)]">{assessmentText(item.readiness_score, t("catalogAssessment.unassessed"))}</p>
                   </div>
                   <div className="grid gap-1">
-                    {Object.entries(item.dimensions ?? {}).map(([key, value]: [string, any]) => (
+                    {!isAssessedNumber(item.readiness_score) ? <span className="text-[var(--muted)]">{t("catalogAssessment.unassessed")}</span> : Object.entries(item.dimensions ?? {}).map(([key, value]: [string, any]) => (
                       <div key={key} className="flex items-center justify-between gap-2 rounded-md bg-[var(--surface-muted)] px-2 py-1">
                         <span className="text-[var(--muted)]">{t(`page.systemMap.readinessDimension.${key}`)}</span>
-                        <span className="font-mono font-semibold text-[var(--text)]">{value.score}</span>
+                        <span className="font-mono font-semibold text-[var(--text)]">{assessmentText(value.score, t("catalogAssessment.unassessed"))}</span>
                       </div>
                     ))}
                   </div>
@@ -1840,7 +1848,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                         <span className="font-mono text-[var(--muted-strong)]">{gap.dimension}</span> · {gap.detail}
                       </p>
                     ))}
-                    {!(item.gaps ?? []).length ? <p className="text-emerald-600 dark:text-emerald-300">{t("page.systemMap.noReadinessGaps")}</p> : null}
+                    {!(item.gaps ?? []).length ? <p className={isAssessedNumber(item.readiness_score) ? "text-emerald-600 dark:text-emerald-300" : "text-[var(--muted)]"}>{t(isAssessedNumber(item.readiness_score) ? "page.systemMap.noReadinessGaps" : "catalogAssessment.unassessed")}</p> : null}
                   </div>
                 </div>
               ))}
@@ -2203,9 +2211,10 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                   <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.description}</p>
                 </div>
                 <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 font-mono text-xs text-[var(--muted-strong)]">
-                  {item.avg_maturity}%
+                  {assessmentText(item.avg_maturity, t("catalogAssessment.unassessed"), true)}
                 </span>
               </div>
+              <CatalogAssessmentCounts value={item} />
               <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
                 <Metric label={t("page.systemMap.reactShort")} value={item.react_count ?? 0} />
                 <Metric label={t("page.systemMap.legacyShort")} value={item.legacy_count ?? 0} />
@@ -2396,12 +2405,13 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   );
 }
 
-function SummaryTile({ label, value, sub }: { label: string; value: string | number; sub: string }) {
+function SummaryTile({ label, value, sub, assessment }: { label: string; value: string | number; sub: string; assessment?: { assessed_count?: number; unassessed_count?: number } }) {
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <p className="text-xs text-[var(--muted)]">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{value}</p>
       <p className="mt-1 text-xs text-[var(--muted-strong)]">{sub}</p>
+      <CatalogAssessmentCounts value={assessment} />
     </div>
   );
 }

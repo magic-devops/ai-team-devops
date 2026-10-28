@@ -554,15 +554,6 @@ export const api = {
   rules: () => request<any[]>("/api/v1/rules"),
   ruleCreate: (body: { rule: string; category?: string; source?: string; confidence?: number }) =>
     request<any>("/api/v1/rules", { method: "POST", body: JSON.stringify(body) }),
-  reflectionDistill: (body: { days?: number; category?: string; limit?: number; dry_run?: boolean }) =>
-    request<any>("/api/v1/reflections/distill", { method: "POST", body: JSON.stringify(body) }),
-  reflectionProposals: (limit = 100) =>
-    request<any[]>(`/api/v1/reflections/proposals?limit=${encodeURIComponent(String(limit))}`),
-  reflectionReviewProposal: (proposalId: string, body: { status: "approved" | "rejected"; note?: string; reviewer?: string }) =>
-    request<any>(`/api/v1/reflections/proposals/${encodeURIComponent(proposalId)}/review`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
   memoryHealth: () => request<any>("/api/v1/memory/health"),
   memoryRecent: (limit = 30, lifecycleState = "active") =>
     request<any>(`/api/v1/memory/recent?limit=${encodeURIComponent(String(limit))}&lifecycle_state=${encodeURIComponent(lifecycleState)}`),

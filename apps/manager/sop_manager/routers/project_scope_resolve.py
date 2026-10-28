@@ -51,7 +51,7 @@ _EXISTING_PROJECT_PREFIXES = (
     "/api/v1/projects", "/api/v1/design-docs",
     "/api/v1/requirements", "/api/v1/tasks", "/api/v1/issues",
     "/api/v1/sprints", "/api/v1/models", "/api/v1/llm",
-    "/api/v1/events", "/api/v1/sync",
+    "/api/v1/events", "/api/v1/reflections", "/api/v1/sync",
     "/api/v1/delivery", "/api/v1/dev-flow", "/api/v1/analytics/nlq", "/api/v1/workflows",
     "/api/v1/search", "/api/v1/semantic-search", "/api/v1/state",
     "/api/v1/custom", "/api/v1/agent-reflections", "/api/v1/rules", "/api/v1/knowledge",
@@ -59,6 +59,7 @@ _EXISTING_PROJECT_PREFIXES = (
 )
 
 _EXISTING_PROJECT_EXACT_PATHS = frozenset({
+    "/api/v1/system/pages/capabilities/me", "/api/v1/system/pages/capabilities/check",
     "/api/v1/dashboard", "/api/v1/analytics",
     "/api/v1/pages/interaction-ops",
     "/api/v1/system/pages/governance-tasks",

@@ -225,6 +225,17 @@ COMMAND_TREE: dict[str, CmdEntry] = {
             "subscribe": "订阅 WSS 实时事件",
         },
     },
+    "reflection": {
+        "help": "反思原件与固定输入（收集不是验收证据）",
+        "subs": {
+            "record": "typed data加原ID/时间，或完整原件；先SQLite入队（--file/--event-file/--local）",
+            "list": "只读一页收集事实（--category/--from/--to/--limit/--cursor/--json）",
+            "show": "指定原件、当前来源与精确选择引用（ID，--json）",
+            "inputs": "只读一页固定输入（--limit/--cursor/--json）",
+            "input": "指定固定manifest与当前可用性（ID，--json）",
+            "prepare": "提交完整原reflection.input.create命令（--file）；重试保持原版本与键",
+        },
+    },
     "usage": {
         "help": "用量计量与配额",
         "subs": {

@@ -3,6 +3,8 @@ import { ArrowRight, Command, FileText, Layers3, Network, Rows3, ShieldCheck } f
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
+import { CatalogAssessmentCounts } from "@/components/CatalogAssessmentCounts";
+import { assessmentText, isAssessedNumber } from "@/lib/catalogAssessment";
 import { ErrorBlock, LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
@@ -50,12 +52,13 @@ export function SystemMapHub() {
               { label: t("page.systemMap.hubReact"), value: summary.react_pages ?? 0 },
               { label: t("page.systemMap.hubMicroApps"), value: summary.micro_apps ?? microApps.length },
               { label: t("page.systemMap.hubLegacy"), value: summary.legacy_pages ?? 0 },
-              { label: t("page.systemMap.hubMaturity"), value: `${summary.avg_maturity ?? 0}%` },
+              { label: t("page.systemMap.hubMaturity"), value: assessmentText(summary.avg_maturity, t("catalogAssessment.unassessed"), true) },
               { label: t("page.systemMap.hubIssues"), value: summary.validation_issues ?? 0 },
             ]}
           />
         }
       />
+      <CatalogAssessmentCounts value={summary} />
       {microApps.length ? (
         <Card title={t("page.systemMap.microAppControlPlane")}>
           <div className="grid gap-3 lg:grid-cols-2">
@@ -68,12 +71,14 @@ export function SystemMapHub() {
               entry: string;
               mode: string;
               status: string;
-              avg_maturity: number;
+              avg_maturity: number | null;
+              assessed_count?: number;
+              unassessed_count?: number;
               module_count: number;
               capability_count: number;
               responsibilities?: string[];
             }) => {
-              const tone = app.status === "healthy"
+              const tone = !isAssessedNumber(app.avg_maturity) ? "text-[var(--muted)] bg-[var(--surface-muted)] ring-[var(--border)]" : app.status === "healthy"
                 ? "text-emerald-700 bg-emerald-500/10 ring-emerald-500/25 dark:text-emerald-300"
                 : app.status === "watch"
                   ? "text-sky-700 bg-sky-500/10 ring-sky-500/25 dark:text-sky-300"
@@ -98,9 +103,10 @@ export function SystemMapHub() {
                       </span>
                     </span>
                     <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ring-1 ${tone}`}>
-                      {app.status} · {app.avg_maturity}%
+                      {isAssessedNumber(app.avg_maturity) ? `${app.status} · ${assessmentText(app.avg_maturity, t("catalogAssessment.unassessed"), true)}` : t("catalogAssessment.unassessed")}
                     </span>
                   </div>
+                  <CatalogAssessmentCounts value={app} />
                   <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                     <span className="rounded-lg bg-[var(--surface-muted)] px-2 py-1.5 text-[var(--muted-strong)]">
                       {t("page.systemMap.hubModules")} {app.module_count}
@@ -134,15 +140,16 @@ export function SystemMapHub() {
       {stackLayers.length ? (
         <Card title={t("page.systemMap.stackTitle")}>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {stackLayers.slice(0, 8).map((layer: { id: string; name: string; avg_maturity: number; react_count: number; total: number }) => (
+            {stackLayers.slice(0, 8).map((layer: { id: string; name: string; avg_maturity: number | null; react_count: number; total: number; assessed_count?: number; unassessed_count?: number }) => (
               <div key={layer.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-[var(--text)]">{layer.name}</span>
-                  <span className="text-xs font-semibold text-[var(--brand)]">{layer.avg_maturity}%</span>
+                  <span className="text-xs font-semibold text-[var(--muted-strong)]">{assessmentText(layer.avg_maturity, t("catalogAssessment.unassessed"), true)}</span>
                 </div>
                 <p className="mt-1 text-xs text-[var(--muted)]">
                   React {layer.react_count} · {t("page.systemMap.totalShort")} {layer.total}
                 </p>
+                <CatalogAssessmentCounts value={layer} />
               </div>
             ))}
           </div>

@@ -1,8 +1,9 @@
 import { EventReceiptWorkbench } from "./intelligence/events/EventReceiptWorkbench";
+import { ReflectionWorkbench } from "./intelligence/reflections/ReflectionWorkbench";
 import { AssetSyncWorkbench } from "./intelligence/sync/AssetSyncWorkbench";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Modal, Progress, Space, Table, Tag } from "antd";
-import { Activity, Ban, Brain, CheckCircle2, Cpu, Database, Gauge, GitBranch, Library, PlayCircle, Plus, RotateCw, Search, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import { Activity, Ban, Brain, Cpu, Database, Gauge, GitBranch, Library, PlayCircle, Plus, RotateCw, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,14 +26,14 @@ function pieToRecord(items?: Array<{ name: string; value: number }>) {
   return out;
 }
 
-type Tab = "kb" | "rag" | "mem" | "rules" | "distill" | "worker" | "sync" | "db" | "events" | "usage";
+type Tab = "kb" | "rag" | "mem" | "rules" | "reflections" | "worker" | "sync" | "db" | "events" | "usage";
 
 const tabs: Array<{ key: Tab; icon: typeof Library; labelKey: string }> = [
   { key: "kb", icon: Library, labelKey: "page.intelligence.tabKb" },
   { key: "rag", icon: Search, labelKey: "page.intelligence.tabRag" },
   { key: "mem", icon: Brain, labelKey: "page.intelligence.tabMem" },
   { key: "rules", icon: ShieldCheck, labelKey: "page.intelligence.tabRules" },
-  { key: "distill", icon: Sparkles, labelKey: "page.intelligence.tabDistill" },
+  { key: "reflections", icon: Sparkles, labelKey: "reflections.title" },
   { key: "worker", icon: Cpu, labelKey: "page.intelligence.tabWorker" },
   { key: "sync", icon: GitBranch, labelKey: "page.intelligence.tabSync" },
   { key: "db", icon: Database, labelKey: "page.intelligence.tabDb" },
@@ -88,7 +89,6 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
   const [newMem, setNewMem] = useState("");
   const [kbDraft, setKbDraft] = useState({ title: "", content: "", category: "general", tags: "" });
   const [ruleDraft, setRuleDraft] = useState({ rule: "", category: "coding", confidence: "0.75" });
-  const [distillDraft, setDistillDraft] = useState({ days: "30", category: "", limit: "100", dryRun: true });
   const [dbDraft, setDbDraft] = useState({ name: "", type: "postgres", role: "business", capability: "sql", host: "", port: "", database: "", username: "", secret_ref: "" });
   const [quotaDraft, setQuotaDraft] = useState("{}");
   const [testUrls, setTestUrls] = useState<Record<string, string>>({});
@@ -109,7 +109,6 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
   const kbSearch = useQuery({ queryKey: ["kbSearch", qKb], queryFn: () => api.knowledgeSearch(qKb), enabled: authed && tab === "kb" && qKb.trim().length >= 1 });
   const ragSearch = useQuery({ queryKey: ["ragSearch", qRag], queryFn: () => api.ragSearch(qRag), enabled: authed && tab === "rag" && qRag.trim().length >= 1 });
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules, enabled: authed && tab === "rules" });
-  const proposals = useQuery({ queryKey: ["reflectionProposals"], queryFn: () => api.reflectionProposals(100), enabled: authed && tab === "distill" });
   const dbDrivers = useQuery({ queryKey: ["dbDrivers"], queryFn: api.dbDrivers, enabled: authed && tab === "db" });
   const dbConnections = useQuery({ queryKey: ["dbConnections"], queryFn: api.dbConnections, enabled: authed && tab === "db" });
   const usage = useQuery({ queryKey: ["usage"], queryFn: () => api.usageSummary(5000), enabled: authed && tab === "usage" });
@@ -159,25 +158,6 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
     }),
     onSuccess: () => {
       setRuleDraft({ rule: "", category: "coding", confidence: "0.75" });
-      void qc.invalidateQueries({ queryKey: ["rules"] });
-    },
-  });
-  const runDistill = useMutation({
-    mutationFn: () => api.reflectionDistill({
-      days: Number(distillDraft.days || 30),
-      category: distillDraft.category.trim(),
-      limit: Number(distillDraft.limit || 100),
-      dry_run: distillDraft.dryRun,
-    }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["reflectionProposals"] });
-    },
-  });
-  const reviewProposal = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: "approved" | "rejected" }) =>
-      api.reflectionReviewProposal(id, { status, reviewer: "manager-web" }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["reflectionProposals"] });
       void qc.invalidateQueries({ queryKey: ["rules"] });
     },
   });
@@ -392,91 +372,10 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
         </div>
       ) : null}
 
-      {tab === "distill" ? (
-        <div className="grid gap-4 xl:grid-cols-[26rem_minmax(0,1fr)] 2xl:grid-cols-[30rem_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <Card title={t("page.intelligence.distillRun")}>
-              <div className="space-y-2">
-                <div className="grid grid-cols-3 gap-2">
-                  <label className="space-y-1 text-xs text-slate-500">
-                    {t("page.intelligence.days")}
-                    <input className={`${inputClass} w-full`} value={distillDraft.days} onChange={(e) => setDistillDraft((v) => ({ ...v, days: e.target.value }))} />
-                  </label>
-                  <label className="space-y-1 text-xs text-slate-500">
-                    {t("page.intelligence.limit")}
-                    <input className={`${inputClass} w-full`} value={distillDraft.limit} onChange={(e) => setDistillDraft((v) => ({ ...v, limit: e.target.value }))} />
-                  </label>
-                  <label className="space-y-1 text-xs text-slate-500">
-                    {t("page.intelligence.category")}
-                    <input className={`${inputClass} w-full`} value={distillDraft.category} onChange={(e) => setDistillDraft((v) => ({ ...v, category: e.target.value }))} placeholder="all" />
-                  </label>
-                </div>
-                <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                  <input type="checkbox" checked={distillDraft.dryRun} onChange={(e) => setDistillDraft((v) => ({ ...v, dryRun: e.target.checked }))} />
-                  {t("page.intelligence.dryRun")}
-                </label>
-                <PrimaryButton disabled={runDistill.isPending} onClick={() => runDistill.mutate()}>
-                  <Sparkles className="h-4 w-4" />
-                  {t("page.intelligence.runDistill")}
-                </PrimaryButton>
-                {runDistill.isError ? <Err message={(runDistill.error as Error).message} /> : null}
-                {runDistill.data ? (
-                  <pre className="max-h-64 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(runDistill.data, null, 2)}</pre>
-                ) : null}
-              </div>
-            </Card>
-            <Card title={t("page.intelligence.distillHow")}>
-              <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">{t("page.intelligence.distillDesc")}</p>
-            </Card>
-          </div>
-          <Card
-            title={t("page.intelligence.proposals")}
-            actions={<MiniButton onClick={() => void proposals.refetch()}><RotateCw className="h-4 w-4" />{t("common.refresh")}</MiniButton>}
-          >
-            {proposals.isError ? <Err message={(proposals.error as Error).message} /> : null}
-            <ul className="space-y-3 text-sm">
-              {(proposals.data ?? []).map((row: any) => {
-                const status = row.status ?? "pending";
-                return (
-                  <li key={String(row.id)} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-3 dark:border-slate-700 dark:bg-slate-800/50">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <span className="rounded-md bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-700 dark:text-brand-200">{row.category ?? "other"}</span>
-                        <span className="ml-2 text-xs text-slate-500">{t("page.intelligence.confidence")}: {row.confidence ?? "-"} · {t("page.intelligence.evidence")}: {row.evidence_count ?? 0}</span>
-                      </div>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status === "approved" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-200" : status === "rejected" ? "bg-rose-500/10 text-rose-700 dark:text-rose-200" : "bg-amber-500/10 text-amber-700 dark:text-amber-200"}`}>
-                        {t(`page.intelligence.proposalStatus.${status}`)}
-                      </span>
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap text-slate-900 dark:text-slate-100">{row.rule}</p>
-                    {Array.isArray(row.examples) && row.examples.length ? (
-                      <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500">
-                        {row.examples.slice(0, 3).map((example: string, i: number) => <li key={`${row.id}-${i}`}>{example}</li>)}
-                      </ul>
-                    ) : null}
-                    {status === "pending" ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <PrimaryButton disabled={reviewProposal.isPending} onClick={() => reviewProposal.mutate({ id: String(row.id), status: "approved" })}>
-                          <CheckCircle2 className="h-4 w-4" />
-                          {t("page.intelligence.approveRule")}
-                        </PrimaryButton>
-                        <MiniButton disabled={reviewProposal.isPending} onClick={() => reviewProposal.mutate({ id: String(row.id), status: "rejected" })}>
-                          <XCircle className="h-4 w-4" />
-                          {t("page.intelligence.rejectRule")}
-                        </MiniButton>
-                      </div>
-                    ) : row.reviewed_at ? (
-                      <p className="mt-2 text-xs text-slate-500">{row.reviewed_at}</p>
-                    ) : null}
-                  </li>
-                );
-              })}
-              {proposals.isSuccess && (proposals.data ?? []).length === 0 ? <li className="text-sm text-slate-500">{t("page.intelligence.noProposals")}</li> : null}
-            </ul>
-            {reviewProposal.isError ? <Err message={(reviewProposal.error as Error).message} /> : null}
-          </Card>
-        </div>
-      ) : null}
+      {tab === "reflections" ? <ReflectionWorkbench key={JSON.stringify([getProjectId(), getSessionRevision()])} projectId={getProjectId() || ""} onExitState={(canNavigate, pending) => {
+        if (pending) syncCanLeave.current = canNavigate;
+        else if (syncCanLeave.current === canNavigate) syncCanLeave.current = () => true;
+      }} /> : null}
 
       {tab === "worker" ? (
         <div className="space-y-4">

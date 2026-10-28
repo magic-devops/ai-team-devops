@@ -217,11 +217,18 @@ func (r RemoteReceipt) Validate(id, digest string) error {
 		if p.Result.TargetKind != nil && *p.Result.TargetKind == "task_submission" && p.Result.Kind != "task_delivery_submitted" {
 			return fail("receipt_invalid", "submission target requires a submitted report effect")
 		}
+		if p.Result.TargetKind != nil && *p.Result.TargetKind == "reflection" && p.Result.Kind != "reflection_recorded" {
+			return fail("receipt_invalid", "reflection target requires a recorded reflection effect")
+		}
 		switch p.Result.Kind {
 		case "fact_recorded", "task_updated", "issue_created", "record_upserted", "record_deleted", "asset_materialized":
 		case "task_delivery_submitted":
 			if p.Result.TargetKind == nil || *p.Result.TargetKind != "task_submission" || p.Result.TargetID == nil || !submissionIdentity.MatchString(*p.Result.TargetID) || p.Handler == nil || *p.Handler != "task.delivery.submit" || p.State != "processed" || p.Attempts < 1 || p.ProcessedAt == nil {
 				return fail("receipt_invalid", "submission effect must identify an actual saved report")
+			}
+		case "reflection_recorded":
+			if p.Result.TargetKind == nil || *p.Result.TargetKind != "reflection" || p.Result.TargetID == nil || *p.Result.TargetID != *r.ReceiptID || p.Handler == nil || *p.Handler != "reflection.record" || p.State != "processed" || p.Attempts < 1 || p.ProcessedAt == nil {
+				return fail("receipt_invalid", "reflection effect must identify the actual collected original")
 			}
 		default:
 			return fail("receipt_invalid", "invalid processing effect kind")

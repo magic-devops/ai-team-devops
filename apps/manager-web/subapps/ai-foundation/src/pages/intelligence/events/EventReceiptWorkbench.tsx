@@ -6,6 +6,7 @@ import { useExecutionExitGuard } from "@/lib/executionExitGuard";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { safeIssueOriginReturn } from "@/lib/issueOriginRoute";
+import { safeReflectionReturn } from "@/lib/reflectionRoute";
 import {
   currentEventHash,
   eventHash,
@@ -111,6 +112,7 @@ export function EventReceiptWorkbench({ projectId }: { projectId: string }) {
   const navigate = (href: string) => {
     if (exit.canNavigate()) location.hash = href;
   };
+  const reflectionReturn = safeReflectionReturn(new URLSearchParams(currentEventHash().split("?")[1]).get("reflection_return") || "", projectId);
   return (
     <section className="event-receipts" aria-label={tr("title")}>
       <header className="event-receipt-heading">
@@ -124,6 +126,7 @@ export function EventReceiptWorkbench({ projectId }: { projectId: string }) {
         </Button>
       </header>
       <p className="event-receipt-note">{tr("hint")}</p>
+      {reflectionReturn && <Button disabled={exit.pending} onClick={() => navigate(reflectionReturn)}>{t("reflections.back")}</Button>}
       {issueReturn && (
         <Button disabled={exit.pending} onClick={() => navigate(issueReturn)}>
           {t("deliveryIssue.origins.back")}

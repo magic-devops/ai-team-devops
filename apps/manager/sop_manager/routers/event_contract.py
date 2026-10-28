@@ -52,8 +52,9 @@ class EffectResult(Strict):
         "record_upserted",
         "record_deleted",
         "asset_materialized",
+        "reflection_recorded",
     ]
-    target_kind: Literal["task", "issue", "requirement", "sprint", "asset", "task_submission"] | None
+    target_kind: Literal["task", "issue", "requirement", "sprint", "asset", "reflection", "task_submission"] | None
     target_id: str | None
 
 

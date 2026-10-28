@@ -83,7 +83,7 @@ const AI_FOUNDATION_KEYS = [
   "ragSearch",
   "aiMemory",
   "ruleCenter",
-  "reflectionDistill",
+  "reflectionIntake",
   "workerOps",
   "syncOps",
   "eventStream",
@@ -303,7 +303,7 @@ export const MICRO_APPS: readonly MicroAppDefinition[] = [
     highlights: ["CLI 与开发环境", "知识/记忆/规则/RAG", "技能插件与资产市场", "Agent/MCP/A2A/模型治理"],
     capabilities: [
       { name: "开发环境与 CLI", scope: "环境模板、CLI 工具、MCP 工具链和执行沙箱", kpi: "工具可用率 99.5%", maturity: "advanced" },
-      { name: "知识记忆与规则", scope: "知识库、RAG、记忆沉淀、规则中心和反思蒸馏", kpi: "命中率提升 20%+", maturity: "leading" },
+      { name: "知识记忆与规则", scope: "知识库、RAG、记忆沉淀、规则中心和反思收集", kpi: "命中率提升 20%+", maturity: "leading" },
       { name: "技能插件市场", scope: "技能仓库、插件发布、安装评分和版本治理", kpi: "资产复用率 60%+", maturity: "standard" },
       { name: "Agent 与模型治理", scope: "Agent 注册、运行、心跳、模型网关、成本和限流", kpi: "失败重试闭环率 95%+", maturity: "advanced" },
     ],

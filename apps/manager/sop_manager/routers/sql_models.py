@@ -357,6 +357,44 @@ class IssueEventOrigin(Base):
     __table_args__ = (Index("ix_issue_origin_scope_seq", "tenant_id", "project_id", "issue_id", "seq"),)
 
 
+class ReflectionRecord(Base):
+    """Successful immutable collection identity; the only body stays in EventInbox."""
+    __tablename__ = "reflection_records"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    receipt_id = Column(String(64), nullable=False, unique=True)
+    attempt_id = Column(String(64), nullable=False, unique=True)
+    producer_id = Column(String(64), nullable=False)
+    digest = Column(String(64), nullable=False)
+    category = Column(String(16), nullable=False)
+    occurred_at = Column(DateTime, nullable=False)
+    collected_at = Column(DateTime, nullable=False)
+    references = Column(JSON, nullable=False)
+    runtime_scopes = Column(JSON, nullable=False)
+    __table_args__ = (Index("ix_reflection_record_scope_seq", "tenant_id", "project_id", "seq"),)
+
+
+class ReflectionInput(Base):
+    """An ordered fixed selection, never copied reflection statements."""
+    __tablename__ = "reflection_inputs"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(160), nullable=False)
+    rationale = Column(Text, nullable=False)
+    created_by_id = Column(String(64), nullable=False)
+    created_by_name = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    source_version = Column(Integer, nullable=False)
+    sources = Column(JSON, nullable=False)
+    manifest_digest = Column(String(64), nullable=False)
+    runtime_scopes = Column(JSON, nullable=False)
+    __table_args__ = (Index("ix_reflection_input_scope_seq", "tenant_id", "project_id", "seq"),)
+
+
 class DeliveryDiscussionThread(Base):
     __tablename__ = "delivery_discussion_threads"
     created_seq = Column(Integer, primary_key=True, autoincrement=True)

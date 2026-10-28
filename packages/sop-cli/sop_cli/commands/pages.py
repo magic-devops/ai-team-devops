@@ -45,7 +45,8 @@ def list_pages(
     summary = out.get("summary") if isinstance(out, dict) else {}
     if isinstance(summary, dict):
         kv("total", summary.get("total", len(rows)))
-        kv("avg_maturity", summary.get("avg_maturity", "-"))
+        average = summary.get("avg_maturity")
+        kv("avg_maturity", "未评估" if average is None else average)
     tbl = Table(title="system pages", show_header=True, header_style="bold")
     for col in ("id", "name", "domain", "path", "status", "maturity"):
         tbl.add_column(col)
@@ -56,7 +57,7 @@ def list_pages(
             str(item.get("domain", "")),
             str(item.get("path", "")),
             str(item.get("status", "")),
-            str(item.get("maturity", "")),
+            "未评估" if item.get("maturity") is None else str(item["maturity"]),
         )
     console.print(tbl)
 

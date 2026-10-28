@@ -35,6 +35,7 @@ from .delivery_scheduling_contract import (
 )
 from .delivery_source_contract import SOURCE_ACTIONS, DiscussionSourceReference
 from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
+from .reflection_contract import ReflectionInputCreate
 from .project_lifecycle_contract import ProjectLifecycleCommand
 from .ops_remediation_contract import OpsIntakeInput
 
@@ -139,6 +140,7 @@ class Command(Input):
         "execution.control.close",
         "progress.record",
         "baseline.create",
+        "reflection.input.create",
     ]
     expected_version: int = Field(ge=0)
     idempotency_key: str = Field(min_length=8, max_length=100)
@@ -755,6 +757,7 @@ class SyncRecordApply(Input):
 PAYLOADS = {
     "issue.ops.intake": OpsIntakeInput,
     "issue.rca.intake": OpsIntakeInput,
+    "reflection.input.create": ReflectionInputCreate,
     "issue.create": IssueCreateCommand,
     "sync.record.apply": SyncRecordApply,
     "project.lifecycle": ProjectLifecycleCommand,
